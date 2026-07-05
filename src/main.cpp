@@ -2,11 +2,12 @@
 #include <string>
 
 #include "query_router.h"
+#include "logger.h"
 
 int main() {
     QueryRouter router;
 
-    std::cout << "EdgeVoiceRAG started." << std::endl;
+    Logger::log(LogLevel::Info, "EdgeVoiceRAG started.");
 
     while (true) {
         std::cout << "\nPlease input your question, or type exit to quit:\n> ";
@@ -21,15 +22,16 @@ int main() {
 
         QueryType type = router.classify(question);
 
-        std::cout << "[USER] " << question << std::endl;
-        std::cout << "[ROUTE] " << router.typeToString(type) << std::endl;
+        Logger::log(LogLevel::User, question);
+        Logger::log(LogLevel::Route, router.typeToString((type)));
+
 
         if (type == QueryType::VehicleManual) {
-            std::cout << "[SYSTEM] This is a vehicle manual question. RAG will handle it later." << std::endl;
+            Logger::log(LogLevel::System, "This is a vehicle manual question. RAG will handle it later.");
         } else if (type == QueryType::chat) {
-            std::cout << "[SYSTEM] This is a chat question. LLM will handle it later." << std::endl;
+            Logger::log(LogLevel::System, "This is a chat question. LLM will handle it later.");
         } else {
-            std::cout << "[SYSTEM] Unknown query type." << std::endl;
+            Logger::log(LogLevel::System, "Unknown query type.");
         }
     }
 
