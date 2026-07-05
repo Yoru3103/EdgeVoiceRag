@@ -10,6 +10,7 @@ add_executable(edge_voice_rag
     src/query_router.cpp
     src/logger.cpp
     src/perf_timer.cpp
+    src/rag_engine.cpp
 )
 
 target_include_directories(edge_voice_rag PRIVATE include)

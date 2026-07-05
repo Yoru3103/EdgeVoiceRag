@@ -6,11 +6,20 @@
 #include "query_router.h"
 #include "logger.h"
 #include "perf_timer.h"
+#include "rag_engine.h"
 
 int main() {
     QueryRouter router;
+    RagEngine rag_engine("docs/vehicle_manual.txt");
 
     Logger::log(LogLevel::Info, "EdgeVoiceRAG started.");
+
+    if (!rag_engine.loadKnowledgeBase()) {
+        Logger::log(LogLevel::Error, "Failed to load knowledge base: docs/vehicle_manual.txt");
+        return 1;
+    }
+
+    Logger::log(LogLevel::Info, "Knowledge base loaded successfully.");
 
     while (true) {
         std::cout << "\nPlease input your question, or type exit to quit:\n> ";
@@ -32,7 +41,19 @@ int main() {
 
 
         if (type == QueryType::VehicleManual) {
-            Logger::log(LogLevel::System, "This is a vehicle manual question. RAG will handle it later.");
+            PerfTimer rag_timer("rag_search");
+
+            std::string context = rag_engine.search(question);
+
+            std::ostringstream answer;
+            answer << "根据车辆手册：" << context;
+
+            Logger::log(LogLevel::System, answer.str());
+
+            std::ostringstream rag_perf;
+            rag_perf << rag_timer.name() << "handle_in " << std::fixed << std::setprecision(3) << rag_timer.elapsedMilliseconds() << "ms";
+
+            Logger::log(LogLevel::Perf, rag_perf.str());
         } else if (type == QueryType::chat) {
             Logger::log(LogLevel::System, "This is a chat question. LLM will handle it later.");
         } else {

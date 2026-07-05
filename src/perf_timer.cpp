@@ -1,5 +1,7 @@
 #include "perf_timer.h"
 
+// chrono:主要包含三个概念：clock（时钟：chrono::steady_clock）、time_point（时间点：chrono::steady_clock::now()）、duration（持续时间：chrono::duration_cast<std::chrono::microseconds>）
+
 PerfTimer::PerfTimer(const std::string& name) 
     : name_(name)
     , start_time_(std::chrono::steady_clock::now()) {
