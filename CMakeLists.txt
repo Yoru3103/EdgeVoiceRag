@@ -7,4 +7,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 add_executable(edge_voice_rag
     src/main.cpp
+    src/query_router.cpp
 )
+
+target_include_directories(edge_voice_rag PRIVATE include)

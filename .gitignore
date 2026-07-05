@@ -10,3 +10,4 @@ __pycache__/
 models/
 vector_db/
 .env
+.vscode/
