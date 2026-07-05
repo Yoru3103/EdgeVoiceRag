@@ -1,1 +1,12 @@
-/build
+build/
+.cache/
+__pycache__/
+*.pyc
+*.o
+*.so
+*.a
+*.wav
+*.mp3
+models/
+vector_db/
+.env
