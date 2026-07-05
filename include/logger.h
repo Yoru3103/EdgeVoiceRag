@@ -8,7 +8,8 @@ enum class LogLevel {
     Error,
     User,
     Route,
-    System
+    System,
+    Perf
 };
 
 class Logger {  //没有普通成员变量，可以全部使用static，这样以后使用时不需要创建对象

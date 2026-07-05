@@ -20,6 +20,8 @@ std::string Logger::levelToString(LogLevel level) {
             return "ROUTE";
         case LogLevel::System:
             return "SYSTEM";
+        case LogLevel::Perf:
+            return "PERF";
         default:
             return "UNKNOWN";
     }

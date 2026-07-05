@@ -1,8 +1,11 @@
 #include <iostream>
 #include <string>
+#include <sstream>
+#include <iomanip>
 
 #include "query_router.h"
 #include "logger.h"
+#include "perf_timer.h"
 
 int main() {
     QueryRouter router;
@@ -20,6 +23,8 @@ int main() {
             break;
         }
 
+        PerfTimer timer("single_query");
+
         QueryType type = router.classify(question);
 
         Logger::log(LogLevel::User, question);
@@ -33,6 +38,13 @@ int main() {
         } else {
             Logger::log(LogLevel::System, "Unknown query type.");
         }
+
+        // 字符串流，用来拼接字符串
+        std::ostringstream oss;
+        // std::fixed << std::setprecision(3)控制timer时间只显示到小数点后三位
+        oss << timer.name() << "handle in " << std::fixed << std::setprecision(3) << timer.elapsedMilliseconds() << "ms";
+
+        Logger::log(LogLevel::Perf, oss.str());
     }
 
     return 0;
