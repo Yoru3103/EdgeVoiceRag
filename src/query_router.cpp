@@ -1,22 +1,37 @@
 #include "query_router.h"
 
+QueryRouter::QueryRouter()
+    : vehicle_keywords_ {
+        "空调",
+        "蓝牙",
+        "胎压",
+        "座椅",
+        "加热",
+        "导航",
+        "雨刮",
+        "雨刷",
+        "车窗",
+        "后备箱",
+        "尾门",
+        "充电站",
+        "温度",
+        "配对",
+        "连接"
+    },
+    chat_key_words_ {
+        "你好",
+        "天气",
+        "你是谁",
+        "谢谢"
+    } {
+}
+
 QueryType QueryRouter::classify(const std::string& query) const {
-    if (query.find("空调") != std::string::npos ||
-        query.find("蓝牙") != std::string::npos ||
-        query.find("胎压") != std::string::npos ||
-        query.find("座椅") != std::string::npos ||
-        query.find("加热") != std::string::npos ||
-        query.find("导航") != std::string::npos ||
-        query.find("雨刮") != std::string::npos ||
-        query.find("雨刷") != std::string::npos ||
-        query.find("车窗") != std::string::npos ||
-        query.find("后备箱") != std::string::npos ||
-        query.find("尾门") != std::string::npos) {
+    if (containsAnyKeyword(query, vehicle_keywords_)) {
         return QueryType::VehicleManual;
     }
 
-    if (query.find("你好") != std::string::npos ||
-        query.find("天气") != std::string::npos) {
+    if (containsAnyKeyword(query, chat_key_words_)) {
         return QueryType::chat;
     }
 
@@ -33,4 +48,14 @@ std::string QueryRouter::typeToString(QueryType type) const {
         default:
             return "Unkown";
     }
+}
+
+bool QueryRouter::containsAnyKeyword(const std::string& query, const std::vector<std::string>& keywords) const {
+    for (const auto& keyword : keywords) {
+        if (query.find(keyword) != std::string::npos) {
+            return true;
+        }
+    }
+
+    return false;
 }
