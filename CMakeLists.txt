@@ -11,6 +11,7 @@ add_executable(edge_voice_rag
     src/logger.cpp
     src/perf_timer.cpp
     src/rag_engine.cpp
+    src/app_config.cpp
 )
 
 target_include_directories(edge_voice_rag PRIVATE include)

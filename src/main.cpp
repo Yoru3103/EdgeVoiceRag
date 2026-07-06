@@ -3,19 +3,35 @@
 #include <sstream>
 #include <iomanip>
 
+#include "app_config.h"
 #include "query_router.h"
 #include "logger.h"
 #include "perf_timer.h"
 #include "rag_engine.h"
 
 int main() {
+    AppConfig config("config/app.conf");
+
+    if (!config.load()) {
+        Logger::log(LogLevel::Error, "Failed to load config: config/app.conf");
+        return 1;
+    }
+
     QueryRouter router;
-    RagEngine rag_engine("docs/vehicle_manual.txt");
+    RagEngine rag_engine(config.knowledgePath());
 
     Logger::log(LogLevel::Info, "EdgeVoiceRAG started.");
+    Logger::log(LogLevel::Info, "Knowledge path: " + config.knowledgePath());
+
+    // 限制oss的局部作用域
+    {
+        std::ostringstream oss;
+        oss << "RAG top_k: " << config.topK();
+        Logger::log(LogLevel::Info, oss.str());
+    }
 
     if (!rag_engine.loadKnowledgeBase()) {
-        Logger::log(LogLevel::Error, "Failed to load knowledge base: docs/vehicle_manual.txt");
+        Logger::log(LogLevel::Error, "Failed to load knowledge base: " + config.knowledgePath());
         return 1;
     }
 
@@ -43,7 +59,7 @@ int main() {
         if (type == QueryType::VehicleManual) {
             PerfTimer rag_timer("rag_search");
 
-            std::vector<SearchResult> results = rag_engine.searchTopK(question, 3);
+            std::vector<SearchResult> results = rag_engine.searchTopK(question, config.topK());
 
             std::ostringstream answer;
             answer << "根据车辆手册：";
