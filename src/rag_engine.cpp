@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <sstream>
+#include <algorithm>
 
 RagEngine::RagEngine(const std::string& knowledge_path)
     : knowledge_path_(knowledge_path) {
@@ -27,16 +28,31 @@ bool RagEngine::loadKnowledgeBase() {
     return !documents_.empty();
 }
 
-std::string RagEngine::search(const std::string& query) const {
+std::vector<SearchResult> RagEngine::searchTopK(const std::string& query, int top_k) const {
     std::vector<std::string> keywords = extractKeywords(query);
+    std::vector<SearchResult> results;
+
+    if (keywords.empty() || top_k <= 0) {
+        return results;
+    }
 
     for (const auto& doc : documents_) {
-        if (containsAnyKeyword(doc, keywords)) {
-            return doc;
+        int score = calculateScore(doc, keywords);
+
+        if (score > 0) {
+            results.push_back(SearchResult{doc, score});
         }
     }
 
-    return "知识库中没有找到相关车辆手册内容。";
+    std::sort(results.begin(), results.end(), [](const SearchResult& a, const SearchResult& b) {
+                                                return a.score > b.score;
+    });
+
+    if (static_cast<int>(results.size()) > top_k) {
+        results.resize(top_k);
+    }
+
+    return results;
 }
 
 std::vector<std::string> RagEngine::extractKeywords(const std::string& query) const {
@@ -44,6 +60,11 @@ std::vector<std::string> RagEngine::extractKeywords(const std::string& query) co
 
     if (query.find("空调") != std::string::npos) {
         keywords.push_back("空调");
+    }
+
+    if (query.find("温度") != std::string::npos ||
+        query.find("调温") != std::string::npos) {
+        keywords.push_back("温度");
     }
 
     if (query.find("蓝牙") != std::string::npos) {
@@ -81,13 +102,14 @@ std::vector<std::string> RagEngine::extractKeywords(const std::string& query) co
     return keywords;
 }
 
-bool RagEngine::containsAnyKeyword(const std::string& text,
+int RagEngine::calculateScore(const std::string& document,
                             const std::vector<std::string>& keywords) const {
+    int score = 0;
     for (const auto& keyword : keywords) {
-        if (text.find(keyword) != std::string::npos) {
-            return true;
+        if (document.find(keyword) != std::string::npos) {
+            score += 1;
         }
     }
 
-    return false;
+    return score;
 }

@@ -43,10 +43,22 @@ int main() {
         if (type == QueryType::VehicleManual) {
             PerfTimer rag_timer("rag_search");
 
-            std::string context = rag_engine.search(question);
+            std::vector<SearchResult> results = rag_engine.searchTopK(question, 3);
 
             std::ostringstream answer;
-            answer << "根据车辆手册：" << context;
+            answer << "根据车辆手册：";
+            if (results.empty()) {
+                answer << "知识库中没有找到相关车辆手册内容。";
+            } else {
+                answer << "\n";
+                for (size_t i = 0; i < results.size(); i++) {
+                    answer << i + 1 << ". " << results[i].document << " [score =" << results[i].score << "]";
+
+                    if (i + 1 < results.size()) {
+                        answer << "\n";
+                    }
+                }
+            }
 
             Logger::log(LogLevel::System, answer.str());
 
