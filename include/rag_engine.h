@@ -8,6 +8,11 @@ struct SearchResult {
     int score;
 };
 
+struct KeywordRule {
+    std::vector<std::string> triggers;
+    std::vector<std::string> keywords;
+};
+
 class RagEngine {
 public:
     // explicit禁止构造函数或转换函数发生隐式类型转换，避免单参数时编译器将User u = 10转换为User(10)。
@@ -22,10 +27,14 @@ public:
 private:
     std::string knowledge_path_;    // 知识库文件路径
     std::vector<std::string> documents_;    // 按行加载后的知识条目
+    std::vector<KeywordRule> keyword_rules_;
     
     // 从问题中提取关键词
     std::vector<std::string> extractKeywords(const std::string& query) const;
 
     int calculateScore(const std::string& document,
                             const std::vector<std::string>& keywords) const;
+
+    bool containsKeyword(const std::string& text,
+                            const std::string& keyword) const;
 };
