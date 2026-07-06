@@ -4,16 +4,32 @@
 #include <iomanip>
 
 #include "app_config.h"
+#include "command_line_options.h"
 #include "query_router.h"
 #include "logger.h"
 #include "perf_timer.h"
 #include "rag_engine.h"
 
-int main() {
-    AppConfig config("config/app.conf");
+int main(int argc, char* argv[]) {
+    CommandLineOptions options = CommandLineOptions::parse(argc, argv);
+
+    std::string program_name = argc > 0 ? argv[0] : "edge_voice_rag";
+
+    if (options.showHelp()) {
+        std::cout << CommandLineOptions::usage(program_name);
+        return 1;
+    }
+
+    if (options.hasError()) {
+        Logger::log(LogLevel::Error, options.errorMessage());
+        std::cout << CommandLineOptions::usage(program_name);
+        return 1;
+    }
+
+    AppConfig config(options.configPath());
 
     if (!config.load()) {
-        Logger::log(LogLevel::Error, "Failed to load config: config/app.conf");
+        Logger::log(LogLevel::Error, "Failed to load config: " + options.configPath());
         return 1;
     }
 
