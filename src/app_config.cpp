@@ -8,7 +8,10 @@
 AppConfig::AppConfig(const std::string& config_path)
     : config_path_(config_path)
     , knowledge_path_("docs/vehicle_manual.txt")
-    , top_k_(3) {
+    , top_k_(3)
+    , rag_backend_("local")
+    , rag_endpoint_("tcp://localhost:5555")
+    , rag_timeout_ms_(3000) {
 }
 
 bool AppConfig::load() {
@@ -59,6 +62,16 @@ bool AppConfig::load() {
             }
         } else if (key == "rag_endpoint") {
             rag_endpoint_ = value;
+        } else if (key == "rag_timeout_ms") {
+            try {
+                rag_timeout_ms_ = std::stoi(value);
+            } catch (...) {
+                rag_timeout_ms_ = 3000;
+            }
+
+            if (rag_timeout_ms_ < 0) {
+                rag_timeout_ms_ = 3000;
+            }
         }
     }
 
@@ -79,6 +92,10 @@ const std::string& AppConfig::ragBackend() const {
 
 const std::string& AppConfig::ragEndpoint() const {
     return rag_endpoint_;
+}
+
+int AppConfig::ragTimeoutMs() const {
+    return rag_timeout_ms_;
 }
 
 std::string AppConfig::trim(const std::string& text) {

@@ -47,7 +47,8 @@ static void handleQuery(const std::string& question,
                         const RagEngine& rag_engine,
                         int top_k,
                         const std::string& rag_backend,
-                        const std::string& rag_endpoint) {
+                        const std::string& rag_endpoint,
+                        int rag_timeout_ms) {
     PerfTimer total_timer("single_query");
 
     QueryType type = router.classify(question);
@@ -59,7 +60,7 @@ static void handleQuery(const std::string& question,
         if (rag_backend == "zmq") {
             PerfTimer rag_timer("rag_zmq_request");
 
-            RagClilentZmq rag_client(rag_endpoint);
+            RagClilentZmq rag_client(rag_endpoint, rag_timeout_ms);
             std::string reply = rag_client.query(question);
 
             Logger::log(LogLevel::System, reply);
@@ -121,6 +122,12 @@ int main(int argc, char* argv[]) {
         Logger::log(LogLevel::Info, oss.str());
     }
 
+    {
+        std::ostringstream oss;
+        oss << "RAG timeout: " << config.ragTimeoutMs() << " ms";
+        Logger::log(LogLevel::Info, oss.str());
+    }
+
     if (config.ragBackend() == "local") {
         if (!rag_engine.loadKnowledgeBase()) {
             Logger::log(LogLevel::Error, "Failed to load knowledge base: " + config.knowledgePath());
@@ -139,7 +146,8 @@ int main(int argc, char* argv[]) {
             rag_engine, 
             config.topK(), 
             config.ragBackend(), 
-            config.ragEndpoint()
+            config.ragEndpoint(),
+            config.ragTimeoutMs()
         );
         return 0;
     }
@@ -152,6 +160,8 @@ int main(int argc, char* argv[]) {
 
         if (question == "exit") {
             std::cout << "Bye." << std::endl;
+            RagClilentZmq rag_client(config.ragEndpoint(), config.ragTimeoutMs());
+            std::string reply = rag_client.query("exit");
             break;
         }
 
@@ -166,7 +176,8 @@ int main(int argc, char* argv[]) {
             rag_engine, 
             config.topK(), 
             config.ragBackend(),
-            config.ragEndpoint()
+            config.ragEndpoint(),
+            config.ragTimeoutMs()
     );
     }
 

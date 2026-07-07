@@ -13,6 +13,7 @@ public:
 
     const std::string& ragBackend() const;
     const std::string& ragEndpoint() const;
+    int ragTimeoutMs() const;
 
 private:
     std::string config_path_;
@@ -22,6 +23,7 @@ private:
 
     std::string rag_backend_;
     std::string rag_endpoint_;
+    int rag_timeout_ms_;
 
     static std::string trim(const std::string& text);
 };
