@@ -140,6 +140,15 @@ int main(int argc, char* argv[]) {
     }
 
     if (options.onceMode()) {
+        if (options.onceQuery() == "exit" && config.ragBackend() == "zmq") {
+            Logger::log(LogLevel::Info, "Sending exit command to RAG server.");
+
+            RagClilentZmq rag_client(config.ragEndpoint(), config.ragTimeoutMs());
+            std::string reply = rag_client.query("exit");
+
+            Logger::log(LogLevel::System, reply);
+            return 0;
+        }
         handleQuery(
             options.onceQuery(), 
             router, 
