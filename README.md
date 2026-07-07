@@ -10,7 +10,7 @@ This project is being developed step by step as a learning and engineering pract
 Current milestone:
 
 ```text
-V1: C++ Mock RAG Core
+V2: ZeroMQ RAG Server
 ```
 
 V1 focuses on building a clean C++ engineering foundation before introducing ZeroMQ, Python-based vector retrieval, LLM inference, ASR, TTS, and Docker deployment.
