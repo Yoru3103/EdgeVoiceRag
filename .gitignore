@@ -11,3 +11,4 @@ models/
 vector_db/
 .env
 .vscode/
+.venv/
