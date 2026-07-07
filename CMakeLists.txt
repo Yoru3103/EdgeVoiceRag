@@ -27,3 +27,15 @@ add_executable(unit_tests
 )
 
 target_link_libraries(unit_tests PRIVATE edge_voice_rag_core)
+
+add_executable(zmq_rep_server
+    src/zmq_rep_server.cpp
+)
+
+target_link_libraries(zmq_rep_server PRIVATE zmq)
+
+add_executable(zmq_req_client
+    src/zmq_req_client.cpp
+)
+
+target_link_libraries(zmq_req_client PRIVATE zmq)
