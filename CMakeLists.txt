@@ -12,9 +12,12 @@ add_library(edge_voice_rag_core
     src/rag_engine.cpp
     src/app_config.cpp
     src/command_line_options.cpp
+    src/rag_client_zmq.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
+
+target_link_libraries(edge_voice_rag_core PUBLIC zmq)
 
 add_executable(edge_voice_rag
     src/main.cpp

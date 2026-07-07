@@ -51,6 +51,14 @@ bool AppConfig::load() {
             if (top_k_ < 0) {
                 top_k_ = 3;
             }
+        } else if (key == "rag_backend") {
+            rag_backend_ = value;
+
+            if (rag_backend_ != "local" && rag_backend_ != "zmq") {
+                rag_backend_ = "local";
+            }
+        } else if (key == "rag_endpoint") {
+            rag_endpoint_ = value;
         }
     }
 
@@ -63,6 +71,14 @@ const std::string& AppConfig::knowledgePath() const {
 
 int AppConfig::topK() const {
     return top_k_;
+}
+
+const std::string& AppConfig::ragBackend() const {
+    return rag_backend_;
+}
+
+const std::string& AppConfig::ragEndpoint() const {
+    return rag_endpoint_;
 }
 
 std::string AppConfig::trim(const std::string& text) {
