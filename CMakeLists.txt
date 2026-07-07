@@ -39,3 +39,15 @@ add_executable(zmq_req_client
 )
 
 target_link_libraries(zmq_req_client PRIVATE zmq)
+
+add_executable(rag_server
+    src/rag_server.cpp
+)
+
+target_link_libraries(rag_server PRIVATE edge_voice_rag_core zmq)
+
+add_executable(rag_client
+    src/rag_client.cpp
+)
+
+target_link_libraries(rag_client PRIVATE zmq)

@@ -4,8 +4,8 @@
 #include <zmq.hpp>
 
 int main() {
-    zmq::context_t context(1);
-    zmq::socket_t socket(context, zmq::socket_type::rep);
+    zmq::context_t context(1);  //ZeroMQ 运行时上下文。管理运行时的内部I/O线程和资源
+    zmq::socket_t socket(context, zmq::socket_type::rep);   // 内部封装了连接管理、消息收发、队列、重连、传输协议
 
     const std::string endpoint = "tcp://*:5555";
     socket.bind(endpoint);
