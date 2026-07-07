@@ -21,3 +21,9 @@ add_executable(edge_voice_rag
 )
 
 target_link_libraries(edge_voice_rag PRIVATE edge_voice_rag_core)   # PUBLIC：edge_voice_rag 自己链接 edge_voice_rag_core 这个链接不继续向外传播
+
+add_executable(unit_tests
+    tests/unit_tests.cpp
+)
+
+target_link_libraries(unit_tests PRIVATE edge_voice_rag_core)
