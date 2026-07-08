@@ -25,8 +25,8 @@ def build_chunks(lines: List[str]) -> List[Dict]:
         title = line
         content = line
         
-        if ": " in line:
-            title, content = line.split(": ", 1)    # 按字符串: 分割，最多分割1次
+        if ":" in line:
+            title, content = line.split(":", 1)    # 按字符串: 分割，最多分割1次
             title = title.strip()
             content = content.strip()
             
