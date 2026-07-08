@@ -15,6 +15,27 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 USER_DICT_PATH = Path("python/rag/user_dict.txt")
 
+SYNONYM_MAP = {
+    "雨刷": ["雨刮"],
+    "雨刮": ["雨刷"],
+
+    "冷气": ["空调", "制冷"],
+    "制冷": ["空调", "冷气"],
+    "空调": ["冷气", "制冷"],
+
+    "后备箱": ["尾门"],
+    "尾门": ["后备箱"],
+
+    "充电桩": ["充电站"],
+    "充电站": ["充电桩"],
+
+    "胎压": ["轮胎气压"],
+    "轮胎气压": ["胎压"],
+
+    "蓝牙": ["连接", "配对"],
+    "配对": ["蓝牙", "连接"],
+}
+
 # 用dataclass加工一下这个类，为其自动生成构造函数等
 @dataclass
 class SearchResult:
@@ -58,7 +79,8 @@ class TfidfRagSearcher:
             return []
 
         # 把查询文本转成向量 transform处理列表 需要转换成列表，列表值为TF*IDF
-        query_vector = self.vectorizer.transform([query])
+        expanded_query = self._expand_query(query)
+        query_vector = self.vectorizer.transform([expanded_query])
 
         # 计算 query 和每个文档 chunk 的余弦相似度。.flatten() 把结果压平成一维数组，方便后面排序。
         scores = cosine_similarity(query_vector, self.doc_matrix).flatten()
@@ -111,6 +133,16 @@ class TfidfRagSearcher:
             raise ValueError(f"chunks file should contain a list: {chunks_path}")
 
         return data
+    
+    @staticmethod
+    def _expand_query(query: str) -> str:
+        expanded_tems = [query]
+        
+        for key, synonyms in SYNONYM_MAP.items():
+            if key in query:
+                expanded_tems.extend(synonyms)
+                
+        return " ".join(expanded_tems)
 
 
 def print_results(results: List[SearchResult]) -> None:
@@ -121,7 +153,6 @@ def print_results(results: List[SearchResult]) -> None:
     for rank, result in enumerate(results, start=1):
         print(f"{rank}. [{result.score:.4f}] {result.title}")
         print(f"   {result.text}")
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Search vehicle manual chunks with TF-IDF.")
@@ -141,10 +172,21 @@ def main() -> None:
         default=3,
         help="Number of results to return.",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print debug information.",
+    )
 
     args = parser.parse_args()
-
+    
     searcher = TfidfRagSearcher(Path(args.index))
+    
+    if args.debug:
+        expanded_query = searcher._expand_query(args.query)
+        print(f"[DEBUG] query: {args.query}")
+        print(f"[DEBUG] expanded query: {expanded_query}")
+    
     results = searcher.search(args.query, args.top_k)
 
     print_results(results)

@@ -53,5 +53,8 @@ run_test "蓝牙怎么连接" "蓝牙连接"
 run_test "胎压报警怎么办" "胎压报警"
 run_test "雨刷怎么开" "雨刮控制"
 run_test "怎么打开后备箱" "后备箱开启"
+run_test "车里太热了怎么开冷气" "空调系统"
+run_test "尾门怎么打开" "后备箱开启"
+run_test "怎么导航到最近的充电桩" "导航系统"
 
 echo "All Python TF-IDF tests passed."
