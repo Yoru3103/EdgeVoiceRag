@@ -96,9 +96,11 @@ sock.close()
 ctx.term()
 PY
 )
-    if echo "$output" | grep -q '"ok": true' && 
-       echo "$output" | grep -q "$expected" &&
-       echo "$output" | grep -q "answer"; then
+    if echo "$output" | grep -q '"ok": true' && \
+        echo "$output" | grep -q '"answer"' && \
+        echo "$output" | grep -q '"generated_answer"' && \
+        echo "$output" | grep -q '"llm_backend": "mock_llm"' && \
+        echo "$output" | grep -q "$expected"; then
         echo "[PASS] $query"
     else
         cho "[FAIL] $query"

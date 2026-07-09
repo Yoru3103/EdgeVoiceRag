@@ -8,6 +8,7 @@ from typing import Any, List, Dict
 import zmq
 
 from tfidf_search import SearchResult, TfidfRagSearcher
+from llm_generator import MockLLMGenerator
 
 def result_to_dict(rank: int, result: SearchResult) -> Dict[str, Any]:
     return {
@@ -34,12 +35,18 @@ def build_success_response(
     query: str,
     backend: str,
     results: List[SearchResult],
+    generated_answer: str,
+    prompt: str,
+    llm_backend: str,
 ) -> Dict[str, Any]:
     return {
         "ok": True,
         "query": query,
         "backend": backend,
+        "llm_backend":llm_backend,
         "answer": build_answer(results),
+        "generated_answer": generated_answer,
+        "prompt": prompt,
         "result_count": len(results),
         "results": [
             result_to_dict(rank, result)
@@ -73,6 +80,7 @@ class PythonRagServer:
         self.running = True
         
         self.searcher = TfidfRagSearcher(index_path)
+        self.generator = MockLLMGenerator()
         
     def start(self) -> None:
         self.socket.bind(self.endpoint)
@@ -81,6 +89,7 @@ class PythonRagServer:
         print(f"[INFO] Endpoint: {self.endpoint}")
         print(f"[INFO] Index path: {self.index_path}")
         print(f"[INFO] Top-k: {self.top_k}")
+        print(f"[INfO] LLM backend: {self.generator.backend}")
         
         while self.running:
             try:
@@ -101,10 +110,23 @@ class PythonRagServer:
                     break
                 
                 results = self.searcher.search(query, self.top_k)
+                
+                contexts = [
+                    result.text
+                    for result in results
+                ]
+                
+                generation = self.generator.generate(
+                    query=query,
+                    contexts=contexts,
+                )
                 response = build_success_response(
                     query=query,
                     backend=self.backend,
-                    results=results
+                    results=results,
+                    generated_answer=generation.answer,
+                    prompt=generation.prompt,
+                    llm_backend=generation.backend,
                 )
                 
                 self.socket.send_string(response_to_json(response))
