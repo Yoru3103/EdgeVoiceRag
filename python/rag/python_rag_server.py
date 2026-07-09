@@ -8,7 +8,7 @@ from typing import Any, List, Dict
 import zmq
 
 from tfidf_search import SearchResult, TfidfRagSearcher
-from llm_generator import MockLLMGenerator
+from llm_generator import create_llm_generator
 
 def result_to_dict(rank: int, result: SearchResult) -> Dict[str, Any]:
     return {
@@ -69,7 +69,11 @@ def response_to_json(response: Dict[str, Any]) -> str:
     return json.dumps(response, ensure_ascii=False)
 
 class PythonRagServer:
-    def __init__(self, endpoint: str, index_path: Path, top_k: int) -> None:
+    def __init__(
+        self, endpoint: str, 
+        index_path: Path, 
+        top_k: int,
+        llm_backend: str) -> None:
         self.endpoint = endpoint
         self.index_path = index_path
         self.top_k = top_k
@@ -80,7 +84,7 @@ class PythonRagServer:
         self.running = True
         
         self.searcher = TfidfRagSearcher(index_path)
-        self.generator = MockLLMGenerator()
+        self.generator = create_llm_generator(llm_backend)
         
     def start(self) -> None:
         self.socket.bind(self.endpoint)
@@ -179,6 +183,12 @@ def main() -> None:
         default=3,
         help="Number of results to return.",
     )
+    parser.add_argument(
+        "--llm-backend",
+        default="mock",
+        choices=["mock"],
+        help="LLM generation backen",
+    )
     
     args = parser.parse_args()
     
@@ -198,6 +208,7 @@ def main() -> None:
         endpoint=args.endpoint,
         index_path=index_path,
         top_k=args.top_k,
+        llm_backend=args.llm_backend,
     )
     
     def handle_signal(signum, frame) -> None:

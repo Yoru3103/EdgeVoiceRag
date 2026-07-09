@@ -1,7 +1,7 @@
-from llm_generator import MockLLMGenerator
+from llm_generator import create_llm_generator
 
 def main() -> None:
-    generator = MockLLMGenerator()
+    generator = create_llm_generator("mock")
     
     query = "空调怎么打开"
     contexts = [

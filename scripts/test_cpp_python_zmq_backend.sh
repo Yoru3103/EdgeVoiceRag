@@ -51,7 +51,8 @@ echo "Starting Python RAG server..."
 python python/rag/python_rag_server.py \
     --endpoint tcp://*:5556 \
     --index vector_db/chunks.json \
-    --top-k 3 > "$LOG_FILE" 2>&1 &
+    --top-k 3 \
+    --llm-backend mock > "$LOG_FILE" 2>&1 &
 
 SERVER_PID=$!
 

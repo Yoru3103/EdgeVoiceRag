@@ -47,3 +47,9 @@ class MockLLMGenerator:
             lines.append(f"{idx}. {context}")
         # 分隔符.join(可迭代对象) lines每个成员之间用分隔符连接
         return "\n".join(lines)
+    
+def create_llm_generator(backend: str):
+    if backend == "mock":
+        return MockLLMGenerator()
+    
+    raise ValueError(f"Unsupported LLM backend: {backend}")
