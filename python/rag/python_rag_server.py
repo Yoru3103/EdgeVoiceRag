@@ -73,7 +73,9 @@ class PythonRagServer:
         self, endpoint: str, 
         index_path: Path, 
         top_k: int,
-        llm_backend: str) -> None:
+        llm_backend: str,
+        llm_model: str,
+        ollama_url: str,) -> None:
         self.endpoint = endpoint
         self.index_path = index_path
         self.top_k = top_k
@@ -84,7 +86,11 @@ class PythonRagServer:
         self.running = True
         
         self.searcher = TfidfRagSearcher(index_path)
-        self.generator = create_llm_generator(llm_backend)
+        self.generator = create_llm_generator(
+            backend=llm_backend,
+            model=llm_model,
+            base_url=ollama_url,
+        )
         
     def start(self) -> None:
         self.socket.bind(self.endpoint)
@@ -186,8 +192,18 @@ def main() -> None:
     parser.add_argument(
         "--llm-backend",
         default="mock",
-        choices=["mock"],
+        choices=["mock", "ollama"],
         help="LLM generation backen",
+    )
+    parser.add_argument(
+        "--llm-model",
+        default="qwen2.5:1.5b",
+        help="LLM model name for Ollama backend."
+    )
+    parser.add_argument(
+        "--ollama-url",
+        default="http://localhost:11434",
+        help="Ollama base URL.",
     )
     
     args = parser.parse_args()
@@ -209,6 +225,8 @@ def main() -> None:
         index_path=index_path,
         top_k=args.top_k,
         llm_backend=args.llm_backend,
+        llm_model=args.llm_model,
+        ollama_url=args.ollama_url,
     )
     
     def handle_signal(signum, frame) -> None:

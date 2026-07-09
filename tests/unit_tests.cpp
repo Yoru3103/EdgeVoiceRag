@@ -87,6 +87,16 @@ static void testRagEngine() {
             "RagEngine: unrelated query should return empty results"
         );
     }
+
+    {
+        std::string response = R"({"ok":true,"answer":"旧 answer","generated_answer":"LLM 生成 answer"})";
+        std::string answer = RagResponseParser::extractAnswerOrRaw(response);
+
+        expectTrue(
+        answer == "LLM 生成 answer",
+        "RagResponseParser: should prefer generated_answer over answer"
+    );
+    }
 }
 
 static void testRagResponseParser() {
