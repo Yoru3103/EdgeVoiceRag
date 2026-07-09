@@ -57,8 +57,10 @@ static void handleQuery(const std::string& question,
     Logger::log(LogLevel::Route, router.typeToString(type));
 
     if (type == QueryType::VehicleManual) {
-        if (rag_backend == "zmq") {
-            PerfTimer rag_timer("rag_zmq_request");
+        if (rag_backend == "zmq" || rag_backend == "python_zmq") {
+            PerfTimer rag_timer(rag_backend == "zmq" 
+                                    ? "rag_zmq_request"
+                                    : "rag_python_zmq_request");
 
             RagClilentZmq rag_client(rag_endpoint, rag_timeout_ms);
             std::string reply = rag_client.query(question);
@@ -136,11 +138,11 @@ int main(int argc, char* argv[]) {
 
         Logger::log(LogLevel::Info, "Knowledge base loaded successfully.");
     } else {
-        Logger::log(LogLevel::Info, "Local knowledge base loading skipped because RAG backend is zmq.");
+        Logger::log(LogLevel::Info, "Local knowledge base loading skipped because RAG backend is " + config.ragBackend() + ".");
     }
 
     if (options.onceMode()) {
-        if (options.onceQuery() == "exit" && config.ragBackend() == "zmq") {
+        if (options.onceQuery() == "exit" && (config.ragBackend() == "zmq" || config.ragBackend() == "python_zmq")) {
             Logger::log(LogLevel::Info, "Sending exit command to RAG server.");
 
             RagClilentZmq rag_client(config.ragEndpoint(), config.ragTimeoutMs());
@@ -168,9 +170,17 @@ int main(int argc, char* argv[]) {
         std::getline(std::cin, question);
 
         if (question == "exit") {
-            std::cout << "Bye." << std::endl;
-            RagClilentZmq rag_client(config.ragEndpoint(), config.ragTimeoutMs());
-            std::string reply = rag_client.query("exit");
+            if (config.ragBackend() == "zmq" ||
+                config.ragBackend() == "python_zmq") {
+                Logger::log(LogLevel::Info, "Sending exit command to RAG server");
+
+                RagClilentZmq rag_client(config.ragEndpoint(), config.ragTimeoutMs());
+                std::string reply = rag_client.query(question);
+
+                Logger::log(LogLevel::System, reply);
+            }
+
+            Logger::log(LogLevel::System, "Bye.");
             break;
         }
 

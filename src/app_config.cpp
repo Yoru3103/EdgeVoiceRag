@@ -57,7 +57,7 @@ bool AppConfig::load() {
         } else if (key == "rag_backend") {
             rag_backend_ = value;
 
-            if (rag_backend_ != "local" && rag_backend_ != "zmq") {
+            if (rag_backend_ != "local" && rag_backend_ != "zmq" && rag_backend_ != "python_zmq") {
                 rag_backend_ = "local";
             }
         } else if (key == "rag_endpoint") {
