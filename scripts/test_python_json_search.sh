@@ -36,7 +36,9 @@ run_test() {
         --top-k 3 \
         --backend tfidf)
 
-    if echo "$output" | grep -q '"ok": true' && echo "$output" | grep -q "$expected"; then
+    if echo "$output" | grep -q '"ok": true' && 
+       echo "$output" | grep -q "$expected" &&
+       echo "$output" | grep -q "answer"; then
         echo "[PASS] $query"
     else
         echo "[FAIL] $query"

@@ -17,6 +17,17 @@ def result_to_dict(rank: int, result: SearchResult) -> Dict[str, Any]:
         "title": result.title,
     }
     
+def build_answer(results: List[SearchResult]) -> str:
+    if not results:
+        return "根据车辆手册：没有找到相关车辆手册内容。"
+    
+    lines = ["根据车辆手册："]
+    
+    for rank, result in enumerate(results, start=1):
+        lines.append(f"{rank}, {result}")
+        
+    return "\n".join(lines)
+    
 def build_success_response(
     query: str,
     backend: str,
@@ -26,6 +37,7 @@ def build_success_response(
         "ok": True,
         "query": query,
         "backend": backend,
+        "answer": build_answer(results),
         "result_count": len(results),
         "results": [
             result_to_dict(rank, result)
@@ -42,6 +54,8 @@ def build_error_response(
         "ok": False,
         "query": query,
         "backend": backend,
+        "answer": "Python RAG 检索失败。",
+        "error": error,
         "result_count": 0,
         "results": [],
     }

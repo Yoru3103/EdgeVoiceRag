@@ -96,7 +96,9 @@ sock.close()
 ctx.term()
 PY
 )
-    if echo "$output" | grep -q '"ok": true' && echo "$output"| grep -q "$expected"; then
+    if echo "$output" | grep -q '"ok": true' && 
+       echo "$output" | grep -q "$expected" &&
+       echo "$output" | grep -q "answer"; then
         echo "[PASS] $query"
     else
         cho "[FAIL] $query"
