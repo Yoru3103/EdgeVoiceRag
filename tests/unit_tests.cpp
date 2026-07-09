@@ -4,6 +4,7 @@
 
 #include "query_router.h"
 #include "rag_engine.h"
+#include "rag_response_parser.h"
 
 static int g_failed_count = 0;
 
@@ -88,11 +89,44 @@ static void testRagEngine() {
     }
 }
 
+static void testRagResponseParser() {
+    {
+        std::string response = R"({"ok":true,"answer":"根据车辆手册：\n1. 空调系统：..."})";
+        std::string answer = RagResponseParser::extractAnswerOrRaw(response);
+
+        expectTrue(
+            answer.find("空调系统") != std::string::npos,
+            "RagResponseParser: should extract answer from JSON response"
+        );
+    }
+
+    {
+        std::string response = "根据车辆手册：普通文本回答";
+        std::string answer = RagResponseParser::extractAnswerOrRaw(response);
+
+        expectTrue(
+            answer == response,
+            "RagResponseParser: should keep non-JSON response unchanged"
+        );
+    }
+
+    {
+        std::string response = R"({"ok":false,"error":"backend timeout"})";
+        std::string answer = RagResponseParser::extractAnswerOrRaw(response);
+
+        expectTrue(
+            answer.find("[ERROR] backend timeout") != std::string::npos,
+            "RagResponseParser: should extract error from JSON response"
+        );
+    }
+}
+
 int main() {
     std::cout << "Running unit tests..." << std::endl;
 
     testQueryRouter();
     testRagEngine();
+    testRagResponseParser();
 
     if (g_failed_count == 0) {
         std::cout << "\nAll unit tests passed." << std::endl;

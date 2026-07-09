@@ -24,7 +24,7 @@ def build_answer(results: List[SearchResult]) -> str:
     lines = ["根据车辆手册："]
     
     for rank, result in enumerate(results, start=1):
-        lines.append(f"{rank}, {result}")
+        lines.append(f"{rank}. {result.content}")
         
     return "\n".join(lines)
     

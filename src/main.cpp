@@ -11,6 +11,7 @@
 #include "perf_timer.h"
 #include "rag_engine.h"
 #include "rag_client_zmq.h"
+#include "rag_response_parser.h"
 
 static void logElapsedTime (const PerfTimer& timer) {
     std::ostringstream perf;
@@ -64,8 +65,10 @@ static void handleQuery(const std::string& question,
 
             RagClilentZmq rag_client(rag_endpoint, rag_timeout_ms);
             std::string reply = rag_client.query(question);
+            
+            std::string answer = RagResponseParser::extractAnswerOrRaw(reply);
 
-            Logger::log(LogLevel::System, reply);
+            Logger::log(LogLevel::System, answer);
             logElapsedTime(rag_timer);
         } else {
             PerfTimer rag_timer("rag_local_request");
@@ -148,7 +151,9 @@ int main(int argc, char* argv[]) {
             RagClilentZmq rag_client(config.ragEndpoint(), config.ragTimeoutMs());
             std::string reply = rag_client.query("exit");
 
-            Logger::log(LogLevel::System, reply);
+            std::string answer = RagResponseParser::extractAnswerOrRaw(reply);
+
+            Logger::log(LogLevel::System, answer);
             return 0;
         }
         handleQuery(
@@ -177,7 +182,9 @@ int main(int argc, char* argv[]) {
                 RagClilentZmq rag_client(config.ragEndpoint(), config.ragTimeoutMs());
                 std::string reply = rag_client.query(question);
 
-                Logger::log(LogLevel::System, reply);
+                std::string answer = RagResponseParser::extractAnswerOrRaw(reply);
+
+                Logger::log(LogLevel::System, answer);
             }
 
             Logger::log(LogLevel::System, "Bye.");

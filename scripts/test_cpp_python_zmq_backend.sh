@@ -73,9 +73,8 @@ run_test() {
     local output
     output=$("$BIN" --config "$CONFIG" --once "$query")
 
-    if echo "$output" | grep -q '"ok": true' && 
-       echo "$output" | grep -q "$expected" &&
-       echo "$output" | grep -q "answer"; then
+    if echo "$output" | grep -q "$expected" &&
+       echo "$output" | grep -q "根据车辆手册"; then
         echo "[PASS] $query"
     else
         echo "[FAIL] $query"
@@ -91,12 +90,12 @@ run_test() {
     echo
 }
 
-run_test "空调怎么打开" "空调系统"
-run_test "蓝牙怎么连接" "蓝牙连接"
+run_test "空调怎么打开" "打开空调"
+run_test "蓝牙怎么连接" "配对连接"
 run_test "胎压报警怎么办" "胎压报警"
-run_test "雨刷怎么开" "雨刮控制"
-run_test "车里太热了怎么开冷气" "空调系统"
-run_test "尾门怎么打开" "后备箱开启"
+run_test "雨刷怎么开" "方向盘右侧拨杆"
+run_test "车里太热了怎么开冷气" "制冷"
+run_test "尾门怎么打开" "尾门"
 
 echo "Stopping Python RAG server..."
 "$BIN" --config "$CONFIG" --once "exit" > /dev/null 2>&1 || true
