@@ -1,3 +1,5 @@
+# 读取docs/vehicle_manual.txt，生成 chunks.json
+
 import argparse
 import json
 from pathlib import Path

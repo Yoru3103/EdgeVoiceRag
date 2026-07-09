@@ -1,3 +1,5 @@
+# 调试 jieba 分词结果。
+
 import argparse
 from pathlib import Path
 from typing import List

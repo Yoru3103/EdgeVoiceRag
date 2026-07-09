@@ -1,3 +1,5 @@
+# 提供统一 JSON 搜索入口。
+
 import argparse
 import json
 from pathlib import Path
