@@ -3,9 +3,7 @@
 set -e
 
 EXPECTED_ENV="edge-rag"
-
-CLIENT="./build/rag_client"
-LOG_FILE="/tmp/python_rag_server_test.log"
+LOG_FILE="/tmp/python_rag_server_debug_prompt_test.log"
 ENDPOINT_BIND="tcp://*:5556"
 ENDPOINT_CONNECT="tcp://localhost:5556"
 
@@ -21,14 +19,6 @@ if [ "$CONDA_DEFAULT_ENV" != "$EXPECTED_ENV" ]; then
     echo "Expected environment: $EXPECTED_ENV"
     echo "Please run:"
     echo "  conda activate $EXPECTED_ENV"
-    exit 1
-fi
-
-if [ ! -x "$CLIENT" ]; then
-    echo "[ERROR] C++ rag_client not found: $CLIENT"
-    echo "Please build the C++ project first:"
-    echo "  cmake -S . -B build"
-    echo "  cmake --build build"
     exit 1
 fi
 
@@ -58,12 +48,13 @@ PY
 
 trap cleanup EXIT
 
-echo "Starting Python RAG server..."
+echo "Starting Python RAG server with prompt debug..."
 python python/rag/python_rag_server.py \
     --endpoint "$ENDPOINT_BIND" \
     --index vector_db/chunks.json \
     --top-k 3 \
-    --llm-backend mock > "$LOG_FILE" 2>&1 &
+    --llm-backend mock \
+    --include-prompt > "$LOG_FILE" 2>&1 &
 
 SERVER_PID=$!
 
@@ -76,14 +67,9 @@ if ! kill -0 "$SERVER_PID" 2>/dev/null; then
     exit 1
 fi
 
-run_test() {
-    local query="$1"
-    local expected="$2"
+echo "Running debug prompt query..."
 
-    echo "Running Python Rag server queryz: $query"
-
-    local output
-    output=$(python - <<PY
+output=$(python - <<PY
 import zmq
 ctx = zmq.Context()
 sock = ctx.socket(zmq.REQ)
@@ -91,46 +77,26 @@ sock.setsockopt(zmq.RCVTIMEO, 3000)
 sock.setsockopt(zmq.SNDTIMEO, 3000)
 sock.setsockopt(zmq.LINGER, 0)
 sock.connect("$ENDPOINT_CONNECT")
-sock.send_string("$query")
+sock.send_string("空调怎么打开")
 print(sock.recv_string())
 sock.close()
 ctx.term()
 PY
 )
-    if echo "$output" | grep -q '"prompt"'; then
-    echo "[FAIL] $query"
-    echo "Prompt should not be included by default."
+
+if echo "$output" | grep -q '"ok": true' && \
+   echo "$output" | grep -q '"prompt"' && \
+   echo "$output" | grep -q "你是一个车载语音助手"; then
+    echo "[PASS] prompt debug response includes prompt"
+else
+    echo "[FAIL] prompt debug response missing prompt"
     echo "Actual output:"
     echo "$output"
-    exit 1
-    fi
-
-    if echo "$output" | grep -q '"ok": true' && \
-        echo "$output" | grep -q '"answer"' && \
-        echo "$output" | grep -q '"generated_answer"' && \
-        echo "$output" | grep -q '"llm_backend": "mock_llm"' && \
-        echo "$output" | grep -q "$expected"; then
-        echo "[PASS] $query"
-    else
-        cho "[FAIL] $query"
-        echo "Expected keyword: $expected"
-        echo "Actual output:"
-        echo "$output"
-        echo
-        echo "Server log:"
-        cat "$LOG_FILE"
-        exit 1
-    fi
-    
     echo
-}
-
-run_test "空调怎么打开" "空调系统"
-run_test "蓝牙怎么连接" "蓝牙连接"
-run_test "胎压报警怎么办" "胎压报警"
-run_test "雨刷怎么开" "雨刮控制"
-run_test "车里太热了怎么开冷气" "空调系统"
-run_test "尾门怎么打开" "后备箱开启"
+    echo "Server log:"
+    cat "$LOG_FILE"
+    exit 1
+fi
 
 echo "Stopping Python RAG server..."
 cleanup
@@ -142,4 +108,4 @@ if kill -0 "$SERVER_PID" 2>/dev/null; then
     kill "$SERVER_PID" || true
 fi
 
-echo "All Python RAG server tests passed."
+echo "Prompt debug test passed."
