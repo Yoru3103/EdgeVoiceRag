@@ -40,11 +40,42 @@ class OllamaGenerator:
         self,
         model: str = "qwen2.5:3b",
         base_url: str = "http://localhost:11434",
-        timeout_seconds: int= 60) -> None:
+        timeout_seconds: int= 60,
+        enable_health_check: bool = True) -> None:
         self.model = model
         self.base_url = base_url
         self.timeout_seconds = timeout_seconds
         self.backend = f"ollama{self.model}"
+        
+        if enable_health_check:
+            self.health_check()
+            
+    def health_check(self) -> None:
+        try:
+            models = self._list_models()
+        except requests.ConnectionError as exc:
+            raise RuntimeError(
+                f"Ollama service is unavailable at {self.base_url}. "
+                f"Please make sure Ollama is running. Original error: {exc}"
+            ) from exc
+        except requests.Timeout as exc:
+            raise RuntimeError(
+                f"Ollama health check timed out after {self.timeout_seconds} seconds. "
+                f"Base URL: {self.base_url}"
+            ) from exc
+        except requests.RequestException as exc:
+            raise RuntimeError(
+                f"Ollama health check failed. Base URL: {self.base_url}. "
+                f"Original error: {exc}"
+            ) from exc
+        
+        if not self._is_model_available(models):
+            available = ", ".join(models) if models else "none"
+            raise RuntimeError(
+                f"Ollama model not found: {self.model}. "
+                f"Available models: {available}. "
+                f"Please run: ollama pull {self.model}"
+            )
         
     def generate(self, query: str, contexts: List[str]) -> GenerationResult:
         prompt = build_rag_prompt(query, contexts)
@@ -87,12 +118,76 @@ class OllamaGenerator:
                 backend=self.backend,
             )
             
+        except requests.ConnectionError as exc:
+            return GenerationResult(
+                answer=(
+                    f"Ollama 服务不可用：无法连接到 {self.base_url}。"
+                    "请确认 Ollama 已启动，并检查 WSL/Windows 网络访问地址。"
+                    f"原始错误：{exc}"
+                ),
+                prompt=prompt,
+                backend=self.backend,
+            )
+            
+        except requests.Timeout as exc:
+            return GenerationResult(
+                answer=(
+                    f"Ollama 生成超时，超过 {self.timeout_seconds} 秒未返回。"
+                    "可以尝试换更小的模型、增大 --llm-timeout，或确认机器负载。"
+                ),
+                prompt=prompt,
+                backend=self.backend
+            )
+            
+        except requests.HTTPError as exc:
+            return GenerationResult(
+                answer=(
+                    f"Ollama HTTP 错误：{exc}。"
+                    f"请确认模型名称是否正确：{self.model}"
+                ),
+                prompt=prompt,
+                backend=self.backend,
+            )
+            
         except requests.RequestException as exc:
             return GenerationResult(
                 answer=f"Ollama 调用失败: {exc}",
                 prompt=prompt,
                 backend=self.backend,
             )
+            
+        except ValueError as exc:
+            return GenerationResult(
+                answer=f"Ollama 返回内容不是合法 JSON：{exc}",
+                prompt=prompt,
+                backend=self.backend,
+            )
+            
+    def _list_models(self) -> List[str]:
+        url = f"{self.base_url}/api/tags"
+        
+        # GET请求 获取数据
+        response = requests.get(
+            url,
+            timeout=self.timeout_seconds,
+        )
+        # 状态码出现失败时，会抛出异常
+        response.raise_for_status()
+        
+        data = response.json()
+        raw_models = data.get("models", [])
+        
+        models: List[str] = []
+        
+        for item in raw_models:
+            name = item.get("name")
+            if isinstance(name, str):
+                models.append(name)
+                
+        return models
+    
+    def _is_model_available(self, models: List[str]) -> bool:
+        return self.model in models
     
 def build_rag_prompt(query: str, contexts: List[str]) -> str:
     context_text = "\n".join(
@@ -115,6 +210,8 @@ def create_llm_generator(
     backend: str,
     model: str = "qwen2.5:3b",
     base_url: str = "http://localhost:11434",
+    timeout_seconds: int = 60,
+    enable_health_check: bool = True,
     ):
     if backend == "mock":
         return MockLLMGenerator()
@@ -123,6 +220,8 @@ def create_llm_generator(
         return OllamaGenerator(
             model=model,
             base_url=base_url,
+            timeout_seconds=timeout_seconds,
+            enable_health_check=enable_health_check,
         )
     
     raise ValueError(f"Unsupported LLM backend: {backend}")

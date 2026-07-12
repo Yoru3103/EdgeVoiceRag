@@ -5,6 +5,7 @@ set -e
 EXPECTED_ENV="edge-rag"
 MODEL="${1:-qwen2.5:3b}"
 OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
+LLM_TIMEOUT="${LLM_TIMEOUT:-60}"
 
 if [ -z "$CONDA_DEFAULT_ENV" ]; then
     echo "[ERROR] No conda environment is currently activated."
@@ -34,4 +35,5 @@ python python/rag/python_rag_server.py \
     --top-k 3 \
     --llm-backend ollama \
     --llm-model "$MODEL" \
-    --ollama-url "$OLLAMA_URL"
+    --ollama-url "$OLLAMA_URL" \
+    --llm-timeout "$LLM_TIMEOUT"

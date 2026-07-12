@@ -38,21 +38,26 @@ def build_success_response(
     generated_answer: str,
     prompt: str,
     llm_backend: str,
+    include_prompt: bool,
 ) -> Dict[str, Any]:
-    return {
+    response = {
         "ok": True,
         "query": query,
         "backend": backend,
         "llm_backend":llm_backend,
         "answer": build_answer(results),
         "generated_answer": generated_answer,
-        "prompt": prompt,
         "result_count": len(results),
         "results": [
             result_to_dict(rank, result)
             for rank, result in enumerate(results, start=1)
         ],
     }
+    
+    if include_prompt:
+        response["prompt"] = prompt
+        
+    return response
     
 def build_error_response(query: str, backend: str, error: str) -> Dict[str, Any]:
     return {
@@ -75,11 +80,15 @@ class PythonRagServer:
         top_k: int,
         llm_backend: str,
         llm_model: str,
-        ollama_url: str,) -> None:
+        ollama_url: str,
+        llm_timeout: int,
+        llm_health_check: bool,
+        include_prompt: bool) -> None:
         self.endpoint = endpoint
         self.index_path = index_path
         self.top_k = top_k
         self.backend = "python_tdidf"
+        self.include_prompt = include_prompt
         
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REP)
@@ -90,6 +99,8 @@ class PythonRagServer:
             backend=llm_backend,
             model=llm_model,
             base_url=ollama_url,
+            timeout_seconds=llm_timeout,
+            enable_health_check=llm_health_check,
         )
         
     def start(self) -> None:
@@ -100,6 +111,8 @@ class PythonRagServer:
         print(f"[INFO] Index path: {self.index_path}")
         print(f"[INFO] Top-k: {self.top_k}")
         print(f"[INfO] LLM backend: {self.generator.backend}")
+        print(f"[INFO] LLM timeout: {self.generator.timeout_seconds if hasattr(self.generator, 'timeout_seconds') else 'N/A'} seconds")
+        print(f"[INFO] Include prompt: {self.include_prompt}")
         
         while self.running:
             try:
@@ -137,6 +150,7 @@ class PythonRagServer:
                     generated_answer=generation.answer,
                     prompt=generation.prompt,
                     llm_backend=generation.backend,
+                    include_prompt=self.include_prompt,
                 )
                 
                 self.socket.send_string(response_to_json(response))
@@ -205,11 +219,31 @@ def main() -> None:
         default="http://localhost:11434",
         help="Ollama base URL.",
     )
+    parser.add_argument(
+        "--llm-timeout",
+        type=int,
+        default=60,
+        help="LLM request timeout in seconds.",
+    )
+    parser.add_argument(
+        "--disable-llm-health-check",
+        action="store_true",
+        help="Disable LLM backend health check on startup.",
+    )
+    parser.add_argument(
+        "--include-prompt",
+        action="store_true",
+        help="Include full prompt in JSON response for debugging.",
+    )
     
     args = parser.parse_args()
     
     if args.top_k < 0:
         print("[ERROR] --top-k must be positive.")
+        sys.exit(1)
+        
+    if args.llm_timeout < 0:
+        print("[ERROR] --llm-timeout must be positive.")
         sys.exit(1)
         
     index_path = Path(args.index)
@@ -227,6 +261,9 @@ def main() -> None:
         llm_backend=args.llm_backend,
         llm_model=args.llm_model,
         ollama_url=args.ollama_url,
+        llm_timeout=args.llm_timeout,
+        llm_health_check=args.disable_llm_health_check,
+        include_prompt=args.include_prompt,
     )
     
     def handle_signal(signum, frame) -> None:

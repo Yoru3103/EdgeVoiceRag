@@ -5,6 +5,7 @@ set -e
 EXPECTED_ENV="edge-rag"
 MODEL="${1:-qwen2.5:3b}"
 OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
+LLM_TIMEOUT="${LLM_TIMEOUT:-60}"
 
 if [ -z "$CONDA_DEFAULT_ENV" ]; then
     echo "[ERROR] No conda environment is currently activated."
@@ -28,6 +29,8 @@ generator = create_llm_generator(
     backend="ollama",
     model="$MODEL",
     base_url="$OLLAMA_URL",
+    timeout_seconds=int("$LLM_TIMEOUT"),
+    enable_health_check=True,
 )
 
 query = "空调怎么打开"

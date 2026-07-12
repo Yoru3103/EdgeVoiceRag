@@ -7,12 +7,12 @@ std::string RagResponseParser::extractAnswerOrRaw(const std::string& response) {
         auto json_response = nlohmann::json::parse(response);
 
         if (json_response.contains("generated_answer") && 
-        json_response["generated_answer"].is_string()) {
+            json_response["generated_answer"].is_string()) {
             return json_response["generated_answer"].get<std::string>();
         }
 
         if (json_response.contains("error") && 
-        json_response["error"].is_string()) {
+            json_response["error"].is_string()) {
             return "[ERROR] " + json_response["error"].get<std::string>();
         }
 
