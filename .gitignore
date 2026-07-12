@@ -12,3 +12,6 @@ vector_db/
 .env
 .vscode/
 .venv/
+voice_input/
+voice_output/
+*.pcm
