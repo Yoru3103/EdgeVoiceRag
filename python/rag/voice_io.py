@@ -36,7 +36,7 @@ class MockTts:
             file.write(text)
             
         return TtsResult(
-            output_path=output_path,
+            output_path=str(output_path),
             backend=self.backend,
             text=text,
         )
