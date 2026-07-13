@@ -2,11 +2,12 @@ import argparse
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Dict
 
 import zmq
 
-from voice_io import create_asr_backend, create_tts_backend
+from rag.voice_io import create_asr_backend, create_tts_backend
 
 
 @dataclass
@@ -34,14 +35,7 @@ class ZmqRagClient:
             socket.connect(self.endpoint)
             socket.send_string(text)
 
-            raw_response = socket.recv_string()
-            answer = self._extract_answer(raw_response)
-
-            return RagClientResult(
-                ok=True,
-                answer=answer,
-                raw_response=raw_response,
-            )
+            return self._parse_response(socket.recv_string())
 
         except zmq.Again:
             return RagClientResult(
@@ -64,26 +58,38 @@ class ZmqRagClient:
             context.term()
 
     @staticmethod
-    def _extract_answer(raw_response: str) -> str:
+    def _parse_response(raw_response: str) -> RagClientResult:
         try:
             data: Dict[str, Any] = json.loads(raw_response)
 
+            if data.get("ok") is False:
+                error = data.get("error")
+                if not isinstance(error, str) or not error.strip():
+                    error = "RAG server returned ok=false"
+                return RagClientResult(
+                    ok=False,
+                    answer="",
+                    raw_response=raw_response,
+                    error=error.strip(),
+                )
+
             generated_answer = data.get("generated_answer")
             if isinstance(generated_answer, str) and generated_answer.strip():
-                return generated_answer.strip()
+                return RagClientResult(True, generated_answer.strip(), raw_response)
 
             answer = data.get("answer")
             if isinstance(answer, str) and answer.strip():
-                return answer.strip()
+                return RagClientResult(True, answer.strip(), raw_response)
 
-            error = data.get("error")
-            if isinstance(error, str) and error.strip():
-                return f"Python RAG 检索失败：{error.strip()}"
-
-            return raw_response
+            return RagClientResult(
+                ok=False,
+                answer="",
+                raw_response=raw_response,
+                error="RAG response does not contain a non-empty answer",
+            )
 
         except json.JSONDecodeError:
-            return raw_response
+            return RagClientResult(True, raw_response, raw_response)
 
 
 def build_voice_pipeline_response(
@@ -94,6 +100,7 @@ def build_voice_pipeline_response(
     rag_raw_response: str,
     tts_backend: str,
     tts_output_path: str,
+    timings_ms: Dict[str, float],
 ) -> Dict[str, Any]:
     return {
         "ok": True,
@@ -104,6 +111,7 @@ def build_voice_pipeline_response(
         "rag_raw_response": rag_raw_response,
         "tts_backend": tts_backend,
         "tts_output_path": str(tts_output_path),
+        "timings_ms": timings_ms,
     }
 
 
@@ -166,6 +174,7 @@ def main() -> None:
     tts_output_path = Path(args.tts_output)
 
     try:
+        pipeline_start = perf_counter()
         asr = create_asr_backend(
             backend=args.asr_backend,
             mock_text=args.mock_asr_text,
@@ -180,17 +189,25 @@ def main() -> None:
             timeout_ms=args.rag_timeout_ms,
         )
 
+        asr_start = perf_counter()
         asr_result = asr.transcribe(audio_path)
+        asr_ms = (perf_counter() - asr_start) * 1000
+
+        rag_start = perf_counter()
         rag_result = rag_client.query(asr_result.text)
+        rag_ms = (perf_counter() - rag_start) * 1000
 
         if not rag_result.ok:
             print_json(build_error_response(audio_path, rag_result.error))
             return
 
+        tts_start = perf_counter()
         tts_result = tts.synthesize(
             text=rag_result.answer,
             output_path=tts_output_path,
         )
+        tts_ms = (perf_counter() - tts_start) * 1000
+        total_ms = (perf_counter() - pipeline_start) * 1000
 
         response = build_voice_pipeline_response(
             audio_path=audio_path,
@@ -200,6 +217,12 @@ def main() -> None:
             rag_raw_response=rag_result.raw_response,
             tts_backend=tts_result.backend,
             tts_output_path=tts_result.output_path,
+            timings_ms={
+                "asr": round(asr_ms, 2),
+                "rag": round(rag_ms, 2),
+                "tts": round(tts_ms, 2),
+                "total": round(total_ms, 2),
+            },
         )
 
         print_json(response)

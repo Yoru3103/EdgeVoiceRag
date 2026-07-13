@@ -4,8 +4,8 @@ set -e
 
 EXPECTED_ENV="edge-rag"
 LOG_FILE="/tmp/python_rag_server_voice_pipeline_test.log"
-ENDPOINT_BIND="tcp://*:5556"
-ENDPOINT_CONNECT="tcp://localhost:5556"
+ENDPOINT_BIND="ipc:///tmp/edge_voice_rag_voice_pipeline_test_$$.ipc"
+ENDPOINT_CONNECT="$ENDPOINT_BIND"
 TTS_OUTPUT="voice_output/test_answer.txt"
 
 if [ -z "$CONDA_DEFAULT_ENV" ]; then
@@ -76,7 +76,7 @@ run_test() {
     rm -f "$TTS_OUTPUT"
 
     local output
-    output=$(python python/rag/voice_pipeline.py \
+    output=$(PYTHONPATH=python python -m rag.voice_pipeline \
         --audio voice_input/mock.wav \
         --mock-asr-text "$query" \
         --rag-endpoint "$ENDPOINT_CONNECT" \

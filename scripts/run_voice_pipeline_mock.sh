@@ -23,7 +23,7 @@ if [ "$CONDA_DEFAULT_ENV" != "$EXPECTED_ENV" ]; then
     exit 1
 fi
 
-python python/rag/voice_pipeline.py \
+PYTHONPATH=python python -m rag.voice_pipeline \
     --audio voice_input/mock.wav \
     --mock-asr-text "$QUERY" \
     --rag-endpoint "$RAG_ENDPOINT" \

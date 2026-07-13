@@ -1265,7 +1265,7 @@ Important limitations:
 3. Ollama integration depends on an external local Ollama service.
 4. Local LLM output quality depends on the selected model.
 5. The knowledge base is still a small mock vehicle manual.
-6. There is no ASR or TTS module yet.
+6. ASR and TTS currently use mock backends; real audio models are not integrated yet.
 7. There is no streaming response support yet.
 8. The Python RAG server is still a simple single-process ZeroMQ REP server.
 9. There is no Docker deployment yet.
@@ -1290,15 +1290,38 @@ A production-ready vehicle voice assistant.
 
 ### V5: Offline Voice Pipeline
 
-Possible tasks:
+Implemented baseline:
 
 ```text
 - Add mock ASR interface
 - Add mock TTS interface
 - Add text-in/text-out voice pipeline abstraction
 - Connect voice input → text query → RAG → voice output
-- Later integrate offline ASR such as Whisper or sherpa-onnx
-- Later integrate offline TTS
+- Return structured ok=false responses for server-side handling
+- Report ASR, RAG, TTS, and end-to-end timings
+- Add pytest unit tests and mock end-to-end integration tests
+```
+
+Run the mock voice pipeline after starting the Python RAG server:
+
+```bash
+./scripts/run_voice_pipeline_mock.sh "空调怎么打开"
+```
+
+Run automated tests:
+
+```bash
+ctest --test-dir build --output-on-failure
+PYTHONPATH=python pytest -q python/tests
+./scripts/test_voice_pipeline_mock.sh
+```
+
+Next tasks:
+
+```text
+- Integrate a real offline ASR backend
+- Integrate a real offline TTS backend
+- Keep mock backends for deterministic automated tests
 ```
 
 ---

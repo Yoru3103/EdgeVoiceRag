@@ -57,3 +57,13 @@ add_executable(rag_client
 )
 
 target_link_libraries(rag_client PRIVATE zmq)
+
+enable_testing()
+add_test(
+    NAME edge_voice_rag_unit_tests
+    COMMAND unit_tests
+)
+
+set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
