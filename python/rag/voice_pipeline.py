@@ -136,7 +136,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--mock-asr-text",
-        required=True,
+        default="",
         help="Text returned by mock ASR.",
     )
     parser.add_argument(
@@ -153,8 +153,35 @@ def main() -> None:
     parser.add_argument(
         "--asr-backend",
         default="mock",
-        choices=["mock"],
+        choices=["mock", "faster_whisper"],
         help="ASR backend.",
+    )
+    parser.add_argument(
+        "--asr-model",
+        default="small",
+        help=(
+            "Faster-Whisper model name or local model path. "
+            "Examples: tiny, base, small, models/asr/whisper-small."
+        ),
+    )
+    parser.add_argument(
+        "--asr-device",
+        default="cpu",
+        choices=["cpu", "cuda"],
+        help="Device used by the ASR model.",
+    )
+    parser.add_argument(
+        "--asr-compute-type",
+        default="int8",
+        help=(
+            "Faster-Whisper compute type. "
+            "CPU usually uses int8; CUDA can use float16."
+        ),
+    )
+    parser.add_argument(
+        "--asr-language",
+        default="zh",
+        help="ASR language code.",
     )
     parser.add_argument(
         "--tts-backend",
@@ -178,6 +205,10 @@ def main() -> None:
         asr = create_asr_backend(
             backend=args.asr_backend,
             mock_text=args.mock_asr_text,
+            model_name_or_path=args.asr_model,
+            device=args.asr_device,
+            compute_type=args.asr_compute_type,
+            language=args.asr_language,
         )
 
         tts = create_tts_backend(

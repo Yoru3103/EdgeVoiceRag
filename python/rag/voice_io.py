@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
+from faster_whisper import WhisperModel
 
 
 @dataclass
@@ -46,6 +47,75 @@ class MockAsr(AsrBackend):
             duration_ms=(perf_counter() - start) * 1000,
         )
 
+class FasterWhisperAsr(AsrBackend):
+    def __init__(
+        self,
+        model_name_or_path: str,
+        device: str = "cpu",
+        compute_type: str = "int8",
+        language: str = "zh",
+        beam_size: int = 5,
+        vad_filter: bool = True
+    ) -> None:
+        self.backend = "faster_whisper"
+        self.model_name_or_path = model_name_or_path
+        self.device = device
+        self.compute_type = compute_type
+        self.language = language
+        self.beam_size = beam_size
+        self.vad_filter = vad_filter
+
+        # 加载模型
+        self.model = WhisperModel(
+            model_name_or_path,
+            device=device,
+            compute_type=compute_type,
+        )
+
+    def transcribe(self, audio_path: Path) -> AsrResult:
+        if not audio_path.exists():
+            raise FileNotFoundError(
+                f"Audio file not found: {audio_path}"
+            )
+
+        if not audio_path.is_file():
+            raise ValueError(
+                f"Audio path is not a file: {audio_path}"
+            )
+
+        start = perf_counter()
+
+        segments, _ = self.model.transcribe(
+            str(audio_path),
+            language=self.language,
+            beam_size=self.beam_size,           # 搜索多个候选识别结果
+            vad_filter=self.vad_filter,         # 过滤较长的静音部分
+            condition_on_previous_text=False,   # 每个语音段减少对之前文本的依赖，短车载指令通常更稳定
+        )
+
+        texts = []
+
+        for segment in segments:
+            text = segment.text.strip()
+
+            if text:
+                texts.append(text)
+
+        result_text = "".join(texts).strip()
+        duration_ms = (perf_counter() - start) * 1000
+
+        if not result_text:
+            raise ValueError(
+                f"ASR returned empty text: {audio_path}"
+            )
+
+        return AsrResult(
+            text=result_text,
+            source=str(audio_path),
+            backend=self.backend,
+            duration_ms=duration_ms,
+        )
+
 
 class MockTts(TtsBackend):
     def __init__(self) -> None:
@@ -66,9 +136,26 @@ class MockTts(TtsBackend):
         )
 
 
-def create_asr_backend(backend: str, mock_text: str = "") -> AsrBackend:
+def create_asr_backend(
+    backend: str,
+    mock_text: str = "",
+    model_name_or_path: str = "small",
+    device: str = "cpu",
+    compute_type: str = "int8",
+    language: str = "zh",
+) -> AsrBackend:
     if backend == "mock":
-        return MockAsr(mock_text=mock_text)
+        return MockAsr(
+            mock_text=mock_text,
+        )
+
+    if backend == "faster_whisper":
+        return FasterWhisperAsr(
+            model_name_or_path=model_name_or_path,
+            device=device,
+            compute_type=compute_type,
+            language=language,
+        )
 
     raise ValueError(f"Unsupported ASR backend: {backend}")
 
