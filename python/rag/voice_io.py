@@ -2,6 +2,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
+
+import soundfile as sf
+import sherpa_onnx
 from faster_whisper import WhisperModel
 
 
@@ -135,6 +138,158 @@ class MockTts(TtsBackend):
             duration_ms=(perf_counter() - start) * 1000,
         )
 
+class SherpaOnnxTts(TtsBackend):
+    def __init__(
+        self,
+        model_dir: str,
+        num_threads: int = 2,
+        speaker_id: int = 0,
+        speed: float = 1.0,
+        debug: bool = False,
+    ) -> None:
+        if num_threads <= 0:
+            raise ValueError(
+                f"num_threads must be positive: {num_threads}"
+            )
+
+        if speaker_id < 0:
+            raise ValueError(
+                f"speaker_id must be non-negative: {speaker_id}"
+            )
+
+        if speed <= 0:
+            raise ValueError(
+                f"speed must be positive: {speed}"
+            )
+
+        self.backend = "sherpa_onnx_tts"
+        self.model_dir = Path(model_dir)
+        self.num_threads = num_threads
+        self.speaker_id = speaker_id
+        self.speed = speed
+        self.debug = debug
+
+        self.model_path = self.model_dir / "model.onnx"
+        self.lexicon_path = self.model_dir / "lexicon.txt"
+        self.tokens_path = self.model_dir / "tokens.txt"
+        self.date_fst_path = self.model_dir / "date.fst"
+        self.number_fst_path = self.model_dir / "number.fst"
+
+        self._validate_files()
+
+        vits_config = sherpa_onnx.OfflineTtsVitsModelConfig(
+            model=str(self.model_path),
+            lexicon=str(self.lexicon_path),
+            tokens=str(self.tokens_path),
+        )
+
+        model_config = sherpa_onnx.OfflineTtsModelConfig(
+            vits=vits_config,
+            num_threads=self.num_threads,
+            debug=self.debug,
+            provider="cpu",
+        )
+
+        rule_fsts = ",".join(
+            [
+                str(self.date_fst_path),
+                str(self.number_fst_path),
+            ]
+        )
+
+        tts_config = sherpa_onnx.OfflineTtsConfig(
+            model=model_config,
+            rule_fsts=rule_fsts,
+            max_num_sentences=2,
+        )
+
+        if not tts_config.validate():
+            raise ValueError(
+                f"Invalid Sherpa-ONNX TTS configuration: {self.model_dir}"
+            )
+
+        self.tts = sherpa_onnx.OfflineTts(tts_config)
+
+    def _validate_files(self) -> None:
+        required_files = [
+            self.model_path,
+            self.lexicon_path,
+            self.tokens_path,
+            self.date_fst_path,
+            self.number_fst_path,
+        ]
+
+        missing_files = [
+            str(path)
+            for path in required_files
+            if not path.is_file()
+        ]
+
+        if missing_files:
+            missing_text = ", ".join(missing_files)
+
+            raise FileNotFoundError(
+                f"TTS model files not found: {missing_text}"
+            )
+
+    def synthesize(
+        self,
+        text: str,
+        output_path: Path,
+    ) -> TtsResult:
+        normalized_text = text.strip()
+
+        if not normalized_text:
+            raise ValueError("TTS input text is empty")
+
+        if output_path.suffix.lower() != ".wav":
+            raise ValueError(
+                f"TTS output must be a WAV file: {output_path}"
+            )
+
+        output_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        generation_config = sherpa_onnx.GenerationConfig()
+        generation_config.sid = self.speaker_id
+        generation_config.speed = self.speed
+
+        start = perf_counter()
+
+        audio = self.tts.generate(
+            normalized_text,
+            generation_config,
+        )
+
+        duration_ms = (
+            perf_counter() - start
+        ) * 1000
+
+        if len(audio.samples) == 0:
+            raise ValueError(
+                "Sherpa-ONNX TTS returned empty audio"
+            )
+
+        if audio.sample_rate <= 0:
+            raise ValueError(
+                f"Invalid TTS sample rate: {audio.sample_rate}"
+            )
+
+        sf.write(
+            str(output_path),
+            audio.samples,
+            samplerate=audio.sample_rate,
+            subtype="PCM_16",
+        )
+
+        return TtsResult(
+            output_path=str(output_path),
+            backend=self.backend,
+            text=normalized_text,
+            duration_ms=duration_ms,
+        )
 
 def create_asr_backend(
     backend: str,
@@ -160,8 +315,26 @@ def create_asr_backend(
     raise ValueError(f"Unsupported ASR backend: {backend}")
 
 
-def create_tts_backend(backend: str) -> TtsBackend:
+def create_tts_backend(
+    backend: str,
+    model_dir: str = "",
+    num_threads: int = 2,
+    speaker_id: int = 0,
+    speed: float = 1.0,
+    debug: bool = False,
+) -> TtsBackend:
     if backend == "mock":
         return MockTts()
 
-    raise ValueError(f"Unsupported TTS backend: {backend}")
+    if backend == "sherpa_onnx":
+        return SherpaOnnxTts(
+            model_dir=model_dir,
+            num_threads=num_threads,
+            speaker_id=speaker_id,
+            speed=speed,
+            debug=debug,
+        )
+
+    raise ValueError(
+        f"Unsupported TTS backend: {backend}"
+    )

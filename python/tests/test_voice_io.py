@@ -27,6 +27,18 @@ def test_mock_tts_writes_answer(tmp_path: Path) -> None:
     assert result.backend == "mock_tts"
     assert result.duration_ms >= 0
 
+def test_sherpa_tts_rejects_missing_model_files(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(
+        FileNotFoundError,
+        match="TTS model files not found",
+    ):
+        create_tts_backend(
+            backend="sherpa_onnx",
+            model_dir=str(tmp_path),
+        )
+
 
 @pytest.mark.parametrize("backend", ["unknown", "real"])
 def test_unsupported_asr_backend_raises(backend: str) -> None:

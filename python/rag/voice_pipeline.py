@@ -186,8 +186,36 @@ def main() -> None:
     parser.add_argument(
         "--tts-backend",
         default="mock",
-        choices=["mock"],
+        choices=["mock", "sherpa_onnx"],
         help="TTS backend.",
+    )
+    parser.add_argument(
+        "--tts-model-dir",
+        default="models/tts/vits-melo-tts-zh_en",
+        help="Sherpa-ONNX TTS model directory.",
+    )
+    parser.add_argument(
+        "--tts-num-threads",
+        type=int,
+        default=2,
+        help="Number of TTS inference threads.",
+    )
+    parser.add_argument(
+        "--tts-speaker-id",
+        type=int,
+        default=0,
+        help="TTS speaker ID.",
+    )
+    parser.add_argument(
+        "--tts-speed",
+        type=float,
+        default=1.0,
+        help="TTS speech speed.",
+    )
+    parser.add_argument(
+        "--tts-debug",
+        action="store_true",
+        help="Enable TTS debug output.",
     )
     parser.add_argument(
         "--tts-output",
@@ -213,6 +241,11 @@ def main() -> None:
 
         tts = create_tts_backend(
             backend=args.tts_backend,
+            model_dir=args.tts_model_dir,
+            num_threads=args.tts_num_threads,
+            speaker_id=args.tts_speaker_id,
+            speed=args.tts_speed,
+            debug=args.tts_debug,
         )
 
         rag_client = ZmqRagClient(
