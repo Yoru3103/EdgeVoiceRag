@@ -32,7 +32,7 @@ fi
 python python/rag/python_rag_server.py \
     --endpoint tcp://*:5556 \
     --index vector_db/chunks.json \
-    --top-k 3 \
+    --top-k 1 \
     --llm-backend ollama \
     --llm-model "$MODEL" \
     --ollama-url "$OLLAMA_URL" \

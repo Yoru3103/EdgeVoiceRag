@@ -17,3 +17,4 @@ vector_db/
 voice_input/
 voice_output/
 *.pcm
+perf_logs/

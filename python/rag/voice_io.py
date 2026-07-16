@@ -5,7 +5,9 @@ from time import perf_counter
 
 import soundfile as sf
 import sherpa_onnx
+import numpy as np
 from faster_whisper import WhisperModel
+from rag.tts_text import split_tts_text
 
 
 @dataclass
@@ -142,10 +144,10 @@ class SherpaOnnxTts(TtsBackend):
     def __init__(
         self,
         model_dir: str,
-        num_threads: int = 2,
-        speaker_id: int = 0,
-        speed: float = 1.0,
-        debug: bool = False,
+        num_threads: int = 2,       # ONNX模型推理使用的CPU线程数
+        speaker_id: int = 0,        # 选择说话人的编号，只对多说话人模型有效
+        speed: float = 1.0,         # 语速
+        debug: bool = False,        # 是否打印日志
     ) -> None:
         if num_threads <= 0:
             raise ValueError(
@@ -168,21 +170,28 @@ class SherpaOnnxTts(TtsBackend):
         self.speaker_id = speaker_id
         self.speed = speed
         self.debug = debug
-
+        # 核心语音合成神经网络
         self.model_path = self.model_dir / "model.onnx"
+        # 发音词典，负责把单词或汉字映射为音素
         self.lexicon_path = self.model_dir / "lexicon.txt"
+        # 模型支持的token/音素表，将音素表映射为数字ID
         self.tokens_path = self.model_dir / "tokens.txt"
+        # 日期文本正规化规则
         self.date_fst_path = self.model_dir / "date.fst"
+        # 数字文本正规化规则
         self.number_fst_path = self.model_dir / "number.fst"
 
+        # 检测是否有缺失文件
         self._validate_files()
 
+        # 描述具体的VITS模型资源
         vits_config = sherpa_onnx.OfflineTtsVitsModelConfig(
             model=str(self.model_path),
             lexicon=str(self.lexicon_path),
             tokens=str(self.tokens_path),
         )
 
+        # 描述模型类型和ONNX推理运行方式
         model_config = sherpa_onnx.OfflineTtsModelConfig(
             vits=vits_config,
             num_threads=self.num_threads,
@@ -200,7 +209,7 @@ class SherpaOnnxTts(TtsBackend):
         tts_config = sherpa_onnx.OfflineTtsConfig(
             model=model_config,
             rule_fsts=rule_fsts,
-            max_num_sentences=2,
+            max_num_sentences=2,    # 一次推理批次最多处理多少个句子（将句子分批处理）
         )
 
         if not tts_config.validate():
@@ -237,10 +246,18 @@ class SherpaOnnxTts(TtsBackend):
         text: str,
         output_path: Path,
     ) -> TtsResult:
-        normalized_text = text.strip()
+        sentences = split_tts_text(
+            text,
+            max_chars=60,
+        )
 
-        if not normalized_text:
+        if not sentences:
             raise ValueError("TTS input text is empty")
+
+        # normalized_text = text.strip()
+
+        # if not normalized_text:
+        #     raise ValueError("TTS input text is empty")
 
         if output_path.suffix.lower() != ".wav":
             raise ValueError(
@@ -258,36 +275,78 @@ class SherpaOnnxTts(TtsBackend):
 
         start = perf_counter()
 
-        audio = self.tts.generate(
-            normalized_text,
-            generation_config,
+        generated_parts = []
+        sample_rate = 0
+
+        for sentence in sentences:
+            audio = self.tts.generate(
+                sentence,
+                generation_config,
+            )
+
+        # duration_ms = (
+        #     perf_counter() - start
+        # ) * 1000
+            # samples：实际声音波形数据
+            if len(audio.samples) == 0:
+                raise ValueError(
+                    "Sherpa-ONNX TTS returned empty audio"
+                )
+
+            # 每秒读取多少个sample
+            if audio.sample_rate <= 0:
+                raise ValueError(
+                    f"Invalid TTS sample rate: {audio.sample_rate}"
+                )
+
+            if sample_rate == 0:
+                sample_rate = audio.sample_rate
+            elif sample_rate != audio.sample_rate:
+                raise ValueError(
+                    "TTS segments have different sample rates"
+                )
+
+            # 把Sherpa-ONNX 返回的 samples 转换为 NumPy 浮点数组，方便拼接多个语音片段并写入 WAV 文件。
+            generated_parts.append(
+                np.asarray(
+                    audio.samples,
+                    dtype=np.float32,
+                )
+            )
+
+        silence_duration_seconds = 0.15
+
+        silence = np.zeros(
+            int(sample_rate * silence_duration_seconds),
+            dtype=np.float32,
         )
+
+        output_parts = []
+
+        for index, samples in enumerate(generated_parts):
+            output_parts.append(samples)
+
+            if index < len(generated_parts) - 1:
+                output_parts.append(silence)
+
+        # 将list拼接成完整的array
+        merged_samples = np.concatenate(output_parts)
 
         duration_ms = (
             perf_counter() - start
         ) * 1000
 
-        if len(audio.samples) == 0:
-            raise ValueError(
-                "Sherpa-ONNX TTS returned empty audio"
-            )
-
-        if audio.sample_rate <= 0:
-            raise ValueError(
-                f"Invalid TTS sample rate: {audio.sample_rate}"
-            )
-
         sf.write(
             str(output_path),
-            audio.samples,
-            samplerate=audio.sample_rate,
-            subtype="PCM_16",
+            merged_samples,
+            samplerate=sample_rate,
+            subtype="PCM_16",       # 使用16bit有符号整数编码
         )
 
         return TtsResult(
             output_path=str(output_path),
             backend=self.backend,
-            text=normalized_text,
+            text="".join(sentences),
             duration_ms=duration_ms,
         )
 
