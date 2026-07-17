@@ -17,6 +17,9 @@ from rag.voice_io import (
     create_asr_backend,
     create_tts_backend,
 )
+from rag.barge_in_detector import (
+    BargeInDetector,
+)
 from rag.voice_pipeline import ZmqRagClient
 
 
@@ -122,6 +125,13 @@ class VoiceAssistant:
         self.player = AudioPlayer(
             device=parse_output_device(
                 self.config.output_device
+            )
+        )
+
+        self.barge_in_detector = BargeInDetector(
+            model_path=self.config.vad_model,
+            device=parse_device(
+                self.config.microphone_device
             )
         )
 
@@ -233,7 +243,11 @@ class VoiceAssistant:
 
         self._set_state(AssistantState.PLAYING)
 
-        playback_result = self.player.play(output_path)
+        self.player.start(output_path)
+
+        barge_in_result = self.barge_in_detector.wait_for_interrupt(self.player)
+
+        playback_result = barge_in_result.playback_result
 
         total_ms = (
             perf_counter() - turn_start
@@ -249,6 +263,11 @@ class VoiceAssistant:
             "answer": rag_result.answer,
             "input_path": str(input_path),
             "output_path": str(output_path),
+            "interrupted": barge_in_result.interrupted,
+            "barge_in_detection":round(
+                barge_in_result.detection_ms,
+                2,
+            ),
             "timings_ms": {
                 "waiting": round(
                     recording_result.waiting_ms,
