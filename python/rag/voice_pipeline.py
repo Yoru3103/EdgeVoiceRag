@@ -7,7 +7,19 @@ from typing import Any, Dict
 
 import zmq
 
-from rag.voice_io import create_asr_backend, create_tts_backend
+from rag.voice_io import (
+    create_asr_backend,
+    create_tts_backend,
+)
+
+from rag.microphone_io import (
+    MicrophoneRecorder,
+    parse_device,
+)
+
+from rag.vad_recorder import (
+    VadMicrophoneRecorder,
+)
 
 
 @dataclass
@@ -135,6 +147,67 @@ def main() -> None:
         help="Input audio path. In mock mode, this file does not need to exist.",
     )
     parser.add_argument(
+        "--input-mode",
+        default="file",
+        choices=[
+            "file",
+            "microphone",
+            "vad_microphone",
+        ],
+        help=(
+            "Use an existing audio file "
+            "or record from microphone."
+        ),
+    )
+    parser.add_argument(
+        "--record-duration",
+        type=float,
+        default=5.0,
+        help="Microphone recording duration.",
+    )
+    parser.add_argument(
+        "--record-sample-rate",
+        type=int,
+        default=16000,
+    )
+    parser.add_argument(
+         "--record-channels",
+         type=int,
+         default=1,
+    )
+    parser.add_argument(
+        "--microphone-device",
+        default=None,
+        help=(
+            "Microphone device index "
+            "or name substring."
+        ),
+    )
+    parser.add_argument(
+        "--microphone-minimum-rms",
+        type=float,
+        default=0.001,
+    )
+    parser.add_argument(
+        "--vad-model",
+        default="models/vad/silero_vad.onnx",
+    )
+    parser.add_argument(
+        "--vad-threshold",
+        type=float,
+        default=0.25,
+    )
+    parser.add_argument(
+        "--vad-min-silence",
+        type=float,
+        default=0.8,
+    )
+    parser.add_argument(
+        "--vad-max-wait",
+        type=float,
+        default=10.0,
+    )
+    parser.add_argument(
         "--mock-asr-text",
         default="",
         help="Text returned by mock ASR.",
@@ -230,6 +303,41 @@ def main() -> None:
 
     try:
         pipeline_start = perf_counter()
+        recording_ms = 0.0
+
+        if args.input_mode == "microphone":
+            recorder = MicrophoneRecorder(
+                sample_rate=args.record_sample_rate,
+                channels=args.record_channels,
+                device=parse_device(args.microphone_device),
+                minimum_rms=args.microphone_minimum_rms,
+            )
+
+            recording_result = recorder.record(
+                duration_seconds=args.record_duration,
+                output_path=audio_path,
+            )
+
+            recording_ms = recording_result.recording_ms
+        elif args.input_mode == "vad_microphone":
+            recorder = VadMicrophoneRecorder(
+                model_path=args.vad_model,
+                device=parse_device(
+                    args.microphone_device
+                ),
+                threshold=args.vad_threshold,
+                min_silence_duration=(
+                    args.vad_min_silence
+                ),
+                max_wait_seconds=args.vad_max_wait,
+            )
+
+            recording_result = recorder.record(
+                output_path=audio_path,
+            )
+
+            recording_ms = recording_result.recording_ms
+
         asr = create_asr_backend(
             backend=args.asr_backend,
             mock_text=args.mock_asr_text,
@@ -282,6 +390,10 @@ def main() -> None:
             tts_backend=tts_result.backend,
             tts_output_path=tts_result.output_path,
             timings_ms={
+                "recording": round(
+                    recording_ms,
+                    2,
+                ),
                 "asr": round(asr_ms, 2),
                 "rag": round(rag_ms, 2),
                 "tts": round(tts_ms, 2),

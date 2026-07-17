@@ -7,3 +7,4 @@ pytest
 faster-whisper==1.2.1
 sherpa-onnx
 soundfile
+sounddevice
