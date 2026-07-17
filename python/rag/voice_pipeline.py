@@ -21,6 +21,11 @@ from rag.vad_recorder import (
     VadMicrophoneRecorder,
 )
 
+from rag.audio_player import (
+    AudioPlayer,
+    parse_output_device,
+)
+
 
 @dataclass
 class RagClientResult:
@@ -295,6 +300,19 @@ def main() -> None:
         default="voice_output/answer.txt",
         help="Mock TTS output path.",
     )
+    parser.add_argument(
+        "--play-output",
+        action="store_true",
+        help="Play the generated TTS WAV.",
+    )
+    parser.add_argument(
+        "--output-device",
+        default=None,
+        help=(
+            "Audio output device index "
+            "or name substring."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -302,6 +320,14 @@ def main() -> None:
     tts_output_path = Path(args.tts_output)
 
     try:
+        if (
+            args.play_output
+            and args.tts_backend == "mock"
+        ):
+            raise ValueError(
+                "--play-output cannot be used "
+                "with mock TTS"
+            )
         pipeline_start = perf_counter()
         recording_ms = 0.0
 
@@ -379,6 +405,18 @@ def main() -> None:
             output_path=tts_output_path,
         )
         tts_ms = (perf_counter() - tts_start) * 1000
+
+        # 播放功能
+        playback_ms = 0.0
+
+        if args.play_output:
+
+            player = AudioPlayer(device=parse_output_device(args.output_device))
+
+            playback_result = player.play(Path(tts_result.output_path))
+
+            playback_ms = playback_result.playback_ms
+
         total_ms = (perf_counter() - pipeline_start) * 1000
 
         response = build_voice_pipeline_response(
@@ -397,6 +435,10 @@ def main() -> None:
                 "asr": round(asr_ms, 2),
                 "rag": round(rag_ms, 2),
                 "tts": round(tts_ms, 2),
+                "playback": round(
+                    playback_ms,
+                    2,
+                ),
                 "total": round(total_ms, 2),
             },
         )
