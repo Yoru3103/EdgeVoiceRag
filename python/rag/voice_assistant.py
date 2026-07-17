@@ -243,9 +243,12 @@ class VoiceAssistant:
 
         self._set_state(AssistantState.PLAYING)
 
-        self.player.start(output_path)
-
-        barge_in_result = self.barge_in_detector.wait_for_interrupt(self.player)
+        barge_in_result = (
+            self.barge_in_detector.play_and_wait(
+                self.player,
+                output_path,
+            )
+        )
 
         playback_result = barge_in_result.playback_result
 

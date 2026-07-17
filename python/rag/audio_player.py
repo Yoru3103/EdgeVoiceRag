@@ -170,6 +170,24 @@ class AudioPlayer:
         self,
         audio_path: Path,
     ) -> None:
+        session = self.prepare(audio_path)
+
+        try:
+            sd.play(
+                session.samples,
+                samplerate=session.sample_rate,
+                device=self.device,
+                blocking=False,
+            )
+        except Exception:
+            self.cancel()
+            raise
+
+    def prepare(
+        self,
+        audio_path: Path,
+    ) -> _PlaybackSession:
+        """Load audio and create a playback session without opening a stream."""
         if self._playing:
             raise RuntimeError(
                 "Audio playback is already running"
@@ -181,17 +199,21 @@ class AudioPlayer:
         self._session = session
         self._playing = True
 
-        try:
-            sd.play(
-                session.samples,
-                samplerate=session.sample_rate,
-                device=self.device,
-                blocking=False,
-            )
-        except Exception:
-            self._session = None
-            self._playing = False
-            raise
+        return session
+
+    def finish(
+        self,
+        interrupted: bool,
+    ) -> PlaybackResult:
+        """Finish a session managed by an external stream."""
+        return self._build_result(
+            interrupted=interrupted
+        )
+
+    def cancel(self) -> None:
+        """Discard an active session after stream setup or playback failure."""
+        self._session = None
+        self._playing = False
 
     def is_playing(self) -> bool:
         if not self._playing:

@@ -1,4 +1,5 @@
 import queue
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
@@ -122,28 +123,78 @@ class BargeInDetector:
             buffer_size_in_seconds=5,
         )
 
-    def wait_for_interrupt(
+    def _resample_for_vad(
+        self,
+        samples: np.ndarray,
+        source_sample_rate: int,
+    ) -> np.ndarray:
+        samples = np.asarray(
+            samples,
+            dtype=np.float32,
+        ).reshape(-1)
+
+        if (
+            source_sample_rate
+            == self.sample_rate
+        ):
+            return samples.copy()
+
+        if samples.size == 0:
+            return samples
+
+        output_size = max(
+            1,
+            int(
+                round(
+                    samples.size
+                    * self.sample_rate
+                    / source_sample_rate
+                )
+            ),
+        )
+
+        source_positions = np.arange(
+            samples.size,
+            dtype=np.float64,
+        )
+        target_positions = np.linspace(
+            0,
+            samples.size - 1,
+            num=output_size,
+            dtype=np.float64,
+        )
+
+        return np.interp(
+            target_positions,
+            source_positions,
+            samples,
+        ).astype(
+            np.float32,
+            copy=False,
+        )
+
+    def play_and_wait(
         self,
         player: AudioPlayer,
+        audio_path: Path,
     ) -> BargeInResult:
-        if not player.is_playing():
-            raise RuntimeError(
-                "Audio player is not playing"
-            )
-
         self.vad.reset()
 
         audio_queue: queue.Queue[
             np.ndarray
         ] = queue.Queue()
 
+        session = player.prepare(audio_path)
+        playback_finished = threading.Event()
+        playback_frame = 0
+
         def callback(
             indata: np.ndarray,
+            outdata: np.ndarray,
             frames: int,
             time_info: object,
             status: sd.CallbackFlags,
         ) -> None:
-            del frames
             del time_info
 
             if status:
@@ -152,84 +203,152 @@ class BargeInDetector:
                     f"callback: {status}"
                 )
 
+            nonlocal playback_frame
+
+            remaining = (
+                session.samples.shape[0]
+                - playback_frame
+            )
+            output_frames = min(
+                frames,
+                remaining,
+            )
+
+            outdata.fill(0)
+
+            if output_frames > 0:
+                output_end = (
+                    playback_frame
+                    + output_frames
+                )
+                outdata[:output_frames] = (
+                    session.samples[
+                        playback_frame:output_end
+                    ]
+                )
+                playback_frame = output_end
+
             audio_queue.put(
                 indata[:, 0].copy()
             )
 
+            if (
+                playback_frame
+                >= session.samples.shape[0]
+            ):
+                raise sd.CallbackStop
+
         start = perf_counter()
         speech_frames = 0
+        interrupted = False
 
-        with sd.InputStream(
-            samplerate=self.sample_rate,
-            channels=1,
-            dtype="float32",
-            blocksize=self.window_size,
-            device=self.device,
-            callback=callback,
-        ):
-            while player.is_playing():  # 只在播放时监听
-                try:
-                    samples = audio_queue.get(
-                        timeout=0.1
-                    )
-                except queue.Empty:
-                    continue
-
-                elapsed = perf_counter() - start
-
-                if (
-                    elapsed
-                    < self.ignore_start_seconds # 播放开始一段时间不检测，避免刚启动时的噪声
-                ):
-                    continue
-
-                self.vad.accept_waveform(
-                    samples
+        duplex_block_size = max(
+            1,
+            int(
+                round(
+                    self.window_size
+                    * session.sample_rate
+                    / self.sample_rate
                 )
+            ),
+        )
 
-                if self.vad.is_speech_detected():
-                    speech_frames += 1
-                else:
-                    speech_frames = 0
+        try:
+            sd.check_input_settings(
+                device=self.device,
+                channels=1,
+                samplerate=session.sample_rate,
+                dtype="float32",
+            )
 
-                if (
-                    speech_frames
-                    >= self.required_speech_frames  # 连续检测到多帧才算检测到语音
-                ):
-                    detection_ms = (
-                        perf_counter() - start
-                    ) * 1000
-
-                    playback_result = (
-                        player.stop()
-                    )
-
-                    if playback_result is None:
-                        raise RuntimeError(
-                            "Playback stopped before "
-                            "barge-in result was built"
+            with sd.Stream(
+                samplerate=session.sample_rate,
+                blocksize=duplex_block_size,
+                device=(
+                    self.device,
+                    player.device,
+                ),
+                channels=(
+                    1,
+                    session.channels,
+                ),
+                dtype="float32",
+                callback=callback,
+                finished_callback=(
+                    playback_finished.set
+                ),
+            ) as stream:
+                while not playback_finished.is_set():
+                    try:
+                        samples = audio_queue.get(
+                            timeout=0.1
                         )
+                    except queue.Empty:
+                        continue
 
-                    return BargeInResult(
-                        interrupted=True,
-                        detection_ms=detection_ms,
-                        speech_frames=(
-                            speech_frames
-                        ),
-                        playback_result=(
-                            playback_result
+                    samples = self._resample_for_vad(
+                        samples,
+                        source_sample_rate=(
+                            session.sample_rate
                         ),
                     )
 
-        playback_result = player.wait()
+                    elapsed = perf_counter() - start
+
+                    if (
+                        elapsed
+                        < self.ignore_start_seconds
+                    ):
+                        continue
+
+                    self.vad.accept_waveform(
+                        samples
+                    )
+
+                    if (
+                        self.vad
+                        .is_speech_detected()
+                    ):
+                        speech_frames += 1
+                    else:
+                        speech_frames = 0
+
+                    if (
+                        speech_frames
+                        >= self.required_speech_frames
+                    ):
+                        interrupted = True
+                        stream.abort()
+                        playback_finished.set()
+                        break
+        except Exception:
+            player.cancel()
+            raise
+
+        playback_result = player.finish(
+            interrupted=interrupted
+        )
 
         detection_ms = (
             perf_counter() - start
         ) * 1000
 
         return BargeInResult(
-            interrupted=False,
+            interrupted=interrupted,
             detection_ms=detection_ms,
             speech_frames=speech_frames,
             playback_result=playback_result,
+        )
+
+    def wait_for_interrupt(
+        self,
+        player: AudioPlayer,
+    ) -> BargeInResult:
+        """Deprecated two-stream API retained with a clear migration error."""
+        del player
+        raise RuntimeError(
+            "wait_for_interrupt() requires a "
+            "separately running output stream; use "
+            "play_and_wait(player, audio_path) for "
+            "full-duplex playback"
         )
