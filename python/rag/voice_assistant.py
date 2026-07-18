@@ -167,6 +167,11 @@ class VoiceAssistant:
             / f"turn_{self.turn_id}_input.wav"
         )
 
+        barge_in_input_path = (
+            self.output_dir
+            / f"turn_{self.turn_id + 1}_input.wav"
+        )
+
         output_path = (
             self.output_dir
             / f"turn_{self.turn_id}_answer.wav"
@@ -247,8 +252,30 @@ class VoiceAssistant:
             self.barge_in_detector.play_and_wait(
                 self.player,
                 output_path,
+                speech_output_path=(
+                    barge_in_input_path
+                ),
             )
         )
+
+        if barge_in_result.interrupted:
+            print(
+                json.dumps(
+                    {
+                        "event": (
+                            "barge_in_speech_saved"
+                        ),
+                        "speech_path": (
+                            barge_in_result.speech_path
+                        ),
+                        "duration_seconds": (
+                            barge_in_result
+                            .speech_duration_seconds
+                        ),
+                    },
+                    ensure_ascii=False,
+                )
+            )
 
         playback_result = barge_in_result.playback_result
 

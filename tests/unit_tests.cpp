@@ -5,6 +5,7 @@
 #include "query_router.h"
 #include "rag_engine.h"
 #include "rag_response_parser.h"
+#include "query_classifier.h"
 
 static int g_failed_count = 0;
 
@@ -131,12 +132,71 @@ static void testRagResponseParser() {
     }
 }
 
+static void testQueryClassifier() {
+    QueryClassifier classifier;
+
+    {
+        const auto result = classifier.classify(
+            "制动系统故障，非常危险"
+        );
+
+        expectTrue(
+            result.category
+                == QueryCategory::Emergency,
+            "QueryClassifier: emergency query"
+        );
+
+        expectTrue(
+            result.requires_immediate_response,
+            "QueryClassifier: emergency query "
+            "requires immediate response"
+        );
+    }
+
+    {
+        const auto result = classifier.classify(
+            "蓝牙应该怎么连接"
+        );
+
+        expectTrue(
+            result.category
+                == QueryCategory::Factual,
+            "QueryClassifier: factual query"
+        );
+    }
+
+    {
+        const auto result = classifier.classify(
+            "推荐一个旅行路线和美食攻略"
+        );
+
+        expectTrue(
+            result.category
+                == QueryCategory::Creative,
+            "QueryClassifier: creative query"
+        );
+    }
+
+    {
+        const auto result = classifier.classify(
+            "你好"
+        );
+
+        expectTrue(
+            result.category
+                == QueryCategory::Unknown,
+            "QueryClassifier: unknown query"
+        );
+    }
+}
+
 int main() {
     std::cout << "Running unit tests..." << std::endl;
 
     testQueryRouter();
     testRagEngine();
     testRagResponseParser();
+    testQueryClassifier();
 
     if (g_failed_count == 0) {
         std::cout << "\nAll unit tests passed." << std::endl;

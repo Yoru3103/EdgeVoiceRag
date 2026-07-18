@@ -12,6 +12,14 @@ from rag.barge_in_detector import (
 )
 
 
+class FakeSegment:
+    def __init__(
+        self,
+        samples: np.ndarray,
+    ) -> None:
+        self.samples = samples
+
+
 class FakeVad:
     def __init__(
         self,
@@ -22,10 +30,18 @@ class FakeVad:
         )
         self.accepted_frames = 0
         self.reset_count = 0
+        self._segment_available = False
+        self._segment = FakeSegment(
+            np.ones(
+                1600,
+                dtype=np.float32,
+            )
+        )
 
     def reset(self) -> None:
         self.reset_count += 1
         self.accepted_frames = 0
+        self._segment_available = False
 
     def accept_waveform(
         self,
@@ -33,8 +49,21 @@ class FakeVad:
     ) -> None:
         self.accepted_frames += 1
 
+        if self.speech_detected:
+            self._segment_available = True
+
     def is_speech_detected(self) -> bool:
         return self.speech_detected
+
+    def empty(self) -> bool:
+        return not self._segment_available
+
+    @property
+    def front(self) -> FakeSegment:
+        return self._segment
+
+    def pop(self) -> None:
+        self._segment_available = False
 
 
 class FakeDuplexStream:
@@ -215,10 +244,14 @@ def test_play_and_wait_finishes_normally(
     )
 
     player = AudioPlayer()
+    speech_path = (
+        tmp_path / "barge_in.wav"
+    )
 
     result = detector.play_and_wait(
         player,
         audio_path,
+        speech_output_path=speech_path,
     )
 
     assert result.interrupted is False
@@ -226,7 +259,9 @@ def test_play_and_wait_finishes_normally(
         result.playback_result.interrupted
         is False
     )
-    assert result.detection_ms >= 0
+    assert result.detection_ms == 0
+    assert result.speech_path is None
+    assert not speech_path.exists()
     assert created_stream is not None
     assert created_stream.aborted is False
 
@@ -281,10 +316,14 @@ def test_play_and_wait_stops_on_speech(
     )
 
     player = AudioPlayer()
+    speech_path = (
+        tmp_path / "barge_in.wav"
+    )
 
     result = detector.play_and_wait(
         player,
         audio_path,
+        speech_output_path=speech_path,
     )
 
     assert result.interrupted is True
@@ -296,6 +335,22 @@ def test_play_and_wait_stops_on_speech(
     assert fake_vad.accepted_frames == 1
     assert created_stream is not None
     assert created_stream.aborted is True
+    assert result.speech_path == str(
+        speech_path
+    )
+    assert speech_path.is_file()
+
+    saved_samples, sample_rate = sf.read(
+        str(speech_path),
+        dtype="float32",
+    )
+
+    assert sample_rate == 16000
+    assert saved_samples.size == 1600
+    assert (
+        result.speech_duration_seconds
+        == pytest.approx(0.1)
+    )
 
 
 def test_stream_failure_cancels_player(
@@ -342,6 +397,9 @@ def test_stream_failure_cancels_player(
         detector.play_and_wait(
             player,
             audio_path,
+            speech_output_path=(
+                tmp_path / "barge_in.wav"
+            ),
         )
 
     session = player.prepare(audio_path)

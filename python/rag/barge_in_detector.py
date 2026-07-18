@@ -8,6 +8,7 @@ from typing import Optional
 import numpy as np
 import sherpa_onnx
 import sounddevice as sd
+import soundfile as sf
 
 from rag.audio_player import (
     AudioPlayer,
@@ -23,6 +24,8 @@ class BargeInResult:
     detection_ms: float
     speech_frames: int
     playback_result: PlaybackResult
+    speech_path: Optional[str] = None
+    speech_duration_seconds: float = 0.0
 
 class BargeInDetector:
     def __init__(
@@ -177,6 +180,7 @@ class BargeInDetector:
         self,
         player: AudioPlayer,
         audio_path: Path,
+        speech_output_path: Path,
     ) -> BargeInResult:
         self.vad.reset()
 
@@ -185,7 +189,10 @@ class BargeInDetector:
         ] = queue.Queue()
 
         session = player.prepare(audio_path)
-        playback_finished = threading.Event()
+
+        stream_finished = threading.Event()
+        mute_output = threading.Event()
+
         playback_frame = 0
 
         def callback(
@@ -205,42 +212,56 @@ class BargeInDetector:
 
             nonlocal playback_frame
 
-            remaining = (
-                session.samples.shape[0]
-                - playback_frame
-            )
-            output_frames = min(
-                frames,
-                remaining,
-            )
-
             outdata.fill(0)
 
-            if output_frames > 0:
-                output_end = (
-                    playback_frame
-                    + output_frames
+            if not mute_output.is_set():
+                remaining = (
+                    session.samples.shape[0]
+                    - playback_frame
                 )
-                outdata[:output_frames] = (
-                    session.samples[
-                        playback_frame:output_end
-                    ]
+
+                output_frames = min(
+                    frames,
+                    remaining,
                 )
-                playback_frame = output_end
+
+                if output_frames > 0:
+                    output_end = (
+                        playback_frame
+                        + output_frames
+                    )
+
+                    outdata[:output_frames] = (
+                        session.samples[
+                            playback_frame:output_end
+                        ]
+                    )
+
+                    playback_frame = output_end
 
             audio_queue.put(
                 indata[:, 0].copy()
             )
 
             if (
-                playback_frame
+                not mute_output.is_set()
+                and playback_frame
                 >= session.samples.shape[0]
             ):
                 raise sd.CallbackStop
 
         start = perf_counter()
+
         speech_frames = 0
         interrupted = False
+        detection_ms = 0.0
+        speech_samples: Optional[
+            np.ndarray
+        ] = None
+
+        playback_result: Optional[
+            PlaybackResult
+        ] = None
 
         duplex_block_size = max(
             1,
@@ -275,10 +296,11 @@ class BargeInDetector:
                 dtype="float32",
                 callback=callback,
                 finished_callback=(
-                    playback_finished.set
+                    stream_finished.set
                 ),
             ) as stream:
-                while not playback_finished.is_set():
+
+                while not stream_finished.is_set():
                     try:
                         samples = audio_queue.get(
                             timeout=0.1
@@ -286,23 +308,26 @@ class BargeInDetector:
                     except queue.Empty:
                         continue
 
-                    samples = self._resample_for_vad(
-                        samples,
-                        source_sample_rate=(
-                            session.sample_rate
-                        ),
+                    vad_samples = (
+                        self._resample_for_vad(
+                            samples,
+                            source_sample_rate=(
+                                session.sample_rate
+                            ),
+                        )
                     )
 
                     elapsed = perf_counter() - start
 
                     if (
-                        elapsed
+                        not interrupted
+                        and elapsed
                         < self.ignore_start_seconds
                     ):
                         continue
 
                     self.vad.accept_waveform(
-                        samples
+                        vad_samples
                     )
 
                     if (
@@ -310,34 +335,108 @@ class BargeInDetector:
                         .is_speech_detected()
                     ):
                         speech_frames += 1
-                    else:
+                    elif not interrupted:
                         speech_frames = 0
 
                     if (
-                        speech_frames
+                        not interrupted
+                        and speech_frames
                         >= self.required_speech_frames
                     ):
                         interrupted = True
+
+                        detection_ms = (
+                            perf_counter() - start
+                        ) * 1000
+
+                        # 回调继续采集输入，但停止输出回答音频。
+                        mute_output.set()
+
+                        playback_result = (
+                            player.finish(
+                                interrupted=True
+                            )
+                        )
+
+                        print(
+                            "[INFO] Barge-in detected, "
+                            "capturing speech..."
+                        )
+
+                    if (
+                        interrupted
+                        and not self.vad.empty()
+                    ):
+                        segment = self.vad.front
+                        self.vad.pop()
+
+                        speech_samples = np.asarray(
+                            segment.samples,
+                            dtype=np.float32,
+                        )
+
                         stream.abort()
-                        playback_finished.set()
+                        stream_finished.set()
                         break
+
         except Exception:
             player.cancel()
             raise
 
-        playback_result = player.finish(
-            interrupted=interrupted
+        if not interrupted:
+            playback_result = player.finish(
+                interrupted=False
+            )
+
+            return BargeInResult(
+                interrupted=interrupted,
+                detection_ms=detection_ms,
+                speech_frames=speech_frames,
+                playback_result=playback_result,
+            )
+
+        if playback_result is None:
+            raise RuntimeError(
+                "Interrupted playback result "
+                "was not created"
+            )
+
+        if (
+            speech_samples is None
+            or speech_samples.size == 0
+        ):
+            raise ValueError(
+                "Barge-in VAD returned empty speech"
+            )
+
+        speech_output_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
         )
 
-        detection_ms = (
-            perf_counter() - start
-        ) * 1000
+        sf.write(
+            str(speech_output_path),
+            speech_samples,
+            samplerate=self.sample_rate,
+            subtype="PCM_16",
+        )
+
+        speech_duration_seconds = (
+            speech_samples.size
+            / self.sample_rate
+        )
 
         return BargeInResult(
-            interrupted=interrupted,
+            interrupted=True,
             detection_ms=detection_ms,
             speech_frames=speech_frames,
             playback_result=playback_result,
+            speech_path=str(
+                speech_output_path
+            ),
+            speech_duration_seconds=(
+                speech_duration_seconds
+            ),
         )
 
     def wait_for_interrupt(

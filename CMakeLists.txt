@@ -16,6 +16,7 @@ add_library(edge_voice_rag_core
     src/command_line_options.cpp
     src/rag_client_zmq.cpp
     src/rag_response_parser.cpp
+    src/query_classifier.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
