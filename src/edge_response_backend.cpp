@@ -1,10 +1,23 @@
 #include "edge_response_backend.h"
 
+#include <atomic>
 #include <sstream>
 #include <utility>
 #include <vector>
 
 #include "rag_response_parser.h"
+#include "llm_protocol.h"
+
+namespace{
+
+std::atomic<unsigned long long> g_llm_request_id{0};
+
+std::string nextLlmRequestId() {
+    return "llm-" + std::to_string(++g_llm_request_id);
+}
+
+} // namespace
+
 
 EdgeResponseBackend::EdgeResponseBackend(
     RagEngine& rag_engine,
@@ -42,29 +55,43 @@ BackendResult EdgeResponseBackend::searchRag(const std::string& query) {
 }
 
 BackendResult EdgeResponseBackend::generateLlm(const std::string& prompt) {
-    const BackendResult response = requester_.request(
-        llm_endpoint_,
-        prompt,
-        llm_timeout_ms_
-    );
+    try {
+        const LlmRequest request{
+            nextLlmRequestId(),
+            prompt,
+            false
+        };
 
-    if (!response.ok) {
-        return response;
-    }
+        const std::string message = LlmProtocol::encodeRequest(request);
 
-    const std::string answer = RagResponseParser::extractAnswerOrRaw(response.text);
-
-    if (answer.empty()) {
-        return BackendResult::failure(
-            "LLM returned empty response"
+        const BackendResult transport_result = requester_.request(
+            llm_endpoint_,
+            message,
+            llm_timeout_ms_
         );
-    }
 
-    if (answer.rfind("[ERROR]", 0) == 0) {
-        return BackendResult::failure(answer);
-    }
+        if (!transport_result.ok) {
+            return transport_result;
+        }
 
-    return BackendResult::success(answer);
+        const LlmResponse response = LlmProtocol::decodeResponse(transport_result.text);
+
+        if (response.request_id != request.request_id) {
+            return BackendResult::failure(
+                "LLM response request_id mismatch"
+            );
+        }
+
+        if (!response.ok) {
+            return BackendResult::failure(
+                response.error.empty() ? "LLM request failed" : response.error
+            );
+        }
+
+        return BackendResult::success(response.answer);
+    } catch (const std::exception& error) {
+        return BackendResult::failure("invalid LLM protocol response: " + std::string(error.what()));
+    }
 }
 
 BackendResult EdgeResponseBackend::searchLocalRag(const std::string& query) {
