@@ -5,11 +5,11 @@
 #include <vector>
 
 enum class QueryCategory {
-    Emergency,
-    Factual,
-    Complex,
-    Creative,
-    Unknown
+    Emergency,      // RAG only
+    Factual,        // RAG only
+    Complex,        // RAG + LLM
+    Creative,       // LLM only
+    Unknown         // RAG + LLM
 };
 
 struct QueryFeatures {

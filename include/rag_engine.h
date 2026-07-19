@@ -13,6 +13,7 @@ struct KeywordRule {
     std::vector<std::string> keywords;
 };
 
+// 负责本地关键词检索器
 class RagEngine {
 public:
     // explicit禁止构造函数或转换函数发生隐式类型转换，避免单参数时编译器将User u = 10转换为User(10)。

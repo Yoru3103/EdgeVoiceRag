@@ -15,6 +15,7 @@ public:
     ) = 0;
 };
 
+// 通用ZeroMQ REQ客户端
 class ZmqTextClient : public TextRequester {
 public:
     BackendResult request(

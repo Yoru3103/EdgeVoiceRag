@@ -5,7 +5,7 @@
 #include "rag_engine.h"
 #include "response_backend.h"
 #include "zmq_text_client.h"
-
+// 负责三种调用，还负责解析服务器返回的json
 class EdgeResponseBackend : public ResponseBackend {
 public:
     EdgeResponseBackend(
