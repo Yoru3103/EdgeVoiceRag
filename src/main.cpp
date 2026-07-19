@@ -1,95 +1,71 @@
-#include <iostream>
-#include <string>
-#include <sstream>
 #include <iomanip>
-#include <vector>
+#include <iostream>
+#include <sstream>
+#include <string>
 
 #include "app_config.h"
 #include "command_line_options.h"
-#include "query_router.h"
+#include "edge_response_backend.h"
 #include "logger.h"
+#include "multi_level_response_system.h"
 #include "perf_timer.h"
 #include "rag_engine.h"
-#include "rag_client_zmq.h"
-#include "rag_response_parser.h"
+#include "zmq_text_client.h"
 
-static void logElapsedTime (const PerfTimer& timer) {
-    std::ostringstream perf;
-    perf << timer.name() << " handled in"
-         << std::fixed << std::setprecision(3)
-         << timer.elapsedMilliseconds() << " ms";
+namespace {
 
-    Logger::log(LogLevel::Info, perf.str());
+void logElapsedTime(const PerfTimer& timer) {
+    std::ostringstream message;
+
+    message
+        << timer.name()
+        << " handled in "
+        << std::fixed
+        << std::setprecision(3)
+        << timer.elapsedMilliseconds()
+        << " ms";
+
+    Logger::log(LogLevel::Perf, message.str());
 }
 
-static std::string buildLocalRagAnswer(const std::vector<SearchResult>& results) {
-    std::ostringstream answer;
-    answer << "根据车辆手册：";
+void logProcessResult(
+    const QueryProcessResult& result,
+    const MultiLevelResponseSystem& system
+) {
+    Logger::log(LogLevel::Route, system.modeToString(result.mode));
 
-    if (results.empty()) {
-        answer << "知识库中没有找到相关车辆手册内容。";
-    } else {
-        answer << "\n";
-
-        for (size_t i = 0; i < results.size(); i++) {
-            answer << i + 1 << ". " << results[i].document << " [score =" << results[i].score << "]";
-
-            if (i + 1 < results.size()) {
-                answer << "\n";
-            }
-        }
+    if (result.from_cache) {
+        Logger::log(LogLevel::Info, "Response cache hit.");
     }
 
-    return answer.str();
-}
-
-static void handleQuery(const std::string& question,
-                        const QueryRouter& router,
-                        const RagEngine& rag_engine,
-                        int top_k,
-                        const std::string& rag_backend,
-                        const std::string& rag_endpoint,
-                        int rag_timeout_ms) {
-    PerfTimer total_timer("single_query");
-
-    QueryType type = router.classify(question);
-
-    Logger::log(LogLevel::User, question);
-    Logger::log(LogLevel::Route, router.typeToString(type));
-
-    if (type == QueryType::VehicleManual) {
-        if (rag_backend == "zmq" || rag_backend == "python_zmq") {
-            PerfTimer rag_timer(rag_backend == "zmq" 
-                                    ? "rag_zmq_request"
-                                    : "rag_python_zmq_request");
-
-            RagClilentZmq rag_client(rag_endpoint, rag_timeout_ms);
-            std::string reply = rag_client.query(question);
-            
-            std::string answer = RagResponseParser::extractAnswerOrRaw(reply);
-
-            Logger::log(LogLevel::System, answer);
-            logElapsedTime(rag_timer);
-        } else {
-            PerfTimer rag_timer("rag_local_request");
-
-            std::vector<SearchResult> results = rag_engine.searchTopK(question, top_k);
-            std::string answer = buildLocalRagAnswer(results);
-
-            Logger::log(LogLevel::System, answer);
-            logElapsedTime(rag_timer);
-        }
-    } else if (type == QueryType::chat) {
-        Logger::log(LogLevel::System, "This is a chat question. LLM will handle it later.");
-    } else {
-        Logger::log(LogLevel::System, "Unknown query type.");
+    if (result.ok) {
+        Logger::log(LogLevel::System, result.answer);
+        return;
     }
 
-    logElapsedTime(total_timer);
+    Logger::log(LogLevel::Error, result.error);
 }
+
+void handleQuery(
+    const std::string& query,
+    MultiLevelResponseSystem& system
+) {
+    PerfTimer timer("multi_level_query");
+
+    Logger::log(LogLevel::User, query);
+
+    const QueryProcessResult result = (
+        system.process(query)
+    );
+
+    logProcessResult(result, system);
+    logElapsedTime(timer);
+}
+
+} // namespace
 
 int main(int argc, char* argv[]) {
-    CommandLineOptions options = CommandLineOptions::parse(argc, argv);
+    const CommandLineOptions options = CommandLineOptions::parse(argc, argv);
 
     std::string program_name = argc > 0 ? argv[0] : "edge_voice_rag";
 
@@ -111,100 +87,67 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    QueryRouter router;
     RagEngine rag_engine(config.knowledgePath());
 
-    Logger::log(LogLevel::Info, "EdgeVoiceRAG started.");
+    if (config.ragBackend() == "local" && !rag_engine.loadKnowledgeBase()) {
+        Logger::log(LogLevel::Error, "Failed to load knowledge base: " + config.knowledgePath());
+
+        return 1;
+    }
+
+    ZmqTextClient requester;
+
+    EdgeResponseBackend backend(
+        rag_engine,
+        requester,
+        config.ragBackend(),
+        config.ragEndpoint(),
+        config.ragTimeoutMs(),
+        config.llmEndpoint(),
+        config.llmTimeoutMs(),
+        config.topK()
+    );
+
+    MultiLevelResponseSystem system(backend);
+
+    Logger::log(
+        LogLevel::Info,
+        "EdgeVoiceRAG multi-level "
+        "response system started."
+    );
     Logger::log(LogLevel::Info, "Config path: " + options.configPath());
     Logger::log(LogLevel::Info, "Knowledge path: " + config.knowledgePath());
     Logger::log(LogLevel::Info, "RAG backend: " + config.ragBackend());
     Logger::log(LogLevel::Info, "RAG endpoint: " + config.ragEndpoint());
-
-    // 限制oss的局部作用域
-    {
-        std::ostringstream oss;
-        oss << "RAG top_k: " << config.topK();
-        Logger::log(LogLevel::Info, oss.str());
-    }
-
-    {
-        std::ostringstream oss;
-        oss << "RAG timeout: " << config.ragTimeoutMs() << " ms";
-        Logger::log(LogLevel::Info, oss.str());
-    }
-
-    if (config.ragBackend() == "local") {
-        if (!rag_engine.loadKnowledgeBase()) {
-            Logger::log(LogLevel::Error, "Failed to load knowledge base: " + config.knowledgePath());
-            return 1;
-        }
-
-        Logger::log(LogLevel::Info, "Knowledge base loaded successfully.");
-    } else {
-        Logger::log(LogLevel::Info, "Local knowledge base loading skipped because RAG backend is " + config.ragBackend() + ".");
-    }
+    Logger::log(LogLevel::Info, "LLM endpoint: " + config.llmEndpoint());
 
     if (options.onceMode()) {
-        if (options.onceQuery() == "exit" && (config.ragBackend() == "zmq" || config.ragBackend() == "python_zmq")) {
-            Logger::log(LogLevel::Info, "Sending exit command to RAG server.");
-
-            RagClilentZmq rag_client(config.ragEndpoint(), config.ragTimeoutMs());
-            std::string reply = rag_client.query("exit");
-
-            std::string answer = RagResponseParser::extractAnswerOrRaw(reply);
-
-            Logger::log(LogLevel::System, answer);
-            return 0;
-        }
         handleQuery(
-            options.onceQuery(), 
-            router, 
-            rag_engine, 
-            config.topK(), 
-            config.ragBackend(), 
-            config.ragEndpoint(),
-            config.ragTimeoutMs()
+            options.onceQuery(),
+            system
         );
+
         return 0;
     }
 
     while (true) {
-        std::cout << "\nPlease input your question, or type exit to quit:\n> ";
+        std::cout << "\nPlease input your query, or type exit to quit:\n> ";
 
-        std::string question;
-        std::getline(std::cin, question);
+        std::string query;
+        std::getline(std::cin, query);
 
-        if (question == "exit") {
-            if (config.ragBackend() == "zmq" ||
-                config.ragBackend() == "python_zmq") {
-                Logger::log(LogLevel::Info, "Sending exit command to RAG server");
-
-                RagClilentZmq rag_client(config.ragEndpoint(), config.ragTimeoutMs());
-                std::string reply = rag_client.query(question);
-
-                std::string answer = RagResponseParser::extractAnswerOrRaw(reply);
-
-                Logger::log(LogLevel::System, answer);
-            }
-
+        if (query == "exit" || query == "quit" || query == "退出") {
             Logger::log(LogLevel::System, "Bye.");
+
             break;
         }
 
-        if (question.empty()) {
+        if (query.empty()) {
             Logger::log(LogLevel::Warning, "Empty query ignored.");
             continue;
         }
-        
-        handleQuery(
-            question, 
-            router, 
-            rag_engine, 
-            config.topK(), 
-            config.ragBackend(),
-            config.ragEndpoint(),
-            config.ragTimeoutMs()
-    );
+
+        handleQuery(query, system);
     }
 
     return 0;

@@ -18,6 +18,8 @@ add_library(edge_voice_rag_core
     src/command_line_options.cpp
     src/rag_client_zmq.cpp
     src/rag_response_parser.cpp
+    src/zmq_text_client.cpp
+    src/edge_response_backend.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -77,6 +79,17 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    edge_response_backend_tests
+    tests/edge_response_backend_tests.cpp
+)
+
+target_link_libraries(
+    edge_response_backend_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
@@ -86,7 +99,16 @@ add_test(
     NAME multi_level_response_tests
     COMMAND multi_level_response_tests
 )
+add_test(
+    NAME edge_response_backend_tests
+    COMMAND edge_response_backend_tests
+)
 
 set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+set_tests_properties(
+    edge_response_backend_tests
+    PROPERTIES
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )

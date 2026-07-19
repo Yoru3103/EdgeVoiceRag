@@ -26,3 +26,21 @@ std::string RagResponseParser::extractAnswerOrRaw(const std::string& response) {
         return response;
     }
 }
+
+std::string RagResponseParser::extractRagAnswerOrRaw(const std::string& response) {
+    try {
+        const auto json_response = nlohmann::json::parse(response);
+
+        if (json_response.contains("error") && json_response["error"].is_string()) {
+            return "[ERROR]" + json_response["error"].get<std::string>();
+        }
+
+        if (json_response.contains("answer") && json_response["answer"].is_string()) {
+            return json_response["answer"].get<std::string>();
+        }
+
+        return response;
+    } catch (const std::exception&) {
+        return response;
+    }
+}

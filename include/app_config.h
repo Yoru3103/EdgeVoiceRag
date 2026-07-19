@@ -15,6 +15,9 @@ public:
     const std::string& ragEndpoint() const;
     int ragTimeoutMs() const;
 
+    const std::string& llmEndpoint() const;
+    int llmTimeoutMs() const;
+
 private:
     std::string config_path_;
 
@@ -25,5 +28,12 @@ private:
     std::string rag_endpoint_;
     int rag_timeout_ms_;
 
+    std::string llm_endpoint_;
+    int llm_timeout_ms_;
+
     static std::string trim(const std::string& text);
+    static int parsePositiveInt(
+        const std::string& value,
+        int default_value
+    );
 };
