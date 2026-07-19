@@ -3,12 +3,14 @@ cmake_minimum_required(VERSION 3.16)
 project(EdgeVoiceRAG)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(nlohmann_json REQUIRED)
 
 add_library(edge_voice_rag_core
     src/query_router.cpp
+    src/query_classifier.cpp
+    src/multi_level_response_system.cpp
     src/logger.cpp
     src/perf_timer.cpp
     src/rag_engine.cpp
@@ -16,7 +18,6 @@ add_library(edge_voice_rag_core
     src/command_line_options.cpp
     src/rag_client_zmq.cpp
     src/rag_response_parser.cpp
-    src/query_classifier.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -59,10 +60,31 @@ add_executable(rag_client
 
 target_link_libraries(rag_client PRIVATE zmq)
 
+add_executable(
+    multi_level_response_tests
+    tests/multi_level_response_tests.cpp
+)
+
+target_include_directories(
+    multi_level_response_tests
+    PRIVATE
+    tests
+)
+
+target_link_libraries(
+    multi_level_response_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
     COMMAND unit_tests
+)
+add_test(
+    NAME multi_level_response_tests
+    COMMAND multi_level_response_tests
 )
 
 set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
