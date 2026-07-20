@@ -21,6 +21,8 @@ add_library(edge_voice_rag_core
     src/zmq_text_client.cpp
     src/edge_response_backend.cpp
     src/llm_protocol.cpp
+    src/mock_llm_backend.cpp
+    src/llm_service.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -64,6 +66,17 @@ add_executable(rag_client
 target_link_libraries(rag_client PRIVATE zmq)
 
 add_executable(
+    llm_server
+    src/llm_server.cpp
+)
+
+target_link_libraries(
+    llm_server
+    PRIVATE
+    edge_voice_rag_core
+)
+
+add_executable(
     multi_level_response_tests
     tests/multi_level_response_tests.cpp
 )
@@ -102,6 +115,17 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    llm_service_tests
+    tests/llm_service_tests.cpp
+)
+
+target_link_libraries(
+    llm_service_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
@@ -118,6 +142,10 @@ add_test(
 add_test(
     NAME llm_protocol_tests
     COMMAND llm_protocol_tests
+)
+add_test(
+    NAME llm_service_tests
+    COMMAND llm_service_tests
 )
 
 set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
