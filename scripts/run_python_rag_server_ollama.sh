@@ -29,7 +29,7 @@ if [ ! -f "vector_db/chunks.json" ]; then
         --output vector_db/chunks.json
 fi
 
-python python/rag/python_rag_server.py \
+PYTHONPATH=python python -m rag.python_rag_server.py \
     --endpoint tcp://*:5556 \
     --index vector_db/chunks.json \
     --top-k 1 \

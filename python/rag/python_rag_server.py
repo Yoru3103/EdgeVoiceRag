@@ -7,8 +7,8 @@ from typing import Any, List, Dict
 
 import zmq
 
-from tfidf_search import SearchResult, TfidfRagSearcher
-from llm_generator import create_llm_generator
+from rag.tfidf_search import SearchResult, TfidfRagSearcher
+from rag.llm_generator import create_llm_generator
 
 def result_to_dict(rank: int, result: SearchResult) -> Dict[str, Any]:
     return {
@@ -19,18 +19,18 @@ def result_to_dict(rank: int, result: SearchResult) -> Dict[str, Any]:
         "text": result.text,
         "score": result.score,
     }
-    
+
 def build_answer(results: List[SearchResult]) -> str:
     if not results:
         return "根据车辆手册：没有找到相关车辆手册内容。"
-    
+
     lines = ["根据车辆手册："]
-    
+
     for rank, result in enumerate(results, start=1):
         lines.append(f"{rank}. {result.content}")
-        
+
     return "\n".join(lines)
-    
+
 def build_success_response(
     query: str,
     backend: str,
@@ -53,12 +53,12 @@ def build_success_response(
             for rank, result in enumerate(results, start=1)
         ],
     }
-    
+
     if include_prompt:
         response["prompt"] = prompt
-        
+
     return response
-    
+
 def build_error_response(query: str, backend: str, error: str) -> Dict[str, Any]:
     return {
         "ok": False,
@@ -69,56 +69,62 @@ def build_error_response(query: str, backend: str, error: str) -> Dict[str, Any]
         "result_count": 0,
         "results": [],
     }
-    
+
 def response_to_json(response: Dict[str, Any]) -> str:
     return json.dumps(response, ensure_ascii=False)
 
 class PythonRagServer:
     def __init__(
-        self, endpoint: str, 
-        index_path: Path, 
+        self,
+        endpoint: str,
+        index_path: Path,
         top_k: int,
         llm_backend: str,
         llm_model: str,
         ollama_url: str,
+        llm_endpoint: str,
         llm_timeout: int,
         llm_health_check: bool,
-        include_prompt: bool) -> None:
+        include_prompt: bool
+    ) -> None:
         self.endpoint = endpoint
         self.index_path = index_path
         self.top_k = top_k
-        self.backend = "python_tdidf"
+        self.backend = "python_tfidf"
         self.include_prompt = include_prompt
-        
+
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REP)
+        self.socket.setsockopt(zmq.LINGER, 0)
         self.running = True
-        
+
         self.searcher = TfidfRagSearcher(index_path)
+
         self.generator = create_llm_generator(
             backend=llm_backend,
             model=llm_model,
             base_url=ollama_url,
+            endpoint=llm_endpoint,
             timeout_seconds=llm_timeout,
             enable_health_check=llm_health_check,
         )
-        
+
     def start(self) -> None:
         self.socket.bind(self.endpoint)
-        
+
         print(f"[INFO] Python RAG server started.")
         print(f"[INFO] Endpoint: {self.endpoint}")
         print(f"[INFO] Index path: {self.index_path}")
         print(f"[INFO] Top-k: {self.top_k}")
-        print(f"[INfO] LLM backend: {self.generator.backend}")
+        print(f"[INFO] LLM backend: {self.generator.backend}")
         print(f"[INFO] LLM timeout: {self.generator.timeout_seconds if hasattr(self.generator, 'timeout_seconds') else 'N/A'} seconds")
         print(f"[INFO] Include prompt: {self.include_prompt}")
-        
+
         while self.running:
             try:
                 query = self.socket.recv_string()
                 print(f"[REQUEST] {query}")
-                
+
                 if query == "exit":
                     response = {
                         "ok": True,
@@ -131,14 +137,14 @@ class PythonRagServer:
                     }
                     self.socket.send_string(response_to_json(response))
                     break
-                
+
                 results = self.searcher.search(query, self.top_k)
-                
+
                 contexts = [
                     result.text
                     for result in results
                 ]
-                
+
                 generation = self.generator.generate(
                     query=query,
                     contexts=contexts,
@@ -152,39 +158,39 @@ class PythonRagServer:
                     llm_backend=generation.backend,
                     include_prompt=self.include_prompt,
                 )
-                
+
                 self.socket.send_string(response_to_json(response))
-                
+
             except KeyboardInterrupt:
                 print("\n[INFO] KeyboardInterrupt received.")
                 break
-            
+
             except Exception as exc:
                 error_query = ""
                 try:
                     error_query = query
                 except UnboundLocalError:
                     error_query = ""
-                    
+
                 response = build_error_response(
                     query=error_query,
                     backend=self.backend,
                     error=str(exc),
                 )
-                
+
                 try:
                     self.socket.send_string(response_to_json(response))
                 except Exception:
                     pass
-                
+
         self.stop()
-        
+
     def stop(self) -> None:
         self.running = False
         self.socket.close(linger=0) #linger控制socket关闭时，还没发出去的消息要不要等待发送完成。-1表示一直等到发送完毕，0表示立即关闭，大于零表示最大等待时间
         self.context.term() # 终止context
         print("[INFO] Python RAG server stopped.")
-        
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Python TF-IDF RAG ZeroMQ server.")
     parser.add_argument(
@@ -206,7 +212,7 @@ def main() -> None:
     parser.add_argument(
         "--llm-backend",
         default="mock",
-        choices=["mock", "ollama"],
+        choices=["mock", "ollama", "zmq"],
         help="LLM generation backen",
     )
     parser.add_argument(
@@ -218,6 +224,11 @@ def main() -> None:
         "--ollama-url",
         default="http://localhost:11434",
         help="Ollama base URL.",
+    )
+    parser.add_argument(
+        "--llm-endpoint",
+        default="tcp://127.0.0.1:8899",
+        help="C++ LLM ZeroMQ service endpoint.",
     )
     parser.add_argument(
         "--llm-timeout",
@@ -235,25 +246,25 @@ def main() -> None:
         action="store_true",
         help="Include full prompt in JSON response for debugging.",
     )
-    
+
     args = parser.parse_args()
-    
-    if args.top_k < 0:
-        print("[ERROR] --top-k must be positive.")
+
+    if args.top_k <= 0:
+        print("[ERROR] --top-k must be greater than zero.")
         sys.exit(1)
-        
-    if args.llm_timeout < 0:
-        print("[ERROR] --llm-timeout must be positive.")
+
+    if args.llm_timeout <= 0:
+        print("[ERROR] --llm-timeout must be greater than zero.")
         sys.exit(1)
-        
+
     index_path = Path(args.index)
-    
+
     if not index_path.exists():
         print(f"[ERROR] Index file not found: {index_path}")
         print("Please build it first:")
         print("  python python/rag/build_index.py --manual docs/vehicle_manual.txt --output vector_db/chunks.json")
         sys.exit(1)
-        
+
     server = PythonRagServer(
         endpoint=args.endpoint,
         index_path=index_path,
@@ -261,21 +272,22 @@ def main() -> None:
         llm_backend=args.llm_backend,
         llm_model=args.llm_model,
         ollama_url=args.ollama_url,
+        llm_endpoint=args.llm_endpoint,
         llm_timeout=args.llm_timeout,
-        llm_health_check=args.disable_llm_health_check,
+        llm_health_check=not args.disable_llm_health_check,
         include_prompt=args.include_prompt,
     )
-    
+
     def handle_signal(signum, frame) -> None:
         print(f"\n[INFO] signal received: {signum}")
         server.running = False
-    
+
     # signal表示操作系统信号，SIGINT中断信号，通常表示ctrl+c；SIGTERM通常表示kill <pid>发出的终止请求
     # frame：收到信号那一刻，程序正在执行的代码位置
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
-    
+
     server.start()
-    
+
 if __name__ == "__main__":
     main()

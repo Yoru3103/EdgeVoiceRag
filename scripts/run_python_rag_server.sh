@@ -4,6 +4,10 @@ set -e
 
 EXPECTED_ENV="edge-rag"
 
+LLM_BACKEND="${LLM_BACKEND:-zmq}"
+LLM_ENDPOINT="${LLM_ENDPOINT:-tcp://127.0.0.1:8899}"
+LLM_TIMEOUT="${LLM_TIMEOUT:-120}"
+
 if [ -z "$CONDA_DEFAULT_ENV" ]; then
     echo "[ERROR] No conda environment is currently activated."
     echo "Please run:"
@@ -26,8 +30,10 @@ if [ ! -f "vector_db/chunks.json" ]; then
         --output vector_db/chunks.json
 fi
 
-python python/rag/python_rag_server.py \
+PYTHONPATH=python python -m rag.python_rag_server \
     --endpoint tcp://*:5556 \
     --index vector_db/chunks.json \
     --top-k 3 \
-    --llm-backend mock
+    --llm-backend "$LLM_BACKEND" \
+    --llm-endpoint "$LLM_ENDPOINT" \
+    --llm-timeout "$LLM_TIMEOUT"

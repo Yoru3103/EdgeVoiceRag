@@ -49,7 +49,7 @@ PY
 trap cleanup EXIT
 
 echo "Starting Python RAG server with prompt debug..."
-python python/rag/python_rag_server.py \
+PYTHONPATH=python python -m rag.python_rag_server.py \
     --endpoint "$ENDPOINT_BIND" \
     --index vector_db/chunks.json \
     --top-k 3 \
