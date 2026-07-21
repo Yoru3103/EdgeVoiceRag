@@ -25,8 +25,18 @@ public:
     std::string name() const override;
     LlmGenerationResult generate(const std::string& prompt) override;
 
+    LlmGenerationResult generateStream(
+        const std::string& prompt,
+        const LlmChunkCallback& callback
+    ) override;
+
 private:
     // 使用Impl隐藏RKLLM SDK类型。这样PC编译时，其他模块不需要包含rkllm.h，也不会把RKLLM SDK依赖扩散到整个项目
     struct Impl;
     Impl* impl_;
+
+    LlmGenerationResult run(
+        const std::string& prompt,
+        const LlmChunkCallback* callback
+    );
 };

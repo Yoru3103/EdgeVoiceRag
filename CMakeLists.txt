@@ -198,6 +198,17 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    llm_backend_stream_tests
+    tests/llm_backend_stream_tests.cpp
+)
+
+target_link_libraries(
+    llm_backend_stream_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
@@ -222,6 +233,10 @@ add_test(
 add_test(
     NAME llm_backend_factory_tests
     COMMAND llm_backend_factory_tests
+)
+add_test(
+    NAME llm_backend_stream_tests
+    COMMAND llm_backend_stream_tests
 )
 
 set_tests_properties(edge_voice_rag_unit_tests PROPERTIES

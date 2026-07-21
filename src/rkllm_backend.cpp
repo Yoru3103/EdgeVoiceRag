@@ -16,6 +16,7 @@ struct GenerationContext {
     std::string answer;
     std::string error;
     bool finished = false;
+    const LlmChunkCallback* callback = nullptr;
 };
 
 // 生成token时，runtime回调用该函数
@@ -30,8 +31,29 @@ int resultCallback(RKLLMResult* result, void* userdata, LLMCallState state) {
 
     // RKLLM_RUN_NORMAL：正常生成文本
     if (state == RKLLM_RUN_NORMAL) {
-        if (result != nullptr && result->text != nullptr) {
-            context->answer += result->text;
+        if (
+            result == nullptr ||
+            result->text == nullptr
+        ) {
+            return 0;
+        }
+
+        const std::string chunk = result->text;
+        context->answer += chunk;
+        
+        if (
+            context->callback != nullptr &&
+            !chunk.empty()
+        ) {
+            try {
+                (*context->callback)(chunk);
+            } catch (const std::exception& error) {
+                context->error = "stream callback failed: " + std::string(error.what());
+                return -1;
+            } catch (...) {
+                context->error = "stream callback failed with unknown error";
+                return -1;
+            }
         }
 
         return 0;
@@ -112,8 +134,30 @@ std::string RkllmBackend::name() const {
 }
 
 LlmGenerationResult RkllmBackend::generate(const std::string& prompt) {
+    return run(prompt, nullptr);
+}
+
+LlmGenerationResult RkllmBackend::generateStream(
+    const std::string& prompt,
+    const LlmChunkCallback& callback
+) {
+    if (!callback) {
+        return LlmGenerationResult::failure(
+            "stream callback must not be empty"
+        );
+    }
+
+    return run(prompt, &callback);
+}
+
+LlmGenerationResult RkllmBackend::run(
+    const std::string& prompt,
+    const LlmChunkCallback* callback
+) {
     if (prompt.empty()) {
-        return LlmGenerationResult::failure("prompt must not be empty");
+        return LlmGenerationResult::failure(
+            "prompt must not be empty"
+        );
     }
 
     if (impl_ == nullptr || impl_->handle == nullptr) {
@@ -134,6 +178,7 @@ LlmGenerationResult RkllmBackend::generate(const std::string& prompt) {
     infer_param.keep_history = 0;               // 本次推理结束后不保留对话历史
 
     GenerationContext context;
+    context.callback = callback;
 
     const int result = rkllm_run(
         impl_->handle,
@@ -142,19 +187,25 @@ LlmGenerationResult RkllmBackend::generate(const std::string& prompt) {
         &context
     );
 
+    if (!context.error.empty()) {
+        return LlmGenerationResult::failure(context.error);
+    }
+
     if (result != 0) {
         return LlmGenerationResult::failure(
             "rkllm_run returned error code: " + std::to_string(result)
         );
     }
 
-    if (!context.error.empty()) {
-        return LlmGenerationResult::failure(context.error);
-    }
-
     if (!context.finished) {
         return LlmGenerationResult::failure(
             "RKLLM generation ended without finish callback"
+        );
+    }
+
+    if (context.answer.empty()) {
+        return LlmGenerationResult::failure(
+            "RKLLM generated an empty answer"
         );
     }
 

@@ -13,6 +13,11 @@ public:
     std::string name() const override;
     LlmGenerationResult generate(const std::string& prompt) override;
 
+    LlmGenerationResult generateStream(
+        const std::string& prompt,
+        const LlmChunkCallback& callback
+    ) override;
+
 private:
     std::size_t preview_length_;
 };
