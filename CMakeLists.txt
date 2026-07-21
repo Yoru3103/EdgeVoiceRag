@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(nlohmann_json REQUIRED)
 
+option(EDGE_ENABLE_RKLLM "Enable Rockchip RKLLM backend" OFF)
+set(RKLLM_SDK_ROOT "" CACHE PATH "Path to RKLLM runtime directory")
+
 add_library(edge_voice_rag_core
     src/query_router.cpp
     src/query_classifier.cpp
@@ -23,11 +26,69 @@ add_library(edge_voice_rag_core
     src/llm_protocol.cpp
     src/mock_llm_backend.cpp
     src/llm_service.cpp
+    src/llm_backend_factory.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
 
 target_link_libraries(edge_voice_rag_core PUBLIC zmq nlohmann_json::nlohmann_json)
+
+if(EDGE_ENABLE_RKLLM)
+    find_path(
+        RKLLM_INCLUDE_DIR
+        rkllm.h
+        PATHS
+        "${RKLLM_SDK_ROOT}/include"
+        "${RKLLM_SDK_ROOT}/librkllm_api/include"
+        NO_DEFAULT_PATH
+    )
+
+    find_library(
+        RKLLM_RUNTIME_LIBRARY
+        NAMES rkllmrt
+        PATHS
+        "${RKLLM_SDK_ROOT}/lib"
+        "${RKLLM_SDK_ROOT}/lib64"
+        "${RKLLM_SDK_ROOT}/${CMAKE_SYSTEM_PROCESSOR}"
+        NO_DEFAULT_PATH
+    )
+
+    if(NOT RKLLM_INCLUDE_DIR)
+        message(FATAL_ERROR
+            "rkllm.h was not found under RKLLM_SDK_ROOT"
+        )
+    endif()
+
+    if(NOT RKLLM_RUNTIME_LIBRARY)
+        message(FATAL_ERROR
+            "librkllmrt.so was not found under RKLLM_SDK_ROOT"
+        )
+    endif()
+
+    target_sources(
+        edge_voice_rag_core
+        PRIVATE
+        src/rkllm_backend.cpp
+    )
+
+    target_include_directories(
+        edge_voice_rag_core
+        PRIVATE
+        "${RKLLM_INCLUDE_DIR}"
+    )
+
+    target_compile_definitions(
+        edge_voice_rag_core
+        PUBLIC
+        EDGE_ENABLE_RKLLM=1
+    )
+
+    target_link_libraries(
+        edge_voice_rag_core
+        PUBLIC
+        "${RKLLM_RUNTIME_LIBRARY}"
+    )
+endif()
 
 add_executable(edge_voice_rag
     src/main.cpp
@@ -126,6 +187,17 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    llm_backend_factory_tests
+    tests/llm_backend_factory_tests.cpp
+)
+
+target_link_libraries(
+    llm_backend_factory_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
@@ -146,6 +218,10 @@ add_test(
 add_test(
     NAME llm_service_tests
     COMMAND llm_service_tests
+)
+add_test(
+    NAME llm_backend_factory_tests
+    COMMAND llm_backend_factory_tests
 )
 
 set_tests_properties(edge_voice_rag_unit_tests PROPERTIES

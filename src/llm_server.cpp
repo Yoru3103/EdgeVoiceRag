@@ -8,7 +8,7 @@
 #include <zmq.hpp>
 
 #include "llm_service.h"
-#include "mock_llm_backend.h"
+#include "llm_backend_factory.h"
 
 namespace {
 
@@ -22,6 +22,9 @@ void handleSignal(int signal_number) {
 struct ServerOptions {
     std::string endpoint = "tcp://*:8899";
     std::string backend = "mock";
+    std::string model_path;
+    int max_new_tokens = 512;
+    int max_context_len = 4096;
     bool show_help = false;
 };
 
@@ -30,9 +33,12 @@ std::string usage(const std::string& program_name) {
         "Usage:\n"
         "  " + program_name + " [options]\n\n"
         "Options:\n"
-        "  --endpoint <endpoint>  Bind endpoint\n"
-        "  --backend <backend>    Backend: mock\n"
-        "  -h, --help             Show help\n";
+        "  --endpoint <endpoint>          Bind endpoint\n"
+        "  --backend <mock|rkllm>         LLM backend\n"
+        "  --model <path>                 RKLLM model path\n"
+        "  --max-new-tokens <number>      Maximum generated tokens\n"
+        "  --max-context-len <number>     Maximum context length\n"
+        "  -h, --help                     Show help\n";
 }
 
 ServerOptions parseOptions(int argc, char* argv[]) {
@@ -48,9 +54,7 @@ ServerOptions parseOptions(int argc, char* argv[]) {
 
         if (argument == "--endpoint") {
             if (index + 1 >= argc) {
-                throw std::runtime_error(
-                    "missing value after --endpoint"
-                );
+                throw std::runtime_error("missing value after --endpoint");
             }
 
             options.endpoint = argv[++index];
@@ -59,12 +63,37 @@ ServerOptions parseOptions(int argc, char* argv[]) {
 
         if (argument == "--backend") {
             if (index + 1 >= argc) {
-                throw std::runtime_error(
-                    "missing value after --backend"
-                );
+                throw std::runtime_error("missing value after --backend");
             }
 
             options.backend = argv[++index];
+            continue;
+        }
+
+        if (argument == "--model") {
+            if (index + 1 >= argc) {
+                throw std::runtime_error("missing value after --model");
+            }
+
+            options.model_path = argv[++index];
+            continue;
+        }
+
+        if (argument == "--max-new-tokens") {
+            if (index + 1 >= argc) {
+                throw std::runtime_error("missing value after --max-new-tokens");
+            }
+
+            options.max_new_tokens = std::stoi(argv[++index]);
+            continue;
+        }
+
+        if (argument == "--max-context-len") {
+            if (index + 1 >= argc) {
+                throw std::runtime_error("missing value after --max-context-len");
+            }
+
+            options.max_context_len = std::stoi(argv[++index]);
             continue;
         }
 
@@ -73,10 +102,16 @@ ServerOptions parseOptions(int argc, char* argv[]) {
         );
     }
 
-    if (options.backend != "mock") {
-        throw std::runtime_error(
-            "unsupported backend: " + options.backend
-        );
+    if (options.max_new_tokens <= 0) {
+        throw std::runtime_error("--max-new-tokens must be greater than zero");
+    }
+
+    if (options.max_context_len <= 0) {
+        throw std::runtime_error("--max-context-len must be greater than zero");
+    }
+
+    if (options.backend == "rkllm" && options.model_path.empty()) {
+        throw std::runtime_error("--model is required when backend is rkllm");
     }
 
     return options;
@@ -111,8 +146,15 @@ int main(int argc, char* argv[]) {
     std::signal(SIGTERM, handleSignal);
 
     try {
-        MockLlmBackend backend;
-        LlmService service(backend);
+        LlmBackendOptions backend_options;
+        backend_options.backend = options.backend;
+        backend_options.max_context_len = options.max_context_len;
+        backend_options.max_new_tokens = options.max_new_tokens;
+        backend_options.model_path = options.model_path;
+
+        std::unique_ptr<LlmBackend> backend = createLlmBackend(backend_options);
+
+        LlmService service(*backend);
 
         zmq::context_t context(1);
         zmq::socket_t socket(context, zmq::socket_type::rep);
@@ -123,7 +165,7 @@ int main(int argc, char* argv[]) {
 
         std::cout << "[INFO] C++ LLM server started\n";
         std::cout << "[INFO] Endpoint: " << options.endpoint << '\n';
-        std::cout << "[INFO] Backend: " << backend.name() << '\n';
+        std::cout << "[INFO] Backend: " << backend->name() << '\n';
 
         while (g_running.load()) {
             zmq::message_t request_message;
