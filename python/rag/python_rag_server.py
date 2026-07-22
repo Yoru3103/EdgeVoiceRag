@@ -4,11 +4,17 @@ import signal
 import sys
 from pathlib import Path
 from typing import Any, List, Dict
+from time import perf_counter
 
 import zmq
 
 from rag.tfidf_search import SearchResult, TfidfRagSearcher
 from rag.llm_generator import create_llm_generator
+from rag.rag_stream_protocol import (
+    RagStreamEvent,
+    decode_rag_stream_request,
+    encode_rag_stream_event,
+)
 
 def result_to_dict(rank: int, result: SearchResult) -> Dict[str, Any]:
     return {
@@ -85,7 +91,9 @@ class PythonRagServer:
         llm_endpoint: str,
         llm_timeout: int,
         llm_health_check: bool,
-        include_prompt: bool
+        stream_endpoint: str,
+        llm_stream_endpoint: str,
+        include_prompt: bool,
     ) -> None:
         self.endpoint = endpoint
         self.index_path = index_path
@@ -105,12 +113,221 @@ class PythonRagServer:
             model=llm_model,
             base_url=ollama_url,
             endpoint=llm_endpoint,
+            stream_endpoint=llm_stream_endpoint,
             timeout_seconds=llm_timeout,
             enable_health_check=llm_health_check,
         )
 
+        self.stream_endpoint = stream_endpoint
+
+        self.stream_socket = self.context.socket(zmq.ROUTER)
+        self.stream_socket.setsockopt(zmq.LINGER, 0)
+
+    def _send_stream_event(
+                self,
+                identity: bytes,
+                event: RagStreamEvent,
+            ) -> None:
+                message = encode_rag_stream_event(event).encode("utf-8")
+
+                self.stream_socket.send_multipart([identity, message])
+
+    def _receive_stream_request(self) -> tuple[bytes, str]:
+        frames = self.stream_socket.recv_multipart()
+
+        if len(frames) != 2:
+            raise RuntimeError(
+                "RAG ROUTER request must contain "
+                "identity and payload"
+            )
+
+        identity, payload = frames
+
+        try:
+            message = payload.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RuntimeError(
+                "RAG stream request is not UTF-8"
+            ) from exc
+
+        return identity, message
+
+    def _handle_stream_request(self) -> None:
+        identity, message = self._receive_stream_request()
+
+        request = None
+
+        start = perf_counter()
+        sequence = 0
+        llm_backend = ""
+
+        try:
+            request = decode_rag_stream_request(message)
+
+            results = self.searcher.search(
+                request.query,
+                self.top_k,
+            )
+
+            contexts = [
+                result.text
+                for result in results
+            ]
+
+            if not contexts:
+                answer = ("车辆手册中没有找到相关内容。")
+
+                self._send_stream_event(
+                    identity,
+                    RagStreamEvent(
+                        type="rag_chunk",
+                        request_id=request.request_id,
+                        sequence=sequence,
+                        delta=answer,
+                        answer="",
+                        backend=self.backend,
+                        llm_backend="none",
+                        error="",
+                        elapsed_ms=(
+                            perf_counter() - start
+                        ) * 1000,
+                        finished=False,
+                    ),
+                )
+
+                sequence += 1
+
+                self._send_stream_event(
+                    identity,
+                    RagStreamEvent(
+                        type="rag_finished",
+                        request_id=request.request_id,
+                        sequence=sequence,
+                        delta="",
+                        answer=answer,
+                        backend=self.backend,
+                        llm_backend="none",
+                        error="",
+                        elapsed_ms=(
+                            perf_counter() - start
+                        ) * 1000,
+                        finished=True,
+                    ),
+                )
+
+                return
+
+            if not hasattr(
+                self.generator,
+                "generate_stream",
+            ):
+                raise RuntimeError(
+                    "selected LLM backend does not "
+                    "support streaming"
+                )
+
+            accumulated_answer = ""
+
+            for event in self.generator.generate_stream(
+                query=request.query,
+                contexts=contexts,
+            ):
+                llm_backend = event.backend
+
+                if event.type == "generation_chunk":
+                    accumulated_answer += event.delta
+
+                    self._send_stream_event(
+                        identity,
+                        RagStreamEvent(
+                            type="rag_chunk",
+                            request_id=request.request_id,
+                            sequence=sequence,
+                            delta=event.delta,
+                            answer="",
+                            backend=self.backend,
+                            llm_backend=llm_backend,
+                            error="",
+                            elapsed_ms=(
+                                perf_counter() - start
+                            ) * 1000,
+                            finished=False,
+                        ),
+                    )
+
+                    sequence += 1
+                    continue
+
+                if (event.type == "generation_finished"):
+                    if (accumulated_answer != event.answer):
+                        raise RuntimeError(
+                            "RAG stream chunks do not "
+                            "match LLM final answer"
+                        )
+
+                    self._send_stream_event(
+                        identity,
+                        RagStreamEvent(
+                            type="rag_finished",
+                            request_id=(
+                                request.request_id
+                            ),
+                            sequence=sequence,
+                            delta="",
+                            answer=event.answer,
+                            backend=self.backend,
+                            llm_backend=llm_backend,
+                            error="",
+                            elapsed_ms=(
+                                perf_counter() - start
+                            ) * 1000,
+                            finished=True,
+                        ),
+                    )
+
+                    return
+
+            raise RuntimeError(
+                "LLM stream ended without "
+                "finished event"
+            )
+        except Exception as exc:
+            if request is None:
+                print(
+                    "[WARNING] Invalid RAG stream "
+                    f"request: {exc}"
+                )
+
+                return
+
+            self._send_stream_event(
+                identity,
+                RagStreamEvent(
+                    type="rag_error",
+                    request_id=request.request_id,
+                    sequence=sequence,
+                    delta="",
+                    answer="",
+                    backend=self.backend,
+                    llm_backend=(
+                        llm_backend or
+                        self.generator.backend
+                    ),
+                    error=str(exc),
+                    elapsed_ms=(
+                        perf_counter() - start
+                    ) * 1000,
+                    finished=True,
+                ),
+            )
+
     def start(self) -> None:
         self.socket.bind(self.endpoint)
+        self.stream_socket.bind(self.stream_endpoint)
+
+        poller = zmq.Poller()
+        poller.register(self.socket, zmq.POLLIN)
+        poller.register(self.stream_socket, zmq.POLLIN)
 
         print(f"[INFO] Python RAG server started.")
         print(f"[INFO] Endpoint: {self.endpoint}")
@@ -119,9 +336,18 @@ class PythonRagServer:
         print(f"[INFO] LLM backend: {self.generator.backend}")
         print(f"[INFO] LLM timeout: {self.generator.timeout_seconds if hasattr(self.generator, 'timeout_seconds') else 'N/A'} seconds")
         print(f"[INFO] Include prompt: {self.include_prompt}")
+        print(f"[INFO] Stream endpoint: {self.stream_endpoint}")
 
         while self.running:
             try:
+                events = dict(poller.poll(500))
+
+                if self.stream_socket in events:
+                    self._handle_stream_request()
+
+                if self.socket not in events:
+                    continue
+
                 query = self.socket.recv_string()
                 print(f"[REQUEST] {query}")
 
@@ -187,8 +413,11 @@ class PythonRagServer:
 
     def stop(self) -> None:
         self.running = False
+
         self.socket.close(linger=0) #linger控制socket关闭时，还没发出去的消息要不要等待发送完成。-1表示一直等到发送完毕，0表示立即关闭，大于零表示最大等待时间
+        self.stream_socket.close(linger=0)
         self.context.term() # 终止context
+
         print("[INFO] Python RAG server stopped.")
 
 def main() -> None:
@@ -246,6 +475,16 @@ def main() -> None:
         action="store_true",
         help="Include full prompt in JSON response for debugging.",
     )
+    parser.add_argument(
+        "--stream-endpoint",
+        default="tcp://*:5557",
+        help="RAG streaming ROUTER endpoint.",
+    )
+    parser.add_argument(
+        "--llm-stream-endpoint",
+        default="tcp://127.0.0.1:8900",
+        help="C++ LLM streaming endpoint.",
+    )
 
     args = parser.parse_args()
 
@@ -275,6 +514,8 @@ def main() -> None:
         llm_endpoint=args.llm_endpoint,
         llm_timeout=args.llm_timeout,
         llm_health_check=not args.disable_llm_health_check,
+        llm_stream_endpoint=args.llm_stream_endpoint,
+        stream_endpoint=args.stream_endpoint,
         include_prompt=args.include_prompt,
     )
 

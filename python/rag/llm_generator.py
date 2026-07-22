@@ -1,9 +1,12 @@
 from dataclasses import dataclass
-from typing import List
+from typing import Iterator, List
 
 import requests
 
-from rag.llm_zmq_client import LlmZmqClient
+from rag.llm_zmq_client import (
+    LlmZmqClient,
+    LlmZmqStreamEvent,
+)
 
 @dataclass
 class GenerationResult:
@@ -195,10 +198,12 @@ class ZmqLLMGenerator:
     def __init__(
         self,
         endpoint: str,
+        stream_endpoint: str,
         timeout_seconds: int = 60,
     ) -> None:
         self.client = LlmZmqClient(
             endpoint=endpoint,
+            stream_endpoint=stream_endpoint,
             timeout_seconds=timeout_seconds,
         )
         self.timeout_seconds = timeout_seconds
@@ -224,6 +229,25 @@ class ZmqLLMGenerator:
             answer=result.answer,
             prompt=prompt,
             backend=result.backend,
+        )
+
+    def generate_stream(
+        self,
+        query: str,
+        contexts: List[str],
+    ) -> Iterator[LlmZmqStreamEvent]:
+        if not contexts:
+            raise RuntimeError(
+                "cannot stream without RAG contexts"
+            )
+
+        prompt = build_rag_prompt(
+            query=query,
+            contexts=contexts,
+        )
+
+        yield from self.client.generate_stream(
+            prompt
         )
 
 
@@ -252,6 +276,7 @@ def create_llm_generator(
     model: str = "qwen2.5:3b",
     base_url: str = "http://localhost:11434",
     endpoint: str = "tcp://127.0.0.1:8899",
+    stream_endpoint: str = "tcp://127.0.0.1:8900",
     timeout_seconds: int = 60,
     enable_health_check: bool = True,
     ):
@@ -269,6 +294,7 @@ def create_llm_generator(
     if backend == "zmq":
         return ZmqLLMGenerator(
             endpoint=endpoint,
+            stream_endpoint=stream_endpoint,
             timeout_seconds=timeout_seconds,
         )
 
