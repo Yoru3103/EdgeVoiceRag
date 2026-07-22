@@ -10,7 +10,7 @@ def test_reject_empty_endpoint() -> None:
         match="endpoint must not be empty",
     ):
         LlmZmqClient(endpoint="")
-        
+
 def test_reject_invalid_timeout() -> None:
     with pytest.raises(
         ValueError,
@@ -20,7 +20,7 @@ def test_reject_invalid_timeout() -> None:
             endpoint="tcp://127.0.0.1:8899",
             timeout_seconds=0,
         )
-        
+
 def test_decode_success_response() -> None:
     raw_response = json.dumps(
         {
@@ -119,15 +119,89 @@ def test_reject_empty_success_answer() -> None:
             raw_response=raw_response,
             expected_request_id="request-1",
         )
-        
+
 def test_generate_rejects_empty_prompt() -> None:
     client = LlmZmqClient(
         endpoint="tcp://127.0.0.1:8899",
         timeout_seconds=1,
     )
-    
+
     with pytest.raises(
         ValueError,
         match="prompt must not be empty",
     ):
         client.generate("   ")
+
+def test_decode_stream_chunk() -> None:
+    event = LlmZmqClient._decode_stream_event(
+        raw_response=json.dumps(
+            {
+                "version": 1,
+                "type": "generation_chunk",
+                "ok": True,
+                "request_id": "stream-1",
+                "delta": "空调",
+                "answer": "",
+                "backend": "cpp_mock",
+                "error": "",
+                "sequence": 0,
+                "elapsed_ms": 2.5,
+                "finished": False,
+            },
+            ensure_ascii=False,
+        ),
+        expected_request_id="stream-1",
+    )
+
+    assert event.type == "generation_chunk"
+    assert event.delta == "空调"
+    assert event.sequence == 0
+    assert not event.finished
+
+def test_decode_stream_finished() -> None:
+    event = LlmZmqClient._decode_stream_event(
+        raw_response=json.dumps(
+            {
+                "version": 1,
+                "type": "generation_finished",
+                "ok": True,
+                "request_id": "stream-1",
+                "delta": "",
+                "answer": "空调温度已调节",
+                "backend": "cpp_mock",
+                "error": "",
+                "sequence": 2,
+                "elapsed_ms": 20.0,
+                "finished": True,
+            },
+            ensure_ascii=False,
+        ),
+        expected_request_id="stream-1",
+    )
+
+    assert event.finished
+    assert event.answer == "空调温度已调节"
+    assert event.sequence == 2
+
+def test_decode_stream_error() -> None:
+    event = LlmZmqClient._decode_stream_event(
+        raw_response=json.dumps(
+            {
+                "version": 1,
+                "type": "generation_error",
+                "ok": False,
+                "request_id": "stream-1",
+                "delta": "",
+                "answer": "",
+                "backend": "rkllm",
+                "error": "generation failed",
+                "sequence": 1,
+                "elapsed_ms": 10.0,
+                "finished": True,
+            }
+        ),
+        expected_request_id="stream-1",
+    )
+
+    assert event.type == "generation_error"
+    assert event.error == "generation failed"

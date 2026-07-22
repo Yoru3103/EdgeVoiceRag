@@ -10,6 +10,7 @@ PROJECT_ROOT="$(
 cd "$PROJECT_ROOT"
 
 ENDPOINT="${LLM_ENDPOINT:-tcp://*:8899}"
+STREAM_ENDPOINT="${LLM_STREAM_ENDPOINT:-tcp://*:8900}"
 BACKEND="${LLM_BACKEND:-mock}"
 
 if [ ! -x "build/llm_server" ]; then
@@ -22,4 +23,5 @@ fi
 
 exec ./build/llm_server \
     --endpoint "$ENDPOINT" \
+    --stream-endpoint "$STREAM_ENDPOINT" \
     --backend "$BACKEND"
