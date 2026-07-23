@@ -105,6 +105,7 @@ class LlmZmqClient:
         if not prompt.strip():
             raise ValueError("LLM prompt must not be empty")
 
+        # 生成全局唯一标识符，.hex转换成不带字符的32位十六进制字符串
         request_id = uuid.uuid4().hex
 
         request = {

@@ -4,6 +4,7 @@ from typing import List
 def normalize_tts_text(text: str) -> str:
     result = text.strip()
 
+    # re：正则表达式库
     # 必须在删除换行之前处理行首列表编号
     result = re.sub(
         r"(?m)^\s*\d+\s*[.、]\s*",
