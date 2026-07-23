@@ -20,7 +20,8 @@ from rag.voice_io import (
 from rag.barge_in_detector import (
     BargeInDetector,
 )
-from rag.voice_pipeline import ZmqRagClient
+from rag.rag_stream_client import RagStreamClient
+from rag.streaming_sentence_buffer import StreamingSentenceBuffer
 
 
 class AssistantState(str, Enum):
@@ -40,6 +41,10 @@ class VoiceAssistantConfig:
     asr_model: str
     tts_model_dir: str
     rag_endpoint: str
+
+    rag_stream_endpoint: str = "tcp://localhost:5557"
+
+    stream_sentence_max_chars: int = 60
 
     microphone_device: Optional[str] = None
     output_device: Optional[str] = None
@@ -115,11 +120,9 @@ class VoiceAssistant:
             ),
         )
 
-        self.rag_client = ZmqRagClient(
-            endpoint=self.config.rag_endpoint,
-            timeout_ms=(
-                self.config.rag_timeout_ms
-            ),
+        self.rag_stream_client = RagStreamClient(
+            endpoint=self.config.rag_stream_endpoint,
+            timeout_ms=self.config.rag_timeout_ms,
         )
 
         self.player = AudioPlayer(
@@ -158,6 +161,62 @@ class VoiceAssistant:
             )
         )
 
+    def _synthesize_and_play_sentence(
+        self,
+        sentence: str,
+        segment_index: int,
+        barge_in_input_path: Path,
+    ) -> Dict[str, Any]:
+        output_path = self.output_dir / (
+            f"turn_{self.turn_id}_"
+            f"segment_{segment_index}.wav"
+        )
+
+        self._set_state(AssistantState.SYNTHESIZING)
+
+        tts_start = perf_counter()
+
+        tts_result = self.tts.synthesize(
+            text=sentence,
+            output_path=output_path,
+        )
+
+        tts_ms = (
+            perf_counter() - tts_start
+        ) * 1000
+
+        self._set_state(AssistantState.PLAYING)
+
+        barge_in_result = self.barge_in_detector.play_and_wait(
+            player=self.player,
+            audio_path=output_path,
+            speech_output_path=barge_in_input_path,
+        )
+
+        if barge_in_result.interrupted:
+            print(
+                json.dumps(
+                    {
+                        "event": "barge_in_speech_saved",
+                        "turn_id": self.turn_id,
+                        "segment_index": segment_index,
+                        "speech_path": barge_in_result.speech_path,
+                        "duration_seconds": barge_in_result.speech_duration_seconds,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+
+        return {
+            "sentence": sentence,
+            "output_path": tts_result.output_path,
+            "tts_ms": tts_ms,
+            "playback_ms": barge_in_result.playback_result.playback_ms,
+            "interrupted": barge_in_result.interrupted,
+            "detection_ms": barge_in_result.detection_ms,
+            "speech_path": barge_in_result.speech_path,
+        }
+
     def run_turn(self) -> Dict[str, Any]:
         self.turn_id += 1
         turn_start = perf_counter()
@@ -170,11 +229,6 @@ class VoiceAssistant:
         barge_in_input_path = (
             self.output_dir
             / f"turn_{self.turn_id + 1}_input.wav"
-        )
-
-        output_path = (
-            self.output_dir
-            / f"turn_{self.turn_id}_answer.wav"
         )
 
         self._set_state(AssistantState.RECORDING)
@@ -222,62 +276,105 @@ class VoiceAssistant:
 
         rag_start = perf_counter()
 
-        rag_result = self.rag_client.query(query)
+        sentence_buffer = StreamingSentenceBuffer(max_chars=self.config.stream_sentence_max_chars)
 
+        stream = self.rag_stream_client.query(query)
+
+        answer = ""
+        final_answer = ""
+        llm_backend = ""
+
+        segment_results = []
+        segment_index = 0
+
+        first_chunk_ms = None
+        first_sentence_ms = None
+        rag_server_elapsed_ms = 0.0
+
+        interrupted = False
+        barge_in_detection_ms = 0.0
+        barge_in_speech_path = None
+
+        try:
+            for event in stream:
+                rag_server_elapsed_ms = event.elapsed_ms
+                llm_backend = event.llm_backend
+
+                sentences = []
+
+                if event.type == "rag_chunk":
+                    if first_chunk_ms is None:
+                        first_chunk_ms = (
+                            perf_counter() - rag_start
+                        ) * 1000
+
+                    answer += event.delta
+
+                    sentences = sentence_buffer.push(event.delta)
+
+                elif event.type == "rag_finished":
+                    final_answer = event.answer
+
+                    sentences = sentence_buffer.flush()
+
+                for sentence in sentences:
+                    if first_sentence_ms is None:
+                        first_sentence_ms = (
+                            perf_counter() - rag_start
+                        ) * 1000
+
+                    segment_index += 1
+
+                    segment_result = (self._synthesize_and_play_sentence(
+                        sentence=sentence,
+                        segment_index=segment_index,
+                        barge_in_input_path=barge_in_input_path,
+                        )
+                    )
+
+                    segment_results.append(segment_result)
+
+                    if segment_result["interrupted"]:
+                        interrupted = True
+                        barge_in_detection_ms = segment_result["detection_ms"]
+                        barge_in_speech_path = segment_result["speech_path"]
+
+                        break
+
+                if interrupted:
+                    break
+        finally:
+            if hasattr(stream, "close"):
+                stream.close()
+
+        if not answer:
+            raise RuntimeError("RAG stream returned empty answer")
+
+        if not interrupted:
+            if not final_answer:
+                raise RuntimeError(
+                    "RAG stream ended without "
+                    "final answer"
+                )
+
+            if answer != final_answer:
+                raise RuntimeError(
+                    "RAG chunks do not match "
+                    "final answer"
+                )
+
+        if not segment_results:
+            raise RuntimeError(
+                "RAG stream produced no "
+                "speakable sentence"
+            )
+
+        tts_ms = sum(item["tts_ms"] for item in segment_results)
+        playback_ms = sum(item["playback_ms"] for item in segment_results)
+        output_paths = [item["output_path"] for item in segment_results]
         rag_ms = (
             perf_counter() - rag_start
         ) * 1000
-
-        if not rag_result.ok:
-            raise RuntimeError(
-                rag_result.error
-            )
-
-        self._set_state(AssistantState.SYNTHESIZING)
-
-        tts_start = perf_counter()
-
-        tts_result = self.tts.synthesize(
-            text=rag_result.answer,
-            output_path=output_path,
-        )
-
-        tts_ms = (
-            perf_counter() - tts_start
-        ) * 1000
-
-        self._set_state(AssistantState.PLAYING)
-
-        barge_in_result = (
-            self.barge_in_detector.play_and_wait(
-                self.player,
-                output_path,
-                speech_output_path=(
-                    barge_in_input_path
-                ),
-            )
-        )
-
-        if barge_in_result.interrupted:
-            print(
-                json.dumps(
-                    {
-                        "event": (
-                            "barge_in_speech_saved"
-                        ),
-                        "speech_path": (
-                            barge_in_result.speech_path
-                        ),
-                        "duration_seconds": (
-                            barge_in_result
-                            .speech_duration_seconds
-                        ),
-                    },
-                    ensure_ascii=False,
-                )
-            )
-
-        playback_result = barge_in_result.playback_result
 
         total_ms = (
             perf_counter() - turn_start
@@ -290,12 +387,17 @@ class VoiceAssistant:
             "turn_id": self.turn_id,
             "should_stop": False,
             "query": query,
-            "answer": rag_result.answer,
+            "answer": final_answer or answer,
+            "llm_backend": llm_backend,
             "input_path": str(input_path),
-            "output_path": str(output_path),
-            "interrupted": barge_in_result.interrupted,
-            "barge_in_detection":round(
-                barge_in_result.detection_ms,
+            "output_path": output_paths[-1],
+            "output_paths": output_paths,
+            "segment_count": len(segment_results),
+            "segments": segment_results,
+            "interrupted": interrupted,
+            "barge_in_speech_path": barge_in_speech_path,
+            "barge_in_detection_ms":round(
+                barge_in_detection_ms,
                 2,
             ),
             "timings_ms": {
@@ -308,16 +410,21 @@ class VoiceAssistant:
                     2,
                 ),
                 "asr": round(asr_ms, 2),
-                "rag": round(rag_ms, 2),
+                "first_chunk": (
+                    round(first_chunk_ms, 2)
+                    if first_chunk_ms is not None
+                    else None
+                ),
+                "first_sentence": (
+                    round(first_sentence_ms, 2)
+                    if first_sentence_ms is not None
+                    else None
+                ),
+                "rag_server": round(rag_server_elapsed_ms, 2),
+                "stream_with_audio": round(rag_ms, 2),
                 "tts": round(tts_ms, 2),
-                "playback": round(
-                    playback_result.playback_ms,
-                    2,
-                ),
-                "total": round(
-                    total_ms,
-                    2,
-                ),
+                "playback": round(playback_ms, 2),
+                "total": round(total_ms, 2),
             },
         }
 

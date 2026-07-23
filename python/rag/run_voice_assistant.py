@@ -52,13 +52,11 @@ def main() -> None:
         type=float,
         default=0.25,
     )
-
     parser.add_argument(
         "--vad-min-silence",
         type=float,
         default=0.8,
     )
-
     parser.add_argument(
         "--vad-max-wait",
         type=float,
@@ -70,13 +68,11 @@ def main() -> None:
         type=int,
         default=2,
     )
-
     parser.add_argument(
         "--tts-speed",
         type=float,
         default=1.0,
     )
-
     parser.add_argument(
         "--max-turns",
         type=int,
@@ -84,6 +80,20 @@ def main() -> None:
         help=(
             "0 means unlimited turns."
         ),
+    )
+    parser.add_argument(
+        "--rag-stream-endpoint",
+        default="tcp://localhost:5557",
+    )
+    parser.add_argument(
+        "--rag-timeout-ms",
+        type=int,
+        default=120000,
+    )
+    parser.add_argument(
+        "--stream-sentence-max-chars",
+        type=int,
+        default=60,
     )
 
     args = parser.parse_args()
@@ -95,6 +105,9 @@ def main() -> None:
             args.tts_model_dir
         ),
         rag_endpoint=args.rag_endpoint,
+        rag_stream_endpoint=args.rag_stream_endpoint,
+        stream_sentence_max_chars=args.stream_sentence_max_chars,
+        rag_timeout_ms=args.rag_timeout_ms,
         microphone_device=(
             args.microphone_device
         ),

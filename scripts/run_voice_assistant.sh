@@ -15,6 +15,9 @@ VAD_MODEL="${VAD_MODEL:-models/vad/silero_vad.onnx}"
 ASR_MODEL="${ASR_MODEL:-small}"
 TTS_MODEL_DIR="${TTS_MODEL_DIR:-models/tts/vits-melo-tts-zh_en}"
 RAG_ENDPOINT="${RAG_ENDPOINT:-tcp://localhost:5556}"
+RAG_STREAM_ENDPOINT="${RAG_STREAM_ENDPOINT:-tcp://localhost:5557}"
+RAG_TIMEOUT_MS="${RAG_TIMEOUT_MS:-120000}"
+STREAM_SENTENCE_MAX_CHARS="${STREAM_SENTENCE_MAX_CHARS:-60}"
 
 MICROPHONE_DEVICE="${MICROPHONE_DEVICE:-}"
 OUTPUT_DEVICE="${OUTPUT_DEVICE:-}"
@@ -82,6 +85,9 @@ print_configuration() {
     echo "  ASR model:          $ASR_MODEL"
     echo "  TTS model dir:      $TTS_MODEL_DIR"
     echo "  RAG endpoint:       $RAG_ENDPOINT"
+    echo "  RAG stream endpoint: $RAG_STREAM_ENDPOINT"
+    echo "  RAG timeout:         $RAG_TIMEOUT_MS ms"
+    echo "  Sentence max chars:  $STREAM_SENTENCE_MAX_CHARS"
     echo "  Microphone device:  ${MICROPHONE_DEVICE:-default}"
     echo "  Output device:      ${OUTPUT_DEVICE:-default}"
     echo "  VAD threshold:      $VAD_THRESHOLD"
@@ -119,6 +125,12 @@ run_assistant() {
         "$TTS_SPEED"
         --max-turns
         "$MAX_TURNS"
+        --rag-stream-endpoint
+        "$RAG_STREAM_ENDPOINT"
+        --rag-timeout-ms
+        "$RAG_TIMEOUT_MS"
+        --stream-sentence-max-chars
+        "$STREAM_SENTENCE_MAX_CHARS"
     )
 
     if [ -n "$MICROPHONE_DEVICE" ]; then
