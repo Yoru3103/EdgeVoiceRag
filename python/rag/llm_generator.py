@@ -235,6 +235,7 @@ class ZmqLLMGenerator:
         self,
         query: str,
         contexts: List[str],
+        request_id: str | None = None,
     ) -> Iterator[LlmZmqStreamEvent]:
         if not contexts:
             raise RuntimeError(
@@ -247,8 +248,15 @@ class ZmqLLMGenerator:
         )
 
         yield from self.client.generate_stream(
-            prompt
+            prompt,
+            request_id,
         )
+
+    def cancel(
+        self,
+        request_id: str,
+    ) -> bool:
+        return self.client.cancel(request_id)
 
 
 def build_rag_prompt(query: str, contexts: List[str]) -> str:

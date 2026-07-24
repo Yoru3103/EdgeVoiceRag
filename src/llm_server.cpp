@@ -11,6 +11,7 @@
 #include "llm_service.h"
 #include "llm_backend_factory.h"
 #include "llm_stream_service.h"
+#include "llm_control_server.h"
 
 namespace {
 
@@ -24,6 +25,7 @@ void handleSignal(int signal_number) {
 struct ServerOptions {
     std::string endpoint = "tcp://*:8899";
     std::string stream_endpoint = "tcp://*:8900";
+    std::string control_endpoint = "tcp://*:8901";
     std::string backend = "mock";
     std::string model_path;
     int max_new_tokens = 512;
@@ -47,6 +49,7 @@ std::string usage(const std::string& program_name) {
         "  --max-new-tokens <number>      Maximum generated tokens\n"
         "  --max-context-len <number>     Maximum context length\n"
         "  --stream-endpoint <endpoint>   Streaming ROUTER endpoint\n"
+        "  --control-endpoint <endpoint>  Cancellation REP endpoint\n"
         "  -h, --help                     Show help\n";
 }
 
@@ -117,6 +120,18 @@ ServerOptions parseOptions(int argc, char* argv[]) {
             continue;
         }
 
+        if (argument == "--control-endpoint") {
+            if (index + 1 >= argc) {
+                throw std::runtime_error(
+                    "missing value after "
+                    "--control-endpoint"
+                );
+            }
+
+            options.control_endpoint = argv[++index];
+            continue;
+        }
+
         throw std::runtime_error(
             "unknown argument: " + argument
         );
@@ -134,9 +149,11 @@ ServerOptions parseOptions(int argc, char* argv[]) {
         throw std::runtime_error("--model is required when backend is rkllm");
     }
 
-    if (options.endpoint == options.stream_endpoint) {
+    if (options.endpoint == options.stream_endpoint ||
+        options.endpoint == options.control_endpoint ||
+        options.stream_endpoint == options.control_endpoint) {
         throw std::runtime_error(
-            "normal and stream endpoints must be different"
+            "LLM endpoints must be different"
         );
     }
 
@@ -255,6 +272,12 @@ int main(int argc, char* argv[]) {
         // 每次只运行一个模型
         LlmService service(*backend);
         LlmStreamService stream_service(*backend);
+        LlmControlServer control_server(
+            stream_service,
+            options.control_endpoint
+        );
+
+        control_server.start();
 
         zmq::context_t context(1);
 
@@ -288,6 +311,10 @@ int main(int argc, char* argv[]) {
         std::cout
             << "[INFO] Backend: "
             << backend->name()
+            << '\n';
+        std::cout
+            << "[INFO] Control endpoint: "
+            << options.control_endpoint
             << '\n';
 
         // pollitem(socket, fd, events, revents)：
@@ -368,6 +395,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        control_server.stop();
         normal_socket.close();
         stream_socket.close();
         context.close();

@@ -231,6 +231,7 @@ class PythonRagServer:
             for event in self.generator.generate_stream(
                 query=request.query,
                 contexts=contexts,
+                request_id=request.request_id,
             ):
                 llm_backend = event.backend
 

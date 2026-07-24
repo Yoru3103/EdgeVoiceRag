@@ -30,9 +30,8 @@ class LlmZmqClient:
         self,
         endpoint: str,
         timeout_seconds: int = 60,
-        stream_endpoint: str = (
-            "tcp://127.0.0.1:8900"
-        ),
+        stream_endpoint: str = "tcp://127.0.0.1:8900",
+        control_endpoint: str = "tcp://127.0.0.1:8901",
     ) -> None:
         if not endpoint:
             raise ValueError("LLM endpoint must not be empty")
@@ -43,9 +42,13 @@ class LlmZmqClient:
         if timeout_seconds <= 0:
             raise ValueError("LLM timeout must be greater than zero")
 
+        if not control_endpoint:
+            raise ValueError("LLM control endpoint must not be empty")
+
         self.endpoint = endpoint
         self.timeout_ms = timeout_seconds * 1000
         self.stream_endpoint = stream_endpoint
+        self.control_endpoint = control_endpoint
 
     def generate(self, prompt: str) -> LlmZmqResult:
         if not prompt.strip():
@@ -100,13 +103,23 @@ class LlmZmqClient:
 
     def generate_stream(
         self,
-        prompt: str
+        prompt: str,
+        request_id: str | None = None,
     ) -> Iterator[LlmZmqStreamEvent]:
         if not prompt.strip():
             raise ValueError("LLM prompt must not be empty")
 
+        if request_id is None:
         # 生成全局唯一标识符，.hex转换成不带字符的32位十六进制字符串
-        request_id = uuid.uuid4().hex
+            request_id = uuid.uuid4().hex
+        else:
+            request_id = request_id.strip()
+
+            if not request_id:
+                raise ValueError(
+                    "LLM stream request_id "
+                    "must not be empty"
+                )
 
         request = {
             "version": PROTOCOL_VERSION,
@@ -185,6 +198,65 @@ class LlmZmqClient:
             raise RuntimeError(
                 "LLM stream ZeroMQ request failed: "
                 f"{exc}"
+            ) from exc
+        finally:
+            socket.close(linger=0)
+            context.term()
+
+    def cancel(
+        self,
+        request_id: str,
+    ) -> bool:
+        normalize_request_id = request_id.strip()
+
+        if not normalize_request_id:
+            raise ValueError("cancel request_id must not be empty")
+
+        context = zmq.Context()
+        socket = context.socket(zmq.REQ)
+
+        socket.setsockopt(zmq.LINGER, 0)
+        socket.setsockopt(zmq.SNDTIMEO, self.timeout_ms)
+        socket.setsockopt(zmq.RCVTIMEO, self.timeout_ms)
+
+        try:
+            socket.connect(self.control_endpoint)
+
+            socket.send_string(
+                json.dumps(
+                    {
+                        "version": PROTOCOL_VERSION,
+                        "type": "cancel",
+                        "request_id": normalize_request_id,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+
+            response = json.loads(socket.recv_string())
+
+            if response.get("version") != PROTOCOL_VERSION:
+                raise RuntimeError("unsupported cancel response type")
+
+            if response.get("type") != "cancel_result":
+                raise RuntimeError("unsupported cancel response type")
+
+            if response.get("ok") is not True:
+                raise RuntimeError(response.get("error", "LLM cancellation failed"))
+
+            if response.get("request_id") != normalize_request_id:
+                raise RuntimeError("cancel response request_id mismatch")
+
+            cancelled = response.get("cancelled")
+
+            if not isinstance(cancelled, bool):
+                raise RuntimeError("cancelled must be boolean")
+
+            return cancelled
+        except zmq.Again as exc:
+            raise RuntimeError(
+                "LLM cancellation timed out: "
+                f"{self.control_endpoint}"
             ) from exc
         finally:
             socket.close(linger=0)

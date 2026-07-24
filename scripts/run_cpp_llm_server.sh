@@ -12,6 +12,7 @@ cd "$PROJECT_ROOT"
 ENDPOINT="${LLM_ENDPOINT:-tcp://*:8899}"
 STREAM_ENDPOINT="${LLM_STREAM_ENDPOINT:-tcp://*:8900}"
 BACKEND="${LLM_BACKEND:-mock}"
+CONTROL_ENDPOINT="${LLM_CONTROL_ENDPOINT:-tcp://*:8901}"
 
 if [ ! -x "build/llm_server" ]; then
     echo "[ERROR] build/llm_server not found."
@@ -24,4 +25,5 @@ fi
 exec ./build/llm_server \
     --endpoint "$ENDPOINT" \
     --stream-endpoint "$STREAM_ENDPOINT" \
+    --control-endpoint "$CONTROL_ENDPOINT" \
     --backend "$BACKEND"
