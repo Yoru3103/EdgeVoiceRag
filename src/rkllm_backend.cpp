@@ -3,11 +3,14 @@
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <atomic>
 
 #include <rkllm.h>
 
 struct RkllmBackend::Impl {
     LLMHandle handle = nullptr;     //推理实例的不透明句柄
+    std::atomic_bool running{false};
+    std::atomic_bool cancel_requested{false};
 };
 
 namespace {
@@ -180,12 +183,21 @@ LlmGenerationResult RkllmBackend::run(
     GenerationContext context;
     context.callback = callback;
 
+    impl_->cancel_requested.store(false);
+    impl_->running.store(true);
+
     const int result = rkllm_run(
         impl_->handle,
         &input,
         &infer_param,
         &context
     );
+
+    impl_->running.store(false);
+
+    if (impl_->cancel_requested.load()) {
+        return LlmGenerationResult::failure("generation cancelled");
+    }
 
     if (!context.error.empty()) {
         return LlmGenerationResult::failure(context.error);
@@ -210,4 +222,21 @@ LlmGenerationResult RkllmBackend::run(
     }
 
     return LlmGenerationResult::success(context.answer);
+}
+
+bool RkllmBackend::cancel() {
+    if (impl_ == nullptr || impl_->handle == nullptr || !impl_->running.load()) {
+        return false;
+    }
+
+    impl_->cancel_requested.store(true);
+
+    const int result = rkllm_abort(impl_->handle);
+
+    if (result != 0) {
+        impl_->cancel_requested.store(false);
+        return false;
+    }
+
+    return true;
 }

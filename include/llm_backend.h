@@ -54,4 +54,8 @@ public:
 
         return result;
     }
+
+    virtual bool cancel() {
+        return false;
+    }
 };

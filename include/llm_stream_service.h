@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <mutex>
 #include <string>
 
 #include "llm_backend.h"
@@ -16,8 +17,18 @@ public:
         const LlmEventEmitter& emitter
     );
 
+    bool cancel(const std::string& request_id);
+
+    std::string activeRequestId() const;
+
 private:
     LlmBackend& backend_;
+
+    mutable std::mutex active_mutex_;
+    std::string active_request_id_;
+
+    void setActiveRequest(const std::string& request_id);
+    void clearActiveRequest(const std::string& request_id);
 
     static std::string tryExtractRequestId(const std::string& message);
 };

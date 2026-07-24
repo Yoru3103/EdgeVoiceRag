@@ -1,5 +1,8 @@
+#include <atomic>
+#include <chrono>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "llm_protocol.h"
@@ -30,6 +33,60 @@ public:
 
         return LlmGenerationResult::failure("generation failed");
     }
+};
+
+class CancellableBackend : public LlmBackend {
+public:
+    std::string name() const override {
+        return "cancellable";
+    }
+
+    LlmGenerationResult generate(const std::string& prompt) override {
+        (void)prompt;
+
+        return LlmGenerationResult::failure("non-stream generation unused");
+    }
+
+    LlmGenerationResult generateStream(
+        const std::string& prompt,
+        const LlmChunkCallback& callback
+    ) override {
+        (void)prompt;
+
+        running_.store(true);
+        cancelled_.store(false);
+
+        callback("测试");
+
+        while (!cancelled_.load()) {
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(1)
+            );
+        }
+
+        running_.store(false);
+
+        return LlmGenerationResult::failure(
+            "generation cancelled"
+        );
+    }
+
+    bool cancel() override {
+        if (!running_.load()) {
+            return false;
+        }
+
+        cancelled_.store(true);
+        return true;
+    }
+
+    bool isRunning() const {
+        return running_.load();
+    }
+
+private:
+    std::atomic_bool running_{false};
+    std::atomic_bool cancelled_{false};
 };
 
 int failed_count = 0;
@@ -182,12 +239,84 @@ void testFailureAfterChunkKeepsSequence() {
     );
 }
 
+void testCancelActiveRequest() {
+    CancellableBackend backend;
+    LlmStreamService service(backend);
+
+    const LlmRequest request{
+        "cancel-1",
+        "测试取消",
+        true
+    };
+
+    std::vector<LlmStreamEvent> events;
+
+    std::thread generation_thread(
+        [&]() {
+            service.handleMessage(
+                LlmProtocol::encodeRequest(request),
+                [&events](const std::string& message) {
+                    events.push_back(LlmProtocol::decodeStreamEvent(message));
+                }
+            );
+        }
+    );
+
+    bool backend_started = false;
+
+    for (int index = 0; index < 1000; index++) {
+        if (backend.isRunning()) {
+            backend_started = true;
+            break;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    expectTrue(
+        backend_started,
+        "cancellable backend started"
+    );
+
+    const bool cancel_accepted = service.cancel(request.request_id);
+
+    expectTrue(
+        cancel_accepted,
+        "active request cancellation accepted"
+    );
+
+    generation_thread.join();
+
+    expectTrue(
+        service.activeRequestId().empty(),
+        "active request cleared after cancel"
+    );
+
+    expectTrue(
+        !events.empty(),
+        "cancel produces terminal event"
+    );
+
+    if (!events.empty()) {
+        expectTrue(
+            events.back().type == LlmStreamEventType::Error,
+            "cancel ends with error event"
+        );
+
+        expectTrue(
+            events.back().error == "generation cancelled",
+            "cancel error reason is preserved"
+        );
+    }
+}
+
 }   // namespace
 
 int main() {
     testNonStreamRequestRejected();
     testSuccessfulStream();
     testFailureAfterChunkKeepsSequence();
+    testCancelActiveRequest();
 
     if (failed_count == 0) {
         std::cout << "\nAll LLM stream service tests passed.\n";

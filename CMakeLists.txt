@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(nlohmann_json REQUIRED)
+find_package(Threads REQUIRED)
 
 option(EDGE_ENABLE_RKLLM "Enable Rockchip RKLLM backend" OFF)
 set(RKLLM_SDK_ROOT "" CACHE PATH "Path to RKLLM runtime directory")
@@ -219,6 +220,7 @@ target_link_libraries(
     llm_stream_service_tests
     PRIVATE
     edge_voice_rag_core
+    Threads::Threads
 )
 
 enable_testing()

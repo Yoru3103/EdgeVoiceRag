@@ -60,9 +60,7 @@ LlmGenerationResult MockLlmBackend::generateStream(
     const LlmChunkCallback& callback
 ) {
     if (!callback) {
-        return LlmGenerationResult::failure(
-            "stream callback must not be empty"
-        );
+        return LlmGenerationResult::failure("stream callback must not be empty");
     }
 
     const LlmGenerationResult result = generate(prompt);
@@ -71,10 +69,27 @@ LlmGenerationResult MockLlmBackend::generateStream(
         return result;
     }
 
+    cancel_requested_.store(false);
+    running_.store(true);
+
+    struct RunningGuard {
+        std::atomic_bool& running;
+
+        ~RunningGuard() {
+            running.store(false);
+        }
+    };
+
+    RunningGuard guard{running_};
+
     constexpr std::size_t chunk_size = 12;
     std::size_t offset = 0;
 
     while (offset < result.answer.size()) {
+        if (cancel_requested_.load()) {
+            return LlmGenerationResult::failure("generation cancelled");
+        }
+
         const std::string remaining = result.answer.substr(offset);
 
         const std::size_t current_size = findUtf8Boundary(remaining, chunk_size);
@@ -92,4 +107,13 @@ LlmGenerationResult MockLlmBackend::generateStream(
 
 
     return result;
+}
+
+bool MockLlmBackend::cancel() {
+    if (!running_.load()) {
+        return false;
+    }
+
+    cancel_requested_.store(true);
+    return true;
 }

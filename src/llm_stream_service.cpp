@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 
 #include "llm_protocol.h"
+#include "scope_exit.h"
 
 namespace {
 
@@ -49,6 +50,14 @@ void LlmStreamService::handleMessage(
                 "stream request must set stream=true"
             );
         }
+
+        setActiveRequest(request_id);
+
+        auto active_guard = makeScopeExit(
+            [this, request_id]() {
+                clearActiveRequest(request_id);
+            }
+        );
 
         const LlmGenerationResult generation = backend_.generateStream(
             request.prompt,
@@ -114,6 +123,47 @@ void LlmStreamService::handleMessage(
         event.finished = true;
 
         emitter(LlmProtocol::encodeStreamEvent(event));
+    }
+}
+
+std::string LlmStreamService::activeRequestId() const {
+    std::lock_guard<std::mutex> lock(active_mutex_);
+
+    return active_request_id_;
+}
+
+bool LlmStreamService::cancel(const std::string& request_id) {
+    if (request_id.empty()) {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(active_mutex_);
+
+    if (active_request_id_ != request_id) {
+        return false;
+    }
+
+    return backend_.cancel();
+}
+
+void LlmStreamService::setActiveRequest(const std::string& request_id) {
+    std::lock_guard<std::mutex> lock(active_mutex_);    // RAII
+
+    if (!active_request_id_.empty()) {
+        throw std::runtime_error(
+            "another LLM stream request "
+            "is already running"
+        );
+    }
+
+    active_request_id_ = request_id;
+}
+
+void LlmStreamService::clearActiveRequest(const std::string& request_id) {
+    std::lock_guard<std::mutex> lock(active_mutex_);
+
+    if (active_request_id_ == request_id) {
+        active_request_id_.clear();
     }
 }
 

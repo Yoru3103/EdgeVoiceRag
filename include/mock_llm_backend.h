@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <string>
 
@@ -18,6 +19,10 @@ public:
         const LlmChunkCallback& callback
     ) override;
 
+    bool cancel() override;
+
 private:
     std::size_t preview_length_;
+    std::atomic_bool cancel_requested_{false};
+    std::atomic_bool running_{false};
 };
