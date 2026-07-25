@@ -8,7 +8,9 @@ LLM_BACKEND="${LLM_BACKEND:-zmq}"
 LLM_ENDPOINT="${LLM_ENDPOINT:-tcp://127.0.0.1:8899}"
 LLM_TIMEOUT="${LLM_TIMEOUT:-120}"
 RAG_STREAM_ENDPOINT="${RAG_STREAM_ENDPOINT:-tcp://*:5557}"
+RAG_CONTROL_ENDPOINT="${RAG_CONTROL_ENDPOINT:-tcp://*:5558}"
 LLM_STREAM_ENDPOINT="${LLM_STREAM_ENDPOINT:-tcp://127.0.0.1:8900}"
+LLM_CONTROL_ENDPOINT="${LLM_CONTROL_ENDPOINT:-tcp://127.0.0.1:8901}"
 
 if [ -z "$CONDA_DEFAULT_ENV" ]; then
     echo "[ERROR] No conda environment is currently activated."
@@ -35,9 +37,11 @@ fi
 PYTHONPATH=python python -m rag.python_rag_server \
     --endpoint tcp://*:5556 \
     --stream-endpoint "$RAG_STREAM_ENDPOINT" \
+    --control-endpoint "$RAG_CONTROL_ENDPOINT" \
     --index vector_db/chunks.json \
     --top-k 3 \
     --llm-backend "$LLM_BACKEND" \
     --llm-endpoint "$LLM_ENDPOINT" \
     --llm-stream-endpoint "$LLM_STREAM_ENDPOINT" \
+    --llm-control-endpoint "$LLM_CONTROL_ENDPOINT" \
     --llm-timeout "$LLM_TIMEOUT"

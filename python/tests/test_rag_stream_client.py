@@ -104,3 +104,90 @@ def test_reject_error_event() -> None:
 
     assert event.type == "rag_error"
     assert event.error == "generation failed"
+
+
+def test_decode_successful_cancel_response() -> None:
+    cancelled = RagStreamClient.decode_cancel_response(
+        raw_response=json.dumps(
+            {
+                "version": 1,
+                "type": "cancel_result",
+                "ok": True,
+                "request_id": "rag-1",
+                "cancelled": True,
+                "active_request_id": "rag-1",
+                "error": "",
+            }
+        ),
+        expected_request_id="rag-1",
+    )
+
+    assert cancelled is True
+
+
+def test_decode_inactive_cancel_response() -> None:
+    cancelled = RagStreamClient.decode_cancel_response(
+        raw_response=json.dumps(
+            {
+                "version": 1,
+                "type": "cancel_result",
+                "ok": True,
+                "request_id": "rag-1",
+                "cancelled": False,
+                "active_request_id": "",
+                "error": "",
+            }
+        ),
+        expected_request_id="rag-1",
+    )
+
+    assert cancelled is False
+
+
+def test_reject_cancel_response_id_mismatch() -> None:
+    with pytest.raises(RuntimeError, match="request_id mismatch"):
+        RagStreamClient.decode_cancel_response(
+            raw_response=json.dumps(
+                {
+                    "version": 1,
+                    "type": "cancel_result",
+                    "ok": True,
+                    "request_id": "another-request",
+                    "cancelled": True,
+                }
+            ),
+            expected_request_id="rag-1",
+        )
+
+
+def test_reject_cancel_server_error() -> None:
+    with pytest.raises(RuntimeError, match="cancel failed"):
+        RagStreamClient.decode_cancel_response(
+            raw_response=json.dumps(
+                {
+                    "version": 1,
+                    "type": "cancel_result",
+                    "ok": False,
+                    "request_id": "rag-1",
+                    "cancelled": False,
+                    "error": "cancel failed",
+                }
+            ),
+            expected_request_id="rag-1",
+        )
+
+
+def test_reject_empty_control_endpoint() -> None:
+    with pytest.raises(ValueError, match="control endpoint"):
+        RagStreamClient(
+            endpoint="tcp://localhost:5557",
+            control_endpoint=" ",
+        )
+
+
+def test_reject_invalid_control_timeout() -> None:
+    with pytest.raises(ValueError, match="control timeout"):
+        RagStreamClient(
+            endpoint="tcp://localhost:5557",
+            control_timeout_ms=0,
+        )

@@ -2,6 +2,7 @@ import argparse
 import json
 import signal
 import sys
+import threading
 from pathlib import Path
 from typing import Any, List, Dict
 from time import perf_counter
@@ -15,6 +16,7 @@ from rag.rag_stream_protocol import (
     decode_rag_stream_request,
     encode_rag_stream_event,
 )
+from rag.rag_control_server import RagControlServer
 
 def result_to_dict(rank: int, result: SearchResult) -> Dict[str, Any]:
     return {
@@ -92,7 +94,9 @@ class PythonRagServer:
         llm_timeout: int,
         llm_health_check: bool,
         stream_endpoint: str,
+        control_endpoint: str,
         llm_stream_endpoint: str,
+        llm_control_endpoint: str,
         include_prompt: bool,
     ) -> None:
         self.endpoint = endpoint
@@ -114,6 +118,7 @@ class PythonRagServer:
             base_url=ollama_url,
             endpoint=llm_endpoint,
             stream_endpoint=llm_stream_endpoint,
+            control_endpoint=llm_control_endpoint,
             timeout_seconds=llm_timeout,
             enable_health_check=llm_health_check,
         )
@@ -122,6 +127,13 @@ class PythonRagServer:
 
         self.stream_socket = self.context.socket(zmq.ROUTER)
         self.stream_socket.setsockopt(zmq.LINGER, 0)
+        self._active_request_id = ""
+        self._active_request_lock = threading.Lock()
+        self.control_server = RagControlServer(
+            endpoint=control_endpoint,
+            cancel_callback=self._cancel_active_request,
+            active_request_callback=self._get_active_request_id,
+        )
 
     def _send_stream_event(
                 self,
@@ -152,6 +164,36 @@ class PythonRagServer:
 
         return identity, message
 
+    def _set_active_request(self, request_id: str) -> None:
+        with self._active_request_lock:
+            if self._active_request_id:
+                raise RuntimeError(
+                    "another RAG stream request is already running"
+                )
+
+            self._active_request_id = request_id
+
+    def _clear_active_request(self, request_id: str) -> None:
+        with self._active_request_lock:
+            if self._active_request_id == request_id:
+                self._active_request_id = ""
+
+    def _get_active_request_id(self) -> str:
+        with self._active_request_lock:
+            return self._active_request_id
+
+    def _cancel_active_request(self, request_id: str) -> bool:
+        with self._active_request_lock:
+            if self._active_request_id != request_id:
+                return False
+
+        cancel = getattr(self.generator, "cancel", None)
+
+        if cancel is None:
+            return False
+
+        return bool(cancel(request_id))
+
     def _handle_stream_request(self) -> None:
         identity, message = self._receive_stream_request()
 
@@ -163,6 +205,7 @@ class PythonRagServer:
 
         try:
             request = decode_rag_stream_request(message)
+            self._set_active_request(request.request_id)
 
             results = self.searcher.search(
                 request.query,
@@ -321,10 +364,14 @@ class PythonRagServer:
                     finished=True,
                 ),
             )
+        finally:
+            if request is not None:
+                self._clear_active_request(request.request_id)
 
     def start(self) -> None:
         self.socket.bind(self.endpoint)
         self.stream_socket.bind(self.stream_endpoint)
+        self.control_server.start()
 
         poller = zmq.Poller()
         poller.register(self.socket, zmq.POLLIN)
@@ -338,6 +385,7 @@ class PythonRagServer:
         print(f"[INFO] LLM timeout: {self.generator.timeout_seconds if hasattr(self.generator, 'timeout_seconds') else 'N/A'} seconds")
         print(f"[INFO] Include prompt: {self.include_prompt}")
         print(f"[INFO] Stream endpoint: {self.stream_endpoint}")
+        print(f"[INFO] Control endpoint: {self.control_server.endpoint}")
 
         while self.running:
             try:
@@ -415,6 +463,7 @@ class PythonRagServer:
     def stop(self) -> None:
         self.running = False
 
+        self.control_server.stop()
         self.socket.close(linger=0) #linger控制socket关闭时，还没发出去的消息要不要等待发送完成。-1表示一直等到发送完毕，0表示立即关闭，大于零表示最大等待时间
         self.stream_socket.close(linger=0)
         self.context.term() # 终止context
@@ -486,6 +535,16 @@ def main() -> None:
         default="tcp://127.0.0.1:8900",
         help="C++ LLM streaming endpoint.",
     )
+    parser.add_argument(
+        "--control-endpoint",
+        default="tcp://*:5558",
+        help="RAG cancellation REP endpoint.",
+    )
+    parser.add_argument(
+        "--llm-control-endpoint",
+        default="tcp://127.0.0.1:8901",
+        help="C++ LLM cancellation endpoint.",
+    )
 
     args = parser.parse_args()
 
@@ -516,7 +575,9 @@ def main() -> None:
         llm_timeout=args.llm_timeout,
         llm_health_check=not args.disable_llm_health_check,
         llm_stream_endpoint=args.llm_stream_endpoint,
+        llm_control_endpoint=args.llm_control_endpoint,
         stream_endpoint=args.stream_endpoint,
+        control_endpoint=args.control_endpoint,
         include_prompt=args.include_prompt,
     )
 

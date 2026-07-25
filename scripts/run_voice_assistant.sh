@@ -16,7 +16,9 @@ ASR_MODEL="${ASR_MODEL:-small}"
 TTS_MODEL_DIR="${TTS_MODEL_DIR:-models/tts/vits-melo-tts-zh_en}"
 RAG_ENDPOINT="${RAG_ENDPOINT:-tcp://localhost:5556}"
 RAG_STREAM_ENDPOINT="${RAG_STREAM_ENDPOINT:-tcp://localhost:5557}"
+RAG_CONTROL_ENDPOINT="${RAG_CONTROL_ENDPOINT:-tcp://localhost:5558}"
 RAG_TIMEOUT_MS="${RAG_TIMEOUT_MS:-120000}"
+RAG_CONTROL_TIMEOUT_MS="${RAG_CONTROL_TIMEOUT_MS:-2000}"
 STREAM_SENTENCE_MAX_CHARS="${STREAM_SENTENCE_MAX_CHARS:-60}"
 
 MICROPHONE_DEVICE="${MICROPHONE_DEVICE:-}"
@@ -86,7 +88,9 @@ print_configuration() {
     echo "  TTS model dir:      $TTS_MODEL_DIR"
     echo "  RAG endpoint:       $RAG_ENDPOINT"
     echo "  RAG stream endpoint: $RAG_STREAM_ENDPOINT"
+    echo "  RAG control endpoint: $RAG_CONTROL_ENDPOINT"
     echo "  RAG timeout:         $RAG_TIMEOUT_MS ms"
+    echo "  RAG control timeout: $RAG_CONTROL_TIMEOUT_MS ms"
     echo "  Sentence max chars:  $STREAM_SENTENCE_MAX_CHARS"
     echo "  Microphone device:  ${MICROPHONE_DEVICE:-default}"
     echo "  Output device:      ${OUTPUT_DEVICE:-default}"
@@ -127,8 +131,12 @@ run_assistant() {
         "$MAX_TURNS"
         --rag-stream-endpoint
         "$RAG_STREAM_ENDPOINT"
+        --rag-control-endpoint
+        "$RAG_CONTROL_ENDPOINT"
         --rag-timeout-ms
         "$RAG_TIMEOUT_MS"
+        --rag-control-timeout-ms
+        "$RAG_CONTROL_TIMEOUT_MS"
         --stream-sentence-max-chars
         "$STREAM_SENTENCE_MAX_CHARS"
     )

@@ -25,7 +25,9 @@ class RagStreamClient:
     def __init__(
         self,
         endpoint: str,
+        control_endpoint: str = "tcp://localhost:5558",
         timeout_ms: int = 120000,
+        control_timeout_ms: int = 2000,
     ) -> None:
         if not endpoint.strip():
             raise ValueError("RAG stream endpoint must not be empty")
@@ -33,19 +35,38 @@ class RagStreamClient:
         if timeout_ms <= 0:
             raise ValueError("RAG stream timeout must be greater than zero")
 
+        if not control_endpoint.strip():
+            raise ValueError("RAG control endpoint must not be empty")
+
+        if control_timeout_ms <= 0:
+            raise ValueError(
+                "RAG control timeout must be greater than zero"
+            )
+
         self.endpoint = endpoint
+        self.control_endpoint = control_endpoint
         self.timeout_ms = timeout_ms
+        self.control_timeout_ms = control_timeout_ms
 
     def query(
         self,
         query: str,
+        request_id: str | None = None,
     ) -> Iterator[RagStreamEvent]:
         normalized_query = query.strip()
 
         if not normalized_query:
             raise ValueError("RAG stream query must not be empty")
 
-        request_id = uuid.uuid4().hex
+        if request_id is None:
+            request_id = uuid.uuid4().hex
+        else:
+            request_id = request_id.strip()
+
+            if not request_id:
+                raise ValueError(
+                    "RAG stream request_id must not be empty"
+                )
 
         request = {
             "version": PROTOCOL_VERSION,
@@ -136,6 +157,90 @@ class RagStreamClient:
         finally:
             socket.close(linger=0)
             context.term()
+
+    def cancel(self, request_id: str) -> bool:
+        normalized_request_id = request_id.strip()
+
+        if not normalized_request_id:
+            raise ValueError("RAG cancel request_id must not be empty")
+
+        context = zmq.Context()
+        socket = context.socket(zmq.REQ)
+        socket.setsockopt(zmq.LINGER, 0)
+        socket.setsockopt(zmq.SNDTIMEO, self.control_timeout_ms)
+        socket.setsockopt(zmq.RCVTIMEO, self.control_timeout_ms)
+
+        try:
+            socket.connect(self.control_endpoint)
+            socket.send_string(
+                json.dumps(
+                    {
+                        "version": PROTOCOL_VERSION,
+                        "type": "cancel",
+                        "request_id": normalized_request_id,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+
+            return self.decode_cancel_response(
+                raw_response=socket.recv_string(),
+                expected_request_id=normalized_request_id,
+            )
+        except zmq.Again as exc:
+            raise RuntimeError(
+                "RAG cancellation timed out after "
+                f"{self.control_timeout_ms} ms: "
+                f"{self.control_endpoint}"
+            ) from exc
+        except zmq.ZMQError as exc:
+            raise RuntimeError(
+                "RAG cancellation ZeroMQ request failed: "
+                f"{exc}"
+            ) from exc
+        finally:
+            socket.close(linger=0)
+            context.term()
+
+    @staticmethod
+    def decode_cancel_response(
+        raw_response: str,
+        expected_request_id: str,
+    ) -> bool:
+        try:
+            response = json.loads(raw_response)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"RAG returned invalid cancel JSON: {exc}"
+            ) from exc
+
+        if not isinstance(response, dict):
+            raise RuntimeError(
+                "RAG cancel response must be a JSON object"
+            )
+
+        if response.get("version") != PROTOCOL_VERSION:
+            raise RuntimeError(
+                "unsupported RAG control protocol version"
+            )
+
+        if response.get("type") != "cancel_result":
+            raise RuntimeError("unsupported RAG cancel response type")
+
+        if response.get("ok") is not True:
+            raise RuntimeError(
+                response.get("error", "RAG cancellation failed")
+            )
+
+        if response.get("request_id") != expected_request_id:
+            raise RuntimeError("RAG cancel response request_id mismatch")
+
+        cancelled = response.get("cancelled")
+
+        if not isinstance(cancelled, bool):
+            raise RuntimeError("RAG cancelled must be boolean")
+
+        return cancelled
 
     @staticmethod
     def decode_event(

@@ -86,9 +86,18 @@ def main() -> None:
         default="tcp://localhost:5557",
     )
     parser.add_argument(
+        "--rag-control-endpoint",
+        default="tcp://localhost:5558",
+    )
+    parser.add_argument(
         "--rag-timeout-ms",
         type=int,
         default=120000,
+    )
+    parser.add_argument(
+        "--rag-control-timeout-ms",
+        type=int,
+        default=2000,
     )
     parser.add_argument(
         "--stream-sentence-max-chars",
@@ -106,8 +115,10 @@ def main() -> None:
         ),
         rag_endpoint=args.rag_endpoint,
         rag_stream_endpoint=args.rag_stream_endpoint,
+        rag_control_endpoint=args.rag_control_endpoint,
         stream_sentence_max_chars=args.stream_sentence_max_chars,
         rag_timeout_ms=args.rag_timeout_ms,
+        rag_control_timeout_ms=args.rag_control_timeout_ms,
         microphone_device=(
             args.microphone_device
         ),

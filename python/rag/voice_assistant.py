@@ -1,4 +1,5 @@
 import json
+import uuid
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -43,6 +44,7 @@ class VoiceAssistantConfig:
     rag_endpoint: str
 
     rag_stream_endpoint: str = "tcp://localhost:5557"
+    rag_control_endpoint: str = "tcp://localhost:5558"
 
     stream_sentence_max_chars: int = 60
 
@@ -60,6 +62,7 @@ class VoiceAssistantConfig:
     tts_speed: float = 1.0
 
     rag_timeout_ms: int = 10000
+    rag_control_timeout_ms: int = 2000
     output_dir: str = "voice_output/assistant"
 
 class VoiceAssistant:
@@ -122,7 +125,9 @@ class VoiceAssistant:
 
         self.rag_stream_client = RagStreamClient(
             endpoint=self.config.rag_stream_endpoint,
+            control_endpoint=self.config.rag_control_endpoint,
             timeout_ms=self.config.rag_timeout_ms,
+            control_timeout_ms=self.config.rag_control_timeout_ms,
         )
 
         self.player = AudioPlayer(
@@ -278,7 +283,11 @@ class VoiceAssistant:
 
         sentence_buffer = StreamingSentenceBuffer(max_chars=self.config.stream_sentence_max_chars)
 
-        stream = self.rag_stream_client.query(query)
+        request_id = uuid.uuid4().hex
+        stream = self.rag_stream_client.query(
+            query,
+            request_id=request_id,
+        )
 
         answer = ""
         final_answer = ""
@@ -294,6 +303,8 @@ class VoiceAssistant:
         interrupted = False
         barge_in_detection_ms = 0.0
         barge_in_speech_path = None
+        cancellation_accepted = False
+        cancellation_error = ""
 
         try:
             for event in stream:
@@ -338,6 +349,26 @@ class VoiceAssistant:
                         interrupted = True
                         barge_in_detection_ms = segment_result["detection_ms"]
                         barge_in_speech_path = segment_result["speech_path"]
+
+                        try:
+                            cancellation_accepted = (
+                                self.rag_stream_client.cancel(
+                                    request_id
+                                )
+                            )
+                        except Exception as exc:
+                            cancellation_error = str(exc)
+                            print(
+                                json.dumps(
+                                    {
+                                        "event": "rag_cancel_failed",
+                                        "turn_id": self.turn_id,
+                                        "request_id": request_id,
+                                        "error": cancellation_error,
+                                    },
+                                    ensure_ascii=False,
+                                )
+                            )
 
                         break
 
@@ -395,6 +426,9 @@ class VoiceAssistant:
             "segment_count": len(segment_results),
             "segments": segment_results,
             "interrupted": interrupted,
+            "request_id": request_id,
+            "cancellation_accepted": cancellation_accepted,
+            "cancellation_error": cancellation_error,
             "barge_in_speech_path": barge_in_speech_path,
             "barge_in_detection_ms":round(
                 barge_in_detection_ms,

@@ -199,11 +199,13 @@ class ZmqLLMGenerator:
         self,
         endpoint: str,
         stream_endpoint: str,
+        control_endpoint: str,
         timeout_seconds: int = 60,
     ) -> None:
         self.client = LlmZmqClient(
             endpoint=endpoint,
             stream_endpoint=stream_endpoint,
+            control_endpoint=control_endpoint,
             timeout_seconds=timeout_seconds,
         )
         self.timeout_seconds = timeout_seconds
@@ -285,6 +287,7 @@ def create_llm_generator(
     base_url: str = "http://localhost:11434",
     endpoint: str = "tcp://127.0.0.1:8899",
     stream_endpoint: str = "tcp://127.0.0.1:8900",
+    control_endpoint: str = "tcp://127.0.0.1:8901",
     timeout_seconds: int = 60,
     enable_health_check: bool = True,
     ):
@@ -303,6 +306,7 @@ def create_llm_generator(
         return ZmqLLMGenerator(
             endpoint=endpoint,
             stream_endpoint=stream_endpoint,
+            control_endpoint=control_endpoint,
             timeout_seconds=timeout_seconds,
         )
 
