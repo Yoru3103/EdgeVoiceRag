@@ -16,6 +16,9 @@ enum class RagStreamEventType {
 struct RagStreamRequest {
     std::string request_id;
     std::string query;
+
+    RagStreamRequest() : request_id(""), query("") {}
+    RagStreamRequest(const std::string& request_id, const std::string& query) : request_id(request_id), query(query) {}
 };
 
 struct RagStreamEvent {

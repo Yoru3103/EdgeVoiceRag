@@ -51,45 +51,17 @@ void validateSequence(const RagStreamEvent& event, std::size_t expected_sequence
 
 }   // namespace
 
-RagStreamQueryResult RagStreamQueryResult::success(
-    const std::string& request_id,
-    const std::string& answer,
-    const std::string& backend,
-    const std::string& llm_backend,
-    double elapsed_ms
-) {
-    RagStreamQueryResult result;
-
-    result.ok = true;
-    result.request_id = request_id;
-    result.answer = answer;
-    result.backend = backend;
-    result.llm_backend = llm_backend;
-    result.elapsed_ms = elapsed_ms;
-
-    return result;
-}
-
-RagStreamQueryResult RagStreamQueryResult::failure(
-    const std::string& request_id,
-    const std::string& error
-) {
-    RagStreamQueryResult result;
-
-    result.ok = false;
-    result.request_id = request_id;
-    result.error = error;
-
-    return result;
-}
-
 RagStreamClient::RagStreamClient(
     std::string endpoint,
     int timeout_ms
 )
-    : endpoint_(endpoint)
+    : endpoint_(std::move(endpoint))
     , timeout_ms_(timeout_ms) {
     validateClientOptions(endpoint_, timeout_ms_);
+}
+
+std::string RagStreamClient::name() const {
+    return "zmq_rag_stream";
 }
 
 // ZeroMQ一般不应该跨线程共享，未来语音生成、主线程检测用户打断以及曲线线程发送cancel的socket应该相互独立。

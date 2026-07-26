@@ -32,6 +32,7 @@ add_library(edge_voice_rag_core
     src/llm_stream_service.cpp
     src/llm_control_server.cpp
     src/rag_stream_protocol.cpp
+    src/streaming_answer_backend.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -265,6 +266,16 @@ target_link_libraries(
     Threads::Threads
 )
 
+add_executable(
+    streaming_answer_backend_tests
+    tests/streaming_answer_backend_tests.cpp
+)
+target_link_libraries(
+    streaming_answer_backend_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
@@ -309,6 +320,10 @@ add_test(
 add_test(
     NAME rag_stream_client_tests
     COMMAND rag_stream_client_tests
+)
+add_test(
+    NAME streaming_answer_backend_tests
+    COMMAND streaming_answer_backend_tests
 )
 
 set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
