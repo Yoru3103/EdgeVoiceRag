@@ -199,6 +199,34 @@ RagStreamRequest RagStreamProtocol::decodeRequest(const std::string& message) {
     return request;
 }
 
+std::string RagStreamProtocol::encodeEvent(const RagStreamEvent& event) {
+    validateEvent(event);
+
+    if (event.request_id.empty()) {
+        throw std::invalid_argument("RAG event request_id must not be empty");
+    }
+    if (event.elapsed_ms < 0.0) {
+        throw std::invalid_argument("RAG event elapsed_ms must not be negative");
+    }
+
+    const Json message = {
+        {"version", KVersion},
+        {"type", eventTypeToString(event.type)},
+        {"ok", event.ok},
+        {"request_id", event.request_id},
+        {"sequence", event.sequence},
+        {"delta", event.delta},
+        {"answer", event.answer},
+        {"backend", event.backend},
+        {"llm_backend", event.llm_backend},
+        {"error", event.error},
+        {"elapsed_ms", event.elapsed_ms},
+        {"finished", event.finished}
+    };
+
+    return message.dump();
+}
+
 RagStreamEvent RagStreamProtocol::decodeEvent(const std::string& message) {
     const Json json = Json::parse(message);
 

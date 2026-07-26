@@ -45,6 +45,7 @@ public:
     static std::string encodeRequest(const RagStreamRequest& request);
     static RagStreamRequest decodeRequest(const std::string& message);
 
+    static std::string encodeEvent(const RagStreamEvent& event);
     static RagStreamEvent decodeEvent(const std::string& message);
     static std::string eventTypeToString(RagStreamEventType type);
 };

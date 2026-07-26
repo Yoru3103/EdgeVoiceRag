@@ -24,6 +24,7 @@ add_library(edge_voice_rag_core
     src/rag_response_parser.cpp
     src/zmq_text_client.cpp
     src/edge_response_backend.cpp
+    src/rag_stream_client.cpp
     src/llm_protocol.cpp
     src/mock_llm_backend.cpp
     src/llm_service.cpp
@@ -253,6 +254,17 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    rag_stream_client_tests
+    tests/rag_stream_client_tests.cpp
+)
+target_link_libraries(
+    rag_stream_client_tests
+    PRIVATE
+    edge_voice_rag_core
+    Threads::Threads
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
@@ -293,6 +305,10 @@ add_test(
 add_test(
     NAME rag_stream_protocol_tests
     COMMAND rag_stream_protocol_tests
+)
+add_test(
+    NAME rag_stream_client_tests
+    COMMAND rag_stream_client_tests
 )
 
 set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
