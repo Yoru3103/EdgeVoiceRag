@@ -298,6 +298,17 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    bounded_blocking_queue_tests
+    tests/bounded_blocking_queue_tests.cpp
+)
+target_link_libraries(
+    bounded_blocking_queue_tests
+    PRIVATE
+    edge_voice_rag_core
+    Threads::Threads
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
@@ -354,6 +365,10 @@ add_test(
 add_test(
     NAME voice_assistant_tests
     COMMAND voice_assistant_tests
+)
+add_test(
+    NAME bounded_blocking_queue_tests
+    COMMAND bounded_blocking_queue_tests
 )
 
 set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
