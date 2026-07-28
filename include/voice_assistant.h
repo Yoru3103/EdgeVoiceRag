@@ -1,9 +1,15 @@
 #pragma once
 
+#include <condition_variable>
 #include <cstddef>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 
+#include "audio_buffer.h"
 #include "audio_player.h"
+#include "bounded_blocking_queue.h"
 #include "streaming_answer_backend.h"
 #include "streaming_sentence_buffer.h"
 #include "tts_backend.h"
@@ -36,8 +42,21 @@ public:
     VoiceAssistant(
         const StreamingAnswerBackend& answer_backend,
         TtsBackend& tts_backend,
-        AudioPlayer& audio_player
+        AudioPlayer& audio_player,
+        std::size_t sentence_queue_capacity = 4,
+        std::size_t audio_queue_capacity = 2
     );
+
+    ~VoiceAssistant();
+
+    VoiceAssistant(const VoiceAssistant&) = delete;
+    VoiceAssistant& operator=(const VoiceAssistant&) = delete;
+
+    bool start();
+
+    void stop();
+
+    bool running() const;
 
     VoiceAssistantResult processText(
         const std::string& request_id,
@@ -47,6 +66,31 @@ public:
     void stopPlayback();
 
 private:
+    // 负责线程之间状态的共享
+    struct RequestState {
+        mutable std::mutex mutex;
+        std::condition_variable completed_cv;
+
+        bool failed = false;
+        bool completed = false;
+
+        std::string error;
+
+        std::size_t spoken_sentence_count = 0;
+    };
+
+    struct SentenceTask {
+        std::shared_ptr<RequestState> state;
+        std::string text;
+        bool end_of_request = false;
+    };
+
+    struct AudioTask {
+        std::shared_ptr<RequestState> state;
+        AudioBuffer audio;
+        bool end_of_request = false;
+    };
+
     const StreamingAnswerBackend& answer_backend_;
 
     TtsBackend& tts_backend_;
@@ -54,8 +98,52 @@ private:
 
     StreamingSentenceBuffer sentence_buffer_;
 
-    bool synthesizeAndPlay(
-        const std::string& sentence,
-        VoiceAssistantResult& result
+    BoundedBlockingQueue<SentenceTask> sentence_queue_;
+    BoundedBlockingQueue<AudioTask> audio_queue_;
+
+    std::thread tts_thread_;
+    std::thread playback_thread_;
+
+    mutable std::mutex lifecycle_mutex_;    // 保护started_, stopped_
+    std::mutex process_mutex_;
+    std::mutex active_state_mutex_;
+
+    bool started_ = false;
+    bool stopped_ = false;
+
+    // 任务可能在processText结束前后跨线程传递
+    // 必须保证状态对象在最后一个任务处理完之前仍然存在
+    std::shared_ptr<RequestState> active_state_;    // 表示当前存在一个尚未完成的processtext请求
+
+    void ttsWorker();
+    void playbackWorker();
+
+    bool enqueueSentence(
+        const std::shared_ptr<RequestState>& state,
+        const std::string& sentence
     );
+
+    static bool stateFailed(
+        const std::shared_ptr<RequestState>& state
+    );
+
+    // 将流式后端生成的结果加入到sentencequeue中等待后续处理
+    bool enqueueEndOfRequest(
+        const std::shared_ptr<RequestState>& state
+    );
+
+    static void failState(
+        const std::shared_ptr<RequestState>& state,
+        const std::string& error
+    );
+
+    static void completeState(const std::shared_ptr<RequestState>& state);
+
+    static void incrementSpokenCount(const std::shared_ptr<RequestState>& state);
+
+    static void waitForCompletion(const std::shared_ptr<RequestState>& state);
+
+    void setActiveState(const std::shared_ptr<RequestState>& state);
+
+    void clearActiveState(const std::shared_ptr<RequestState>& state);
 };

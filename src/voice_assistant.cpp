@@ -2,6 +2,7 @@
 
 #include <exception>
 #include <string>
+#include <utility>
 #include <vector>
 
 VoiceAssistantResult VoiceAssistantResult::failure(
@@ -22,17 +23,132 @@ VoiceAssistantResult VoiceAssistantResult::failure(
 VoiceAssistant::VoiceAssistant(
     const StreamingAnswerBackend& answer_backend,
     TtsBackend& tts_backend,
-    AudioPlayer& audio_player
+    AudioPlayer& audio_player,
+    std::size_t sentence_queue_capacity,
+    std::size_t audio_queue_capacity
 ) 
     : answer_backend_(answer_backend)
     , tts_backend_(tts_backend)
-    , audio_player_(audio_player) {
+    , audio_player_(audio_player) 
+    , sentence_queue_(sentence_queue_capacity)
+    , audio_queue_(audio_queue_capacity) {
+}
+
+VoiceAssistant::~VoiceAssistant() {
+    stop();
+}
+
+bool VoiceAssistant::start() {
+    std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+
+    if (started_ && !stopped_) {
+        return true;
+    }
+
+    /*
+     * 当前 BoundedBlockingQueue 关闭后不能 reopen，
+     * 因此 stop() 之后不允许再次 start()。
+     */
+    if (stopped_) {
+        return false;
+    }
+
+    try {
+        // this表示让当前对象执行这个成员函数。类似异步执行
+        tts_thread_ = std::thread(
+            &VoiceAssistant::ttsWorker,
+            this
+        );
+
+        playback_thread_ = std::thread(
+            &VoiceAssistant::playbackWorker,
+            this
+        );
+
+        started_ = true;
+
+        return true;
+    } catch (...) {
+        // 关闭队列使得两个线程个走出阻塞
+        sentence_queue_.close();
+        audio_queue_.close();
+
+        // joinable判断thread对象是否关联着一个可管理的线程
+        if (tts_thread_.joinable()) {
+            tts_thread_.join();     // 让主线程等待该线程执行完毕后再继续执行
+        }
+
+        if (playback_thread_.joinable()) {
+            playback_thread_.join();
+        }
+
+        stopped_ = true;
+
+        return false;
+    }
+}
+
+void VoiceAssistant::stop() {
+    std::shared_ptr<RequestState> active_state;
+
+    {
+        std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+
+        if (stopped_) {
+            return;
+        }
+
+        stopped_ = true;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(active_state_mutex_);
+
+        active_state = active_state_;
+    }
+
+    if (active_state) {
+        failState(active_state, "voice assistant stopped");
+
+        completeState(active_state);
+    }
+
+    // 先要求播放器停止，避免join等待完整音频播放
+    audio_player_.stop();
+
+    sentence_queue_.clear();
+    audio_queue_.clear();
+    sentence_queue_.close();
+    audio_queue_.close();
+
+    if (tts_thread_.joinable()) {
+        tts_thread_.join();
+    }
+    if (playback_thread_.joinable()) {
+        playback_thread_.join();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+
+        started_ = false;
+    }
+}
+
+bool VoiceAssistant::running() const {
+    std::lock_guard<std::mutex> lock(lifecycle_mutex_);
+
+    return started_ && !stopped_;
 }
 
 VoiceAssistantResult VoiceAssistant::processText(
     const std::string& request_id,
     const std::string& query
 ) {
+    // v1.0: 只允许一次处理一个请求。
+    // 避免多个回答共享buffer，多个回答争用一个player
+    std::lock_guard<std::mutex> process_lock(process_mutex_);
+
     if (request_id.empty()) {
         return VoiceAssistantResult::failure(
             request_id,
@@ -49,7 +165,19 @@ VoiceAssistantResult VoiceAssistant::processText(
         );
     }
 
+    if (!running()) {
+        return VoiceAssistantResult::failure(
+            request_id,
+            query,
+            "voice assistant is not running"
+        );
+    }
+
     sentence_buffer_.clear();
+
+    const auto state = std::make_shared<RequestState>();
+    
+    setActiveState(state);
 
     VoiceAssistantResult result;
 
@@ -60,126 +188,306 @@ VoiceAssistantResult VoiceAssistant::processText(
     result.tts_backend = tts_backend_.name();
     result.audio_backend = audio_player_.name();
 
-    bool output_failed = false;
-    std::string output_error;
-
     try {
         const RagStreamQueryResult answer_result = answer_backend_.query(
             RagStreamRequest{
                 request_id,
                 query
             },
-            [this, &result, &output_failed, &output_error](const RagStreamEvent& event) {
-                if (output_failed || event.type != RagStreamEventType::Chunk) {
+            [this, &result, &state](const RagStreamEvent& event) {
+                if (stateFailed(state) || event.type != RagStreamEventType::Chunk) {
                     return;
                 }
 
                 result.received_chunk_count++;
 
-                const std::vector<std::string> sentences = sentence_buffer_.append(event.delta);
+                const auto sentences = sentence_buffer_.append(event.delta);
 
                 for (const auto& sentence : sentences) {
-                    if (!synthesizeAndPlay(sentence, result)) {
-                        output_failed = true;
-                        output_error = result.error;
+                    if (!enqueueSentence(state, sentence)) {
+                        failState(state, "sentence queue closed");
+
                         return;
                     }
                 }
             }
         );
 
-        if (output_failed) {
-            sentence_buffer_.clear();
-
-            result.ok = false;
-            result.error = output_error;
-
-            return result;
+        // state状态为真且结果已输出但结果为假
+        if (!stateFailed(state) && !answer_result.ok) {
+            failState(
+                state,
+                "answer backend failed: " + answer_result.error
+            );
         }
 
-        if (!answer_result.ok) {
-            sentence_buffer_.clear();
+        if (!stateFailed(state) && answer_result.ok) {
+            result.answer = answer_result.answer;
 
-            result.ok = false;
-            result.error = "answer backend failed: " + answer_result.error;
+            // 兼容不支持流式后端的情况（即不发送chunk的情况）
+            // 如果没有chunk，就把完整答案送入缓冲器
+            if (result.received_chunk_count == 0) {
+                const auto sentences = sentence_buffer_.append(answer_result.answer);
 
-            return result;
-        }
+                for (const auto& sentence : sentences) {
+                    if (!enqueueSentence(state, sentence)) {
+                        failState(state, "sentence queue closed");
 
-        result.answer = answer_result.answer;
+                        break;
+                    }
+                }
+            }
 
-        // 兼容不支持流式后端的情况（即不发送chunk的情况）
-        // 如果没有chunk，就把完整答案送入缓冲器
-        if (result.received_chunk_count == 0) {
-            const std::vector<std::string> sentences = sentence_buffer_.append(answer_result.answer);
+            if (!stateFailed(state)) {
+                const std::string remaining = sentence_buffer_.flush();
 
-            for (const auto& sentence : sentences) {
-                if (!synthesizeAndPlay(sentence, result)) {
-                    sentence_buffer_.clear();
-                    return result;
+                if (!remaining.empty() && !enqueueSentence(state, remaining)) {
+                    failState(state, "sentence queue closed");
                 }
             }
         }
 
-        const std::string remaining = sentence_buffer_.flush();
+        sentence_buffer_.clear();
 
-        if (!remaining.empty() && ! synthesizeAndPlay(remaining, result)) {
-            return result;
+        if (!enqueueEndOfRequest(state)) {
+            failState(state, "failed to enqueue request end");
+
+            completeState(state);
         }
 
-        result.ok = true;
-        result.error.clear();
-
-        return result;
+        waitForCompletion(state);
     } catch (const std::exception& error) {
         sentence_buffer_.clear();
 
-        result.ok = false;
-        result.error = "voice assistant failed: " + std::string(error.what());
+        failState(state, "voice assistant failed: " + std::string(error.what()));
 
-        return result;
+        if (!enqueueEndOfRequest(state)) {
+            completeState(state);
+        } else {
+            waitForCompletion(state);
+        }
     }
+
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+
+        result.spoken_sentence_count = state->spoken_sentence_count;
+
+        if (state->failed) {
+            result.ok = false;
+            result.error = state->error;
+        } else {
+            result.ok = true;
+            result.error.clear();
+        }
+    }
+
+    clearActiveState(state);
+
+    return result;
 }
 
-bool VoiceAssistant::synthesizeAndPlay(
-    const std::string& sentence,
-    VoiceAssistantResult& result
+bool VoiceAssistant::enqueueSentence(
+    const std::shared_ptr<RequestState>& state,
+    const std::string& sentence
 ) {
     if (sentence.empty()) {
         return true;
     }
 
-    const TtsSynthesisResult synthesis = tts_backend_.synthesize(sentence);
+    SentenceTask task;
+    task.state = state;
+    task.text = sentence;
+    task.end_of_request = false;
 
-    if (!synthesis.ok) {
-        result.ok = false;
-        result.error = "TTS failed: " + synthesis.error;
+    return sentence_queue_.push(std::move(task));
+}
 
-        return false;
+bool VoiceAssistant::enqueueEndOfRequest(const std::shared_ptr<RequestState>& state) {
+    SentenceTask task;
+
+    task.state = state;
+    task.end_of_request = true;
+
+    return sentence_queue_.push(std::move(task));
+}
+
+void VoiceAssistant::ttsWorker() {
+    while (true) {
+        auto task = sentence_queue_.pop();
+
+        if (!task.has_value()) {
+            break;
+        }
+
+        if (task->end_of_request) {
+            AudioTask end_task;
+
+            end_task.state = task->state;
+            end_task.end_of_request = true;
+
+            if (!audio_queue_.push(std::move(end_task))) {
+                failState(task->state, "audio queue closed");
+
+                completeState(task->state);
+            }
+
+            continue;
+        }
+
+        if (stateFailed(task->state)) {
+            continue;
+        }
+
+        try {
+            TtsSynthesisResult synthesis = tts_backend_.synthesize(task->text);
+
+            if (!synthesis.ok) {
+                failState(task->state, "TTS failed: " + synthesis.error);
+
+                continue;
+            }
+
+            /*
+             * TTS 期间可能发生 stopPlayback()。
+             * 合成完成后再次检查状态，避免把旧音频入队。
+             */
+            if (stateFailed(task->state)) {
+                continue;
+            }
+
+            AudioTask audio_task;
+            audio_task.state = task->state;
+            audio_task.audio = std::move(synthesis.audio);
+            audio_task.end_of_request = false;
+
+            if (!audio_queue_.push(std::move(audio_task))) {
+                failState(task->state, "audio queue closed");
+
+                completeState(task->state);
+
+                break;
+            }
+        } catch (const std::exception& error) {
+            failState(task->state, "TTS exception: " + std::string(error.what()));
+        }
+    }
+}
+
+void VoiceAssistant::playbackWorker() {
+    while (true) {
+        auto task = audio_queue_.pop();
+
+        if (!task.has_value()) {
+            break;
+        }
+
+        if (task->end_of_request) {
+            completeState(task->state);
+            continue;
+        }
+
+        if (stateFailed(task->state)) {
+            continue;
+        }
+
+        try {
+            const AudioPlaybackResult playback = audio_player_.play(task->audio);
+
+            if (!playback.ok) {
+                failState(task->state, "audio playback failed: " + playback.error);
+
+                continue;
+            }
+
+            // 理由同ttsworeker
+            if (!stateFailed(task->state)) {
+                incrementSpokenCount(task->state);
+            }
+        } catch (const std::exception& error) {
+            failState(task->state, "audio playback exception: " + std::string(error.what()));
+        }
+    }
+}
+
+bool VoiceAssistant::stateFailed(const std::shared_ptr<RequestState>& state) {
+    std::lock_guard<std::mutex> lock(state->mutex);
+
+    return state->failed;
+}
+
+void VoiceAssistant::failState(
+    const std::shared_ptr<RequestState>& state,
+    const std::string& error
+) {
+    std::lock_guard<std::mutex> lock(state->mutex);
+
+    // 保留第一次错误
+    if (!state->failed) {
+        state->failed = true;
+        state->error = error;
+    }
+}
+
+void VoiceAssistant::completeState(const std::shared_ptr<RequestState>& state) {
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+
+        state->completed = true;
     }
 
-    if (synthesis.audio.empty()) {
-        result.ok = false;
-        result.error = "TTS returned empty audio";
+    state->completed_cv.notify_all();
+}
 
-        return false;
+void VoiceAssistant::incrementSpokenCount(const std::shared_ptr<RequestState>& state) {
+    std::lock_guard<std::mutex> lock(state->mutex);
+
+    state->spoken_sentence_count++;
+} 
+
+void VoiceAssistant::waitForCompletion(const std::shared_ptr<RequestState>& state) {
+    std::unique_lock<std::mutex> lock(state->mutex);
+
+    state->completed_cv.wait(
+        lock,
+        [&state]() {
+            return state->completed;
+        }
+    );
+}
+
+void VoiceAssistant::setActiveState(const std::shared_ptr<RequestState>& state) {
+    std::lock_guard<std::mutex> lock(active_state_mutex_);
+
+    active_state_ = state;
+}
+
+void VoiceAssistant::clearActiveState(const std::shared_ptr<RequestState>& state) {
+    std::lock_guard<std::mutex> lock(active_state_mutex_);
+
+    if (active_state_ == state) {
+        active_state_.reset();
     }
-
-    const AudioPlaybackResult playback = audio_player_.play(synthesis.audio);
-
-    if (!playback.ok) {
-        result.ok = false;
-        result.error = "audio playback failed: " + playback.error;
-
-        return false;
-    }
-
-    result.spoken_sentence_count++;
-
-    return true;
 }
 
 void VoiceAssistant::stopPlayback() {
-    sentence_buffer_.clear();
+    std::shared_ptr<RequestState> state;
+
+    {
+        std::lock_guard<std::mutex> lock(active_state_mutex_);
+
+        state = active_state_;
+    }
+
+    if (state) {
+        failState(state, "voice output interrupted");
+
+        completeState(state);
+    }
+
+    // 丢弃尚未开始处理的旧句子和旧音频
+    sentence_queue_.clear();
+    audio_queue_.clear();
+
     audio_player_.stop();
 }

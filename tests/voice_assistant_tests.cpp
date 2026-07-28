@@ -1,6 +1,8 @@
 #include <cstdint>
 #include <iostream>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -111,6 +113,10 @@ class MockTtsBackend final : public TtsBackend {
 public:
     std::vector<std::string> synthesized_texts;
 
+    std::vector<std::thread::id> synthesis_thread_ids;
+
+    std::mutex mutex;
+
     bool fail = false;
 
     std::string name() const override {
@@ -122,15 +128,18 @@ public:
             return TtsSynthesisResult::failure("mock synthesis failure");
         }
 
-        synthesized_texts.push_back(text);
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+
+            synthesized_texts.push_back(text);
+
+            synthesis_thread_ids.push_back(std::this_thread::get_id());
+        }
 
         AudioBuffer audio;
-        audio.sample_rate = 116000;
+        audio.sample_rate = 16000;
         audio.channels = 1;
-
-        audio.samples = {
-            static_cast<std::int16_t>(synthesized_texts.size())
-        };
+        audio.samples = {1};
 
         return TtsSynthesisResult::success(std::move(audio));
     }
@@ -140,8 +149,12 @@ class MockAudioPlayer final : public AudioPlayer {
 public:
     std::vector<AudioBuffer> played_audio;
 
+    std::mutex mutex;
+
     bool fail = false;
     bool stopped = false;
+
+    std::vector<std::thread::id> playback_thread_ids;
 
     std::string name() const override {
         return "mock_audio_player";
@@ -152,7 +165,13 @@ public:
             return AudioPlaybackResult::failure("mock playback failure");
         }
 
-        played_audio.push_back(audio);
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+
+            played_audio.push_back(audio);
+
+            playback_thread_ids.push_back(std::this_thread::get_id());
+        }
 
         return AudioPlaybackResult::success();
     }
@@ -169,10 +188,17 @@ void testStreamedAnswerIsSynthesizedAndPlayed() {
 
     VoiceAssistant assistant(answer, tts, player);
 
+    expectTrue(
+        assistant.start(),
+        "start voice assistant"
+    );
+
     const VoiceAssistantResult result = assistant.processText(
         "voice-1",
         "胎压报警怎么办"
     );
+
+    assistant.stop();
 
     expectTrue(
         result.ok,
@@ -232,10 +258,17 @@ void testUnpunctuatedRemainderIsFlushed() {
         player
     );
 
+    expectTrue(
+        assistant.start(),
+        "start voice assistant"
+    );
+
     const auto result = assistant.processText(
         "voice-2",
         "无法启动车辆"
     );
+
+    assistant.stop();
 
     expectTrue(
         result.ok,
@@ -267,10 +300,17 @@ void testNonStreamingFallback() {
         player
     );
 
+    expectTrue(
+        assistant.start(),
+        "start voice assistant"
+    );
+
     const auto result = assistant.processText(
         "voice-3",
         "测试"
     );
+
+    assistant.stop();
 
     expectTrue(
         result.ok,
@@ -300,11 +340,18 @@ void testAnswerBackendFailure() {
         player
     );
 
+    expectTrue(
+        assistant.start(),
+        "start voice assistant"
+    );
+
     const auto result =
         assistant.processText(
             "voice-4",
             "测试后端失败"
         );
+
+    assistant.stop();
 
     expectTrue(
         !result.ok,
@@ -336,11 +383,18 @@ void testTtsFailure() {
         player
     );
 
+    expectTrue(
+        assistant.start(),
+        "start voice assistant"
+    );
+
     const auto result =
         assistant.processText(
             "voice-5",
             "测试TTS失败"
         );
+
+    assistant.stop();
 
     expectTrue(
         !result.ok,
@@ -372,11 +426,18 @@ void testPlaybackFailure() {
         player
     );
 
+    expectTrue(
+        assistant.start(),
+        "start voice assistant"
+    );
+
     const auto result =
         assistant.processText(
             "voice-6",
             "测试播放失败"
         );
+
+    assistant.stop();
 
     expectTrue(
         !result.ok,
@@ -402,7 +463,14 @@ void testStopPlayback() {
         player
     );
 
+    expectTrue(
+        assistant.start(),
+        "start voice assistant"
+    );
+
     assistant.stopPlayback();
+
+    assistant.stop();
 
     expectTrue(
         player.stopped,
@@ -419,6 +487,11 @@ void testRejectEmptyInput() {
         answer,
         tts,
         player
+    );
+
+    expectTrue(
+        assistant.start(),
+        "start voice assistant"
     );
 
     const auto empty_id =
@@ -438,9 +511,137 @@ void testRejectEmptyInput() {
             ""
         );
 
+    assistant.stop();
+
     expectTrue(
         !empty_query.ok,
         "reject empty query"
+    );
+}
+
+void testPipelineUsesWorkerThreads() {
+    MockStreamingAnswerBackend answer;
+    MockTtsBackend tts;
+    MockAudioPlayer player;
+
+    VoiceAssistant assistant(
+        answer,
+        tts,
+        player
+    );
+
+    expectTrue(
+        assistant.start(),
+        "start asynchronous pipeline"
+    );
+
+    const std::thread::id caller_thread = std::this_thread::get_id();
+
+    const auto result = assistant.processText(
+        "voice-async-1",
+        "胎压报警怎么办"
+    );
+
+    assistant.stop();
+
+    expectTrue(
+        result.ok,
+        "asynchronous pipeline succeeds"
+    );
+    expectTrue(
+        !tts.synthesis_thread_ids.empty(),
+        "TTS worker recorded thread"
+    );
+    expectTrue(
+        !player.playback_thread_ids.empty(),
+        "playback worker recorded thread"
+    );
+    expectTrue(
+        tts.synthesis_thread_ids.front() != caller_thread,
+        "TTS runs outside caller thread"
+    );
+    expectTrue(
+        player.playback_thread_ids.front() != caller_thread,
+        "playback runs outside caller thread"
+    );
+    expectTrue(
+        tts.synthesis_thread_ids.front() != player.playback_thread_ids.front(),
+        "TTS and playback use different workers"
+    );
+}
+
+void testProcessRequiresStart() {
+    MockStreamingAnswerBackend answer;
+    MockTtsBackend tts;
+    MockAudioPlayer player;
+
+    VoiceAssistant assistant(
+        answer,
+        tts,
+        player
+    );
+
+    const auto result = assistant.processText(
+        "voice-not-started",
+        "测试"
+    );
+
+    expectTrue(
+        !result.ok,
+        "reject process before start"
+    );
+    expectTrue(
+        result.error.find("not running") != std::string::npos,
+        "not-running error contains reason"
+    );
+}
+
+void testStopIsIdempotent() {
+    MockStreamingAnswerBackend answer;
+    MockTtsBackend tts;
+    MockAudioPlayer player;
+
+    VoiceAssistant assistant(
+        answer,
+        tts,
+        player
+    );
+
+    expectTrue(
+        assistant.start(),
+        "start before repeated stop"
+    );
+
+    assistant.stop();
+    assistant.stop();
+
+    expectTrue(
+        !assistant.running(),
+        "repeated stop leaves assistant stopped"
+    );
+}
+
+void testCannotRestartAfterStop() {
+    MockStreamingAnswerBackend answer;
+    MockTtsBackend tts;
+    MockAudioPlayer player;
+
+    VoiceAssistant assistant(
+        answer,
+        tts,
+        player
+    );
+
+    expectTrue(
+        assistant.start(),
+        "start before repeated stop"
+    );
+
+    assistant.stop();
+    
+    expectTrue(
+        !assistant.start(),
+        "restart after stop is rejected"
     );
 }
 
@@ -455,6 +656,10 @@ int main() {
     testPlaybackFailure();
     testStopPlayback();
     testRejectEmptyInput();
+    testPipelineUsesWorkerThreads();
+    testProcessRequiresStart();
+    testStopIsIdempotent();
+    testCannotRestartAfterStop();
 
     if (failed_count == 0) {
         std::cout
