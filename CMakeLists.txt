@@ -35,6 +35,9 @@ add_library(edge_voice_rag_core
     src/streaming_answer_backend.cpp
     src/streaming_sentence_buffer.cpp
     src/voice_assistant.cpp
+    src/cancellable_answer_backend.cpp
+    src/rag_control_protocol.cpp
+    src/rag_control_client.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -309,6 +312,26 @@ target_link_libraries(
     Threads::Threads
 )
 
+add_executable(
+    rag_control_protocol_tests
+    tests/rag_control_protocol_tests.cpp
+)
+target_link_libraries(
+    rag_control_protocol_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
+add_executable(
+    rag_control_client_tests
+    tests/rag_control_client_tests.cpp
+)
+target_link_libraries(
+    rag_control_client_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
@@ -369,6 +392,14 @@ add_test(
 add_test(
     NAME bounded_blocking_queue_tests
     COMMAND bounded_blocking_queue_tests
+)
+add_test(
+    NAME rag_control_protocol_tests
+    COMMAND rag_control_protocol_tests
+)
+add_test(
+    NAME rag_control_client_tests
+    COMMAND rag_control_client_tests
 )
 
 set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
