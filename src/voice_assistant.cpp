@@ -26,10 +26,47 @@ VoiceAssistant::VoiceAssistant(
     AudioPlayer& audio_player,
     std::size_t sentence_queue_capacity,
     std::size_t audio_queue_capacity
+)
+    : VoiceAssistant(
+        answer_backend,
+        tts_backend,
+        audio_player,
+        nullptr,
+        sentence_queue_capacity,
+        audio_queue_capacity
+    ) {
+}
+
+VoiceAssistant::VoiceAssistant(
+    const StreamingAnswerBackend& answer_backend,
+    TtsBackend& tts_backend,
+    AudioPlayer& audio_player,
+    const CancellableAnswerBackend& cancellation_backend,
+    std::size_t sentence_queue_capacity,
+    std::size_t audio_queue_capacity
+)
+    : VoiceAssistant(
+        answer_backend,
+        tts_backend,
+        audio_player,
+        &cancellation_backend,
+        sentence_queue_capacity,
+        audio_queue_capacity
+    ) {
+}
+
+VoiceAssistant::VoiceAssistant(
+    const StreamingAnswerBackend& answer_backend,
+    TtsBackend& tts_backend,
+    AudioPlayer& audio_player,
+    const CancellableAnswerBackend* cancellation_backend,
+    std::size_t sentence_queue_capacity,
+    std::size_t audio_queue_capacity
 ) 
     : answer_backend_(answer_backend)
     , tts_backend_(tts_backend)
     , audio_player_(audio_player) 
+    , cancellation_backend_(cancellation_backend)
     , sentence_queue_(sentence_queue_capacity)
     , audio_queue_(audio_queue_capacity) {
 }
@@ -101,23 +138,9 @@ void VoiceAssistant::stop() {
         stopped_ = true;
     }
 
-    {
-        std::lock_guard<std::mutex> lock(active_state_mutex_);
+    // 依旧同上一版，先中断清空缓冲再关闭队列
+    interruptActiveRequest("voice assistant stopped");
 
-        active_state = active_state_;
-    }
-
-    if (active_state) {
-        failState(active_state, "voice assistant stopped");
-
-        completeState(active_state);
-    }
-
-    // 先要求播放器停止，避免join等待完整音频播放
-    audio_player_.stop();
-
-    sentence_queue_.clear();
-    audio_queue_.clear();
     sentence_queue_.close();
     audio_queue_.close();
 
@@ -176,6 +199,9 @@ VoiceAssistantResult VoiceAssistant::processText(
     sentence_buffer_.clear();
 
     const auto state = std::make_shared<RequestState>();
+
+    // 由于停止时可能在任意线程中，因此需要添加request_id
+    state->request_id = request_id;
     
     setActiveState(state);
 
@@ -470,7 +496,13 @@ void VoiceAssistant::clearActiveState(const std::shared_ptr<RequestState>& state
     }
 }
 
-void VoiceAssistant::stopPlayback() {
+VoiceAssistantInterruptResult VoiceAssistant::stopPlayback() {
+    return interruptActiveRequest("voice output interrupted");
+}
+
+VoiceAssistantInterruptResult VoiceAssistant::interruptActiveRequest(const std::string& state_error) {
+    VoiceAssistantInterruptResult result;
+
     std::shared_ptr<RequestState> state;
 
     {
@@ -480,14 +512,59 @@ void VoiceAssistant::stopPlayback() {
     }
 
     if (state) {
-        failState(state, "voice output interrupted");
+        result.had_active_request = true;
 
+        {
+            std::lock_guard<std::mutex> lock(state->mutex);
+
+            result.request_id = state->request_id;
+        }
+
+        // 先标记失败，阻止TTS将刚合成完的旧音频重新放入audio_queue
+        failState(state, state_error);
+
+        // processText最终仍可能等待后端query返回，但不应该继续等待音频流水线完成
         completeState(state);
     }
 
-    // 丢弃尚未开始处理的旧句子和旧音频
+    // 先停止本地输出
+    // 因为网络取消可能还需要等待timeout_ms
     sentence_queue_.clear();
     audio_queue_.clear();
 
     audio_player_.stop();
+
+    result.output_stopped = true;
+
+    if (!state || !cancellation_backend_) {
+        return result;
+    }
+
+    result.cancel_attempted = true;
+    result.cancellation_backend = cancellation_backend_->name();
+
+    try {
+        // 网络取消存在阻塞，持锁期间无法清理active state，因此持锁复制shared_ptr，之后调用锁调用网络取消
+        const CancellationResult cancellation = cancellation_backend_->cancel(result.request_id);
+
+        result.cancel_ok = cancellation.ok;
+
+        result.generation_cancelled = cancellation.cancelled;
+
+        if (!cancellation.ok) {
+            result.error = cancellation.error.empty() ? "generation cancellation failed" : cancellation.error;
+        }
+    } catch (const std::exception& error) {
+        result.cancel_ok = false;
+        result.generation_cancelled = false;
+
+        result.error = "generation cancellation exception: " + std::string(error.what());
+    } catch (...) {
+        result.cancel_ok = false;
+        result.generation_cancelled = false;
+
+        result.error = "unknown generation cancellation exception";
+    }
+
+    return result;
 }

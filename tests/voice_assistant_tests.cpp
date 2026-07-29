@@ -1,4 +1,7 @@
+#include <chrono>
+#include <condition_variable>
 #include <cstdint>
+#include <future>
 #include <iostream>
 #include <mutex>
 #include <string>
@@ -179,6 +182,107 @@ public:
     void stop() override {
         stopped = true;
     }
+};
+
+class BlockingCancellableAnswerBackend final
+    : public StreamingAnswerBackend
+    , public CancellableAnswerBackend {
+public:
+    std::string name() const override {
+        return "blocking_cancellable_mock";
+    }
+
+    RagStreamQueryResult query(
+        const RagStreamRequest& request,
+        const RagStreamEventHandler& handler
+    ) const override {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+
+            active_ = true;
+            cancelled_ = false;
+            active_request_id_ = request.request_id;
+        }
+
+        active_cv_.notify_all();
+
+        RagStreamEvent event;
+
+        event.type = RagStreamEventType::Chunk;
+        event.ok = true;
+        event.request_id = request.request_id;
+        event.sequence = 0;
+        event.delta = "正在生成";
+        event.backend = "mock_rag";
+        event.llm_backend = "mock_llm";
+        event.elapsed_ms = 1.0;
+        event.finished = false;
+
+        if (handler) {
+            handler(event);
+        }
+
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+
+            cancelled_cv_.wait(lock, [this]() {
+                return cancelled_;
+            });
+
+            active_ = false;
+            active_request_id_.clear();
+        }
+
+        return RagStreamQueryResult::failure(
+            request.request_id,
+            "generation cancelled"
+        );
+    }
+
+    CancellationResult cancel(const std::string& request_id) const override {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!active_ || active_request_id_ != request_id) {
+            return CancellationResult::success(
+                request_id,
+                false,
+                active_request_id_
+            );
+        }
+
+        cancelled_ = true;
+
+        cancelled_cv_.notify_all();
+
+        return CancellationResult::success(
+            request_id,
+            true,
+            request_id
+        );
+    }
+
+    bool waitUntilActive(std::chrono::milliseconds timeout) const {
+        std::unique_lock<std::mutex> lock(mutex_);
+
+        return active_cv_.wait_for(
+            lock,
+            timeout,
+            [this]() {
+                return active_;
+            }
+        );
+    }
+
+private:
+    mutable std::mutex mutex_;
+
+    mutable std::condition_variable active_cv_;
+    mutable std::condition_variable cancelled_cv_;
+
+    mutable bool active_ = false;
+    mutable bool cancelled_ = false;
+
+    mutable std::string active_request_id_;
 };
 
 void testStreamedAnswerIsSynthesizedAndPlayed() {
@@ -645,6 +749,138 @@ void testCannotRestartAfterStop() {
     );
 }
 
+// 打断测试
+void testStopPlaybackCancelsGeneration() {
+    using namespace std::chrono_literals;
+
+    BlockingCancellableAnswerBackend backend;
+    MockTtsBackend tts;
+    MockAudioPlayer player;
+
+    VoiceAssistant assistant(
+        backend,
+        tts,
+        player,
+        backend
+    );
+
+    expectTrue(
+        assistant.start(),
+        "start cancellable assistant"
+    );
+
+    auto process_future = std::async(
+        std::launch::async,
+        [&assistant]() {
+            return assistant.processText(
+                "voice-cancel-1",
+                "生成一个较长回答"
+            );
+        }
+    );
+
+    expectTrue(
+        backend.waitUntilActive(1s),
+        "answer backend becomes active"
+    );
+
+    const VoiceAssistantInterruptResult interrupted = assistant.stopPlayback();
+
+    expectTrue(
+        interrupted.had_active_request,
+        "interrupt sees active request"
+    );
+
+    expectTrue(
+        interrupted.request_id ==
+            "voice-cancel-1",
+        "interrupt uses active request_id"
+    );
+
+    expectTrue(
+        interrupted.output_stopped,
+        "interrupt stops local output"
+    );
+
+    expectTrue(
+        interrupted.cancel_attempted,
+        "interrupt attempts generation cancel"
+    );
+
+    expectTrue(
+        interrupted.cancel_ok,
+        "generation cancel request succeeds"
+    );
+
+    expectTrue(
+        interrupted.generation_cancelled,
+        "active generation is cancelled"
+    );
+
+    expectTrue(
+        process_future.wait_for(1s) ==
+            std::future_status::ready,
+        "cancelled processText returns"
+    );
+
+    const VoiceAssistantResult result = process_future.get();
+
+    expectTrue(
+        !result.ok,
+        "cancelled request returns failure"
+    );
+
+    expectTrue(
+        result.error.find("interrupted") !=
+            std::string::npos,
+        "cancelled result reports interruption"
+    );
+
+    expectTrue(
+        player.stopped,
+        "audio player is stopped"
+    );
+
+    assistant.stop();
+}
+
+void testStopPlaybackWithoutActiveRequest() {
+    MockStreamingAnswerBackend answer;
+    MockTtsBackend tts;
+    MockAudioPlayer player;
+
+    VoiceAssistant assistant(
+        answer,
+        tts,
+        player
+    );
+
+    expectTrue(
+        assistant.start(),
+        "start assistant without active request"
+    );
+
+    const auto interrupted = assistant.stopPlayback();
+
+    expectTrue(
+        !interrupted.had_active_request,
+        "no active request is reported"
+    );
+
+    expectTrue(
+        interrupted.output_stopped,
+        "local output stop still runs"
+    );
+
+    expectTrue(
+        !interrupted.cancel_attempted,
+        "no remote cancellation without request"
+    );
+
+    assistant.stop();
+}
+
+// 无活动请求
 }   // namespace
 
 int main() {
@@ -660,6 +896,7 @@ int main() {
     testProcessRequiresStart();
     testStopIsIdempotent();
     testCannotRestartAfterStop();
+    testStopPlaybackCancelsGeneration();
 
     if (failed_count == 0) {
         std::cout
