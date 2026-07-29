@@ -39,6 +39,8 @@ add_library(edge_voice_rag_core
     src/rag_control_protocol.cpp
     src/rag_control_client.cpp
     src/voice_input_pipeline.cpp
+    src/wav_audio_reader.cpp
+src/wav_audio_recorder.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -344,6 +346,16 @@ target_link_libraries(
     Threads::Threads
 )
 
+add_executable(
+    wav_audio_reader_tests
+    tests/wav_audio_reader_tests.cpp
+)
+target_link_libraries(
+    wav_audio_reader_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
@@ -416,6 +428,10 @@ add_test(
 add_test(
     NAME voice_input_pipeline_tests
     COMMAND voice_input_pipeline_tests
+)
+add_test(
+    NAME wav_audio_reader_tests
+    COMMAND wav_audio_reader_tests
 )
 
 set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
