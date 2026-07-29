@@ -11,6 +11,9 @@ find_package(Threads REQUIRED)
 option(EDGE_ENABLE_RKLLM "Enable Rockchip RKLLM backend" OFF)
 set(RKLLM_SDK_ROOT "" CACHE PATH "Path to RKLLM runtime directory")
 
+option(EDGE_ENABLE_SHERPA_ASR "Enable sherpa-onnx C++ ASR backend" OFF)
+set(SHERPA_ONNX_ROOT "" CACHE PATH "Path to sherpa-onnx SDK root")
+
 add_library(edge_voice_rag_core
     src/query_router.cpp
     src/query_classifier.cpp
@@ -110,6 +113,81 @@ if(EDGE_ENABLE_RKLLM)
     )
 endif()
 
+if(EDGE_ENABLE_SHERPA_ASR)
+    if(NOT SHERPA_ONNX_ROOT)
+        message(FATAL_ERROR
+            "EDGE_ENABLE_SHERPA_ASR=ON requires SHERPA_ONNX_ROOT"
+        )
+    endif()
+
+    find_path(
+        SHERPA_ONNX_INCLUDE_DIR
+        sherpa-onnx/c-api/cxx-api.h
+        PATHS
+        "${SHERPA_ONNX_ROOT}/include"
+        NO_DEFAULT_PATH
+    )
+
+    find_library(
+        SHERPA_ONNX_C_LIBRARY
+        NAMES sherpa-onnx-c-api
+        PATHS
+        "${SHERPA_ONNX_ROOT}/lib"
+        NO_DEFAULT_PATH
+    )
+
+    find_library(
+        SHERPA_ONNX_RUNTIME_LIBRARY
+        NAMES onnxruntime
+        PATHS
+        "${SHERPA_ONNX_ROOT}/lib"
+        NO_DEFAULT_PATH
+    )
+
+    if(NOT SHERPA_ONNX_INCLUDE_DIR)
+        message(FATAL_ERROR
+            "sherpa-onnx C++ headers were not found"
+        )
+    endif()
+
+    if(NOT SHERPA_ONNX_C_LIBRARY)
+        message(FATAL_ERROR
+            "libsherpa-onnx-c-api was not found"
+        )
+    endif()
+
+    if(NOT SHERPA_ONNX_RUNTIME_LIBRARY)
+        message(FATAL_ERROR
+            "libonnxruntime was not found"
+        )
+    endif()
+
+    target_sources(
+        edge_voice_rag_core
+        PRIVATE
+        src/sherpa_onnx_asr_backend.cpp
+    )
+
+    target_include_directories(
+        edge_voice_rag_core
+        PRIVATE
+        "${SHERPA_ONNX_INCLUDE_DIR}"
+    )
+
+    target_compile_definitions(
+        edge_voice_rag_core
+        PUBLIC
+        EDGE_ENABLE_SHERPA_ASR=1
+    )
+
+    target_link_libraries(
+        edge_voice_rag_core
+        PUBLIC
+        "${SHERPA_ONNX_C_LIBRARY}"
+        "${SHERPA_ONNX_RUNTIME_LIBRARY}"
+    )
+endif()
+
 add_executable(edge_voice_rag
     src/main.cpp
 )
@@ -156,6 +234,19 @@ target_link_libraries(
     PRIVATE
     edge_voice_rag_core
 )
+
+if(EDGE_ENABLE_SHERPA_ASR)
+    add_executable(
+        sherpa_asr_demo
+        src/sherpa_asr_demo.cpp
+    )
+
+    target_link_libraries(
+        sherpa_asr_demo
+        PRIVATE
+        edge_voice_rag_core
+    )
+endif()
 
 add_executable(
     multi_level_response_tests
@@ -433,6 +524,24 @@ add_test(
     NAME wav_audio_reader_tests
     COMMAND wav_audio_reader_tests
 )
+
+if(EDGE_ENABLE_SHERPA_ASR)
+    add_executable(
+        sherpa_onnx_asr_backend_tests
+        tests/sherpa_onnx_asr_backend_tests.cpp
+    )
+
+    target_link_libraries(
+        sherpa_onnx_asr_backend_tests
+        PRIVATE
+        edge_voice_rag_core
+    )
+
+    add_test(
+        NAME sherpa_onnx_asr_backend_tests
+        COMMAND sherpa_onnx_asr_backend_tests
+    )
+endif()
 
 set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
