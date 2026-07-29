@@ -38,6 +38,7 @@ add_library(edge_voice_rag_core
     src/cancellable_answer_backend.cpp
     src/rag_control_protocol.cpp
     src/rag_control_client.cpp
+    src/voice_input_pipeline.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -332,6 +333,17 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    voice_input_pipeline_tests
+    tests/voice_input_pipeline_tests.cpp
+)
+target_link_libraries(
+    voice_input_pipeline_tests
+    PRIVATE
+    edge_voice_rag_core
+    Threads::Threads
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
@@ -400,6 +412,10 @@ add_test(
 add_test(
     NAME rag_control_client_tests
     COMMAND rag_control_client_tests
+)
+add_test(
+    NAME voice_input_pipeline_tests
+    COMMAND voice_input_pipeline_tests
 )
 
 set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
