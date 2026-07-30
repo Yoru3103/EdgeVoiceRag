@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(nlohmann_json REQUIRED)
 find_package(Threads REQUIRED)
 
+option(EDGE_ENABLE_ALSA "Enable ALSA audio capture and playback" OFF)
+
 option(EDGE_ENABLE_RKLLM "Enable Rockchip RKLLM backend" OFF)
 set(RKLLM_SDK_ROOT "" CACHE PATH "Path to RKLLM runtime directory")
 
@@ -191,6 +193,35 @@ if(
         PUBLIC
         "${SHERPA_ONNX_C_LIBRARY}"
         "${SHERPA_ONNX_RUNTIME_LIBRARY}"
+    )
+endif()
+
+if(EDGE_ENABLE_ALSA)
+    find_package(ALSA REQUIRED)
+
+    target_sources(
+        edge_voice_rag_core
+        PRIVATE
+        src/alsa_audio_player.cpp
+        src/alsa_audio_recorder.cpp
+    )
+
+    target_link_directories(
+        edge_voice_rag_core
+        PRIVATE
+        "${ALSA_INCLUDE_DIRS}"
+    )
+
+    target_compile_definitions(
+        edge_voice_rag_core
+        PUBLIC
+        EDGE_ENABLE_ALSA=1
+    )
+
+    target_link_libraries(
+        edge_voice_rag_core
+        PUBLIC
+        "${ALSA_LIBRARIES}"
     )
 endif()
 
@@ -609,6 +640,24 @@ if(EDGE_ENABLE_SHERPA_TTS)
         COMMAND
             sherpa_onnx_tts_backend_tests
             "${SHERPA_ONNX_TTS_MODEL_DIR}"
+    )
+endif()
+
+if(EDGE_ENABLE_ALSA)
+    add_executable(
+        alsa_audio_backend_tests
+        tests/alsa_audio_backend_tests.cpp
+    )
+
+    target_link_libraries(
+        alsa_audio_backend_tests
+        PRIVATE
+        edge_voice_rag_core
+    )
+
+    add_test(
+        NAME alsa_audio_backend_tests
+        COMMAND alsa_audio_backend_tests
     )
 endif()
 

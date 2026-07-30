@@ -1,5 +1,6 @@
 build/
 build-sherpa/
+build-board-pc
 .cache/
 __pycache__/
 .pytest_cache/
