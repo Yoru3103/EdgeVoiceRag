@@ -12,7 +12,14 @@ option(EDGE_ENABLE_RKLLM "Enable Rockchip RKLLM backend" OFF)
 set(RKLLM_SDK_ROOT "" CACHE PATH "Path to RKLLM runtime directory")
 
 option(EDGE_ENABLE_SHERPA_ASR "Enable sherpa-onnx C++ ASR backend" OFF)
+option(EDGE_ENABLE_SHERPA_TTS "Enable sherpa-onnx C++ TTS backend" OFF)
 set(SHERPA_ONNX_ROOT "" CACHE PATH "Path to sherpa-onnx SDK root")
+set(
+    SHERPA_ONNX_TTS_MODEL_DIR
+    "${CMAKE_SOURCE_DIR}/models/tts/vits-melo-tts-zh_en"
+    CACHE PATH
+    "Path to the sherpa-onnx TTS model used by integration tests"
+)
 
 add_library(edge_voice_rag_core
     src/query_router.cpp
@@ -120,17 +127,20 @@ if(EDGE_ENABLE_RKLLM)
     )
 endif()
 
-if(EDGE_ENABLE_SHERPA_ASR)
+if(
+    EDGE_ENABLE_SHERPA_ASR
+    OR EDGE_ENABLE_SHERPA_TTS    
+)
     # 使用必须说明sherpa SDK的根目录位置
     if(NOT SHERPA_ONNX_ROOT)
         message(FATAL_ERROR
-            "EDGE_ENABLE_SHERPA_ASR=ON requires SHERPA_ONNX_ROOT"
+            "sherpa-onnx ASR/TTS requires SHERPA_ONNX_ROOT"
         )
     endif()
 
     find_path(
         SHERPA_ONNX_INCLUDE_DIR
-        sherpa-onnx/c-api/cxx-api.h
+        sherpa-onnx/c-api/c-api.h
         PATHS
         "${SHERPA_ONNX_ROOT}/include"
         NO_DEFAULT_PATH
@@ -154,7 +164,7 @@ if(EDGE_ENABLE_SHERPA_ASR)
 
     if(NOT SHERPA_ONNX_INCLUDE_DIR)
         message(FATAL_ERROR
-            "sherpa-onnx C++ headers were not found"
+            "sherpa-onnx C API headers were not found"
         )
     endif()
 
@@ -170,22 +180,10 @@ if(EDGE_ENABLE_SHERPA_ASR)
         )
     endif()
 
-    target_sources(
-        edge_voice_rag_core
-        PRIVATE
-        src/sherpa_onnx_asr_backend.cpp
-    )
-
     target_include_directories(
         edge_voice_rag_core
         PRIVATE
         "${SHERPA_ONNX_INCLUDE_DIR}"
-    )
-
-    target_compile_definitions(
-        edge_voice_rag_core
-        PUBLIC
-        EDGE_ENABLE_SHERPA_ASR=1
     )
 
     target_link_libraries(
@@ -193,6 +191,34 @@ if(EDGE_ENABLE_SHERPA_ASR)
         PUBLIC
         "${SHERPA_ONNX_C_LIBRARY}"
         "${SHERPA_ONNX_RUNTIME_LIBRARY}"
+    )
+endif()
+
+if(EDGE_ENABLE_SHERPA_ASR)
+    target_sources(
+        edge_voice_rag_core
+        PRIVATE
+        src/sherpa_onnx_asr_backend.cpp
+    )
+
+    target_compile_definitions(
+        edge_voice_rag_core
+        PUBLIC
+        EDGE_ENABLE_SHERPA_ASR=1
+    )
+endif()
+
+if(EDGE_ENABLE_SHERPA_TTS)
+    target_sources(
+        edge_voice_rag_core
+        PRIVATE
+        src/sherpa_onnx_tts_backend.cpp
+    )
+
+    target_compile_definitions(
+        edge_voice_rag_core
+        PUBLIC
+        EDGE_ENABLE_SHERPA_TTS=1
     )
 endif()
 
@@ -566,13 +592,34 @@ if(EDGE_ENABLE_SHERPA_ASR)
     )
 endif()
 
+if(EDGE_ENABLE_SHERPA_TTS)
+    add_executable(
+        sherpa_onnx_tts_backend_tests
+        tests/sherpa_onnx_tts_backend_tests.cpp
+    )
+
+    target_link_libraries(
+        sherpa_onnx_tts_backend_tests
+        PRIVATE
+        edge_voice_rag_core
+    )
+
+    add_test(
+        NAME sherpa_onnx_tts_backend_tests
+        COMMAND
+            sherpa_onnx_tts_backend_tests
+            "${SHERPA_ONNX_TTS_MODEL_DIR}"
+    )
+endif()
+
 set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 set_tests_properties(
     edge_response_backend_tests
     local_rag_llm_backend_tests
+    sherpa_onnx_asr_backend_tests
+    sherpa_onnx_tts_backend_tests
     PROPERTIES
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
-
