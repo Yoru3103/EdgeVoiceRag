@@ -43,7 +43,8 @@ add_library(edge_voice_rag_core
     src/rag_control_client.cpp
     src/voice_input_pipeline.cpp
     src/wav_audio_reader.cpp
-src/wav_audio_recorder.cpp
+    src/wav_audio_recorder.cpp
+    src/local_rag_llm_backend.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -57,6 +58,7 @@ target_link_libraries(
 )
 
 if(EDGE_ENABLE_RKLLM)
+    # 查找rkllm.h所在目录，在设定paths中寻找，找到后幅值给RKLLM_INCLUDE_DIR
     find_path(
         RKLLM_INCLUDE_DIR
         rkllm.h
@@ -66,6 +68,7 @@ if(EDGE_ENABLE_RKLLM)
         NO_DEFAULT_PATH
     )
 
+    # 查找动态库带有rkllmrt相关的动态库文件
     find_library(
         RKLLM_RUNTIME_LIBRARY
         NAMES rkllmrt
@@ -88,24 +91,28 @@ if(EDGE_ENABLE_RKLLM)
         )
     endif()
 
+    # 加入源文件
     target_sources(
         edge_voice_rag_core
         PRIVATE
         src/rkllm_backend.cpp
     )
 
+    # 添加头文件搜索路径 PRIVATE表示只用于编译，不会暴露给其他依赖edge_voice_rag_core的目标
     target_include_directories(
         edge_voice_rag_core
         PRIVATE
         "${RKLLM_INCLUDE_DIR}"
     )
 
+    # 加入条件编译宏
     target_compile_definitions(
         edge_voice_rag_core
         PUBLIC
         EDGE_ENABLE_RKLLM=1
     )
 
+    # 链接动态库
     target_link_libraries(
         edge_voice_rag_core
         PUBLIC
@@ -114,6 +121,7 @@ if(EDGE_ENABLE_RKLLM)
 endif()
 
 if(EDGE_ENABLE_SHERPA_ASR)
+    # 使用必须说明sherpa SDK的根目录位置
     if(NOT SHERPA_ONNX_ROOT)
         message(FATAL_ERROR
             "EDGE_ENABLE_SHERPA_ASR=ON requires SHERPA_ONNX_ROOT"
@@ -447,6 +455,17 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    local_rag_llm_backend_tests
+    tests/local_rag_llm_backend_tests.cpp
+)
+target_link_libraries(
+    local_rag_llm_backend_tests
+    PRIVATE
+    edge_voice_rag_core
+    Threads::Threads
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
@@ -524,6 +543,10 @@ add_test(
     NAME wav_audio_reader_tests
     COMMAND wav_audio_reader_tests
 )
+add_test(
+    NAME local_rag_llm_backend_tests
+    COMMAND local_rag_llm_backend_tests
+)
 
 if(EDGE_ENABLE_SHERPA_ASR)
     add_executable(
@@ -548,6 +571,8 @@ set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
 )
 set_tests_properties(
     edge_response_backend_tests
+    local_rag_llm_backend_tests
     PROPERTIES
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
+

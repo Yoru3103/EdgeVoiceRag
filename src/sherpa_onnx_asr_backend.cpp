@@ -50,6 +50,8 @@ struct OfflineResultDeleter {
     }
 };
 
+// OfflineRecognizer：长期存在的识别引擎，内部包含ONNX Runtime Session，tokens 字典， 特征提取配置，解码配置
+// 只构造一次，否则每次音频都需要重新加载引擎，开销较大
 using OfflineRecognizerPtr = std::unique_ptr<
     const SherpaOnnxOfflineRecognizer,
     OfflineRecognizerDeleter
@@ -98,32 +100,34 @@ void requireRegularFile(
 }
 
 void validateConfig(const SherpaOnnxAsrConfig& config) {
-    if (config.num_threads <= 0) {
+    if (config.num_threads <= 0) {  // 线程数大于0
         throw std::invalid_argument(
             "sherpa ASR num_threads must "
             "be greater than zero"
         );
     }
 
-    if (config.language.empty()) {
+    if (config.language.empty()) {  // 语言不为空
         throw std::invalid_argument(
             "sherpa ASR language must not "
             "be empty"
         );
     }
 
-    if (config.provider.empty()) {
+    if (config.provider.empty()) {  
         throw std::invalid_argument(
             "sherpa ASR provider must not "
             "be empty"
         );
     }
 
+    //模型文件：包含神经网络结构、模型权重、输入输出定义、部分模型元数据
     requireRegularFile(
         config.model_path,
         "SenseVoice model"
     );
 
+    // 将tokenid转换为真实文字
     requireRegularFile(
         config.tokens_path,
         "SenseVoice tokens"
@@ -134,7 +138,8 @@ SherpaOnnxOfflineRecognizerConfig buildConfig(
     const SherpaOnnxAsrConfig& config
 ) {
     SherpaOnnxOfflineRecognizerConfig recognizer_config{};
-
+    
+    // 模型期望采样率与声学特征维度
     recognizer_config.feat_config.sample_rate = 16000;
     recognizer_config.feat_config.feature_dim = 80;
 
@@ -142,6 +147,7 @@ SherpaOnnxOfflineRecognizerConfig buildConfig(
         config.model_path.c_str();
     recognizer_config.model_config.sense_voice.language =
         config.language.c_str();
+    // INT：逆文本规范化。把类似口语形式转成更适合显示的数字或标点
     recognizer_config.model_config.sense_voice.use_itn =
         config.use_itn ? 1 : 0;
     recognizer_config.model_config.tokens =
@@ -228,10 +234,13 @@ public:
         const auto start = std::chrono::steady_clock::now();
 
         try {
+            // 将可能的多声道数据取平均并将16位数据转换到[-1.0, 1.0)
             std::vector<float> samples = convertToMonoFloat(audio);
 
+            // 解码上锁
             std::lock_guard<std::mutex> lock(decode_mutex_);
 
+            // stream表示一次具体的识别任务
             OfflineStreamPtr stream(
                 SherpaOnnxCreateOfflineStream(
                     recognizer_.get()
@@ -243,17 +252,20 @@ public:
             }
 
             SherpaOnnxAcceptWaveformOffline(
-                stream.get(),
-                audio.sample_rate,
-                samples.data(),
-                static_cast<std::int32_t>(samples.size())
+                stream.get(),                               // 当前识别任务
+                audio.sample_rate,                          // 采样率
+                samples.data(),                             // float音频首地址
+                static_cast<std::int32_t>(samples.size())   // 采样点数量
             );
 
+            // 执行模型推理
+            // offline表示非流式识别
             SherpaOnnxDecodeOfflineStream(
                 recognizer_.get(),
                 stream.get()
             );
 
+            // 获取识别结果
             OfflineResultPtr recognizer_result(
                 SherpaOnnxGetOfflineStreamResult(
                     stream.get()
