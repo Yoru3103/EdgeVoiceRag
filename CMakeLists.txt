@@ -9,6 +9,7 @@ find_package(nlohmann_json REQUIRED)
 find_package(Threads REQUIRED)
 
 option(EDGE_ENABLE_ALSA "Enable ALSA audio capture and playback" OFF)
+option(EDGE_ENABLE_SHERPA_VAD "Enable sherpa-onnx C++ VAD recorder" OFF)
 
 option(EDGE_ENABLE_RKLLM "Enable Rockchip RKLLM backend" OFF)
 set(RKLLM_SDK_ROOT "" CACHE PATH "Path to RKLLM runtime directory")
@@ -131,7 +132,8 @@ endif()
 
 if(
     EDGE_ENABLE_SHERPA_ASR
-    OR EDGE_ENABLE_SHERPA_TTS    
+    OR EDGE_ENABLE_SHERPA_TTS
+    OR EDGE_ENABLE_SHERPA_VAD
 )
     # 使用必须说明sherpa SDK的根目录位置
     if(NOT SHERPA_ONNX_ROOT)
@@ -204,6 +206,7 @@ if(EDGE_ENABLE_ALSA)
         PRIVATE
         src/alsa_audio_player.cpp
         src/alsa_audio_recorder.cpp
+        src/alsa_pcm_stream_source.cpp
     )
 
     target_link_directories(
@@ -250,6 +253,20 @@ if(EDGE_ENABLE_SHERPA_TTS)
         edge_voice_rag_core
         PUBLIC
         EDGE_ENABLE_SHERPA_TTS=1
+    )
+endif()
+
+if(EDGE_ENABLE_SHERPA_VAD)
+    target_sources(
+        edge_voice_rag_core
+        PRIVATE
+        src/sherpa_onnx_vad_audio_recorder.cpp
+    )
+
+    target_compile_definitions(
+        edge_voice_rag_core
+        PUBLIC
+        EDGE_ENABLE_SHERPA_VAD=1
     )
 endif()
 
@@ -658,6 +675,32 @@ if(EDGE_ENABLE_ALSA)
     add_test(
         NAME alsa_audio_backend_tests
         COMMAND alsa_audio_backend_tests
+    )
+endif()
+
+if(EDGE_ENABLE_SHERPA_VAD)
+    add_executable(
+        sherpa_onnx_vad_audio_recorder_tests
+        tests/sherpa_onnx_vad_audio_recorder_tests.cpp
+    )
+
+    target_link_libraries(
+        sherpa_onnx_vad_audio_recorder_tests
+        PRIVATE
+        edge_voice_rag_core
+    )
+
+    add_test(
+        NAME sherpa_onnx_vad_audio_recorder_tests
+        COMMAND
+            sherpa_onnx_vad_audio_recorder_tests
+            "${CMAKE_SOURCE_DIR}/models/vad/silero_vad.onnx"
+    )
+
+    set_tests_properties(
+        sherpa_onnx_vad_audio_recorder_tests
+        PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     )
 endif()
 
