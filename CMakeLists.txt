@@ -56,6 +56,7 @@ add_library(edge_voice_rag_core
     src/wav_audio_recorder.cpp
     src/local_rag_llm_backend.cpp
     src/continuous_voice_session.cpp
+    src/board_app_config.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -271,7 +272,26 @@ if(EDGE_ENABLE_SHERPA_VAD)
     )
 endif()
 
-add_executable(edge_voice_rag
+if(
+    EDGE_ENABLE_ALSA
+    AND EDGE_ENABLE_SHERPA_ASR
+    AND EDGE_ENABLE_SHERPA_VAD
+    AND EDGE_ENABLE_SHERPA_TTS
+)
+    add_executable(
+        board_voice_assistant
+        src/board_voice_main.cpp
+    )
+
+    target_link_libraries(
+        board_voice_assistant
+        PRIVATE
+        edge_voice_rag_core
+    )
+endif()
+
+add_executable(
+    edge_voice_rag
     src/main.cpp
 )
 
