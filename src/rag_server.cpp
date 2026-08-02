@@ -17,7 +17,7 @@ static std::string messageToString(const zmq::message_t& message) {
     );
 }
 
-static std::string buildRagAnswer(const std::vector<SearchResult>& results) {
+static std::string buildRagAnswer(const std::vector<RetrievalResult>& results) {
     std::ostringstream answer;
 
     answer << "根据车辆手册：";
@@ -30,7 +30,13 @@ static std::string buildRagAnswer(const std::vector<SearchResult>& results) {
     answer << "\n";
 
     for (size_t i = 0; i < results.size(); i++) {
-        answer << i + 1 << ". " << results[i].document << " [score=" << results[i].score << "]";
+        answer 
+            << i + 1 
+            << ". " 
+            << results[i].chunk.text 
+            << " [score=" 
+            << results[i].final_score 
+            << "]";
 
         if (i + 1 < results.size()) {
             answer << "\n";
@@ -105,7 +111,7 @@ int main(int argc, char *argv[]) {
 
         PerfTimer timer("rag_server_search");
 
-        std::vector<SearchResult> results = rag_engine.searchTopK(query, config.topK());
+        std::vector<RetrievalResult> results = rag_engine.searchTopK(query, config.topK());
         std::string reply = buildRagAnswer(results);
 
         socket.send(zmq::buffer(reply), zmq::send_flags::none);

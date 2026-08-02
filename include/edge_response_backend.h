@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "rag_engine.h"
+#include "retriever.h"
 #include "response_backend.h"
 #include "zmq_text_client.h"
 
@@ -10,7 +10,7 @@
 class EdgeResponseBackend : public ResponseBackend {
 public:
     EdgeResponseBackend(
-        RagEngine& rag_engine,
+        Retriever& retriever,
         TextRequester& requester,
         std::string rag_backend,
         std::string rag_endpoint,
@@ -24,7 +24,7 @@ public:
     BackendResult generateLlm(const std::string& prompt) override;
 
 private:
-    RagEngine& rag_engine_;
+    Retriever& retriever_;
     TextRequester& requester_;
 
     std::string rag_backend_;
@@ -40,6 +40,6 @@ private:
     BackendResult searchZmqRag(const std::string& query);
 
     static std::string buildLocalAnswer(
-        const std::vector<SearchResult>& results
+        const std::vector<RetrievalResult>& results
     );
 };

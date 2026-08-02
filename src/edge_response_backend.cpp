@@ -20,7 +20,7 @@ std::string nextLlmRequestId() {
 
 
 EdgeResponseBackend::EdgeResponseBackend(
-    RagEngine& rag_engine,
+    Retriever& retriever,
     TextRequester& requester,
     std::string rag_backend,
     std::string rag_endpoint,
@@ -29,7 +29,7 @@ EdgeResponseBackend::EdgeResponseBackend(
     int llm_timeout_ms,
     int top_k
 )
-    : rag_engine_(rag_engine),
+    : retriever_(retriever),
       requester_(requester),
       rag_backend_(std::move(rag_backend)),
       rag_endpoint_(std::move(rag_endpoint)),
@@ -95,7 +95,7 @@ BackendResult EdgeResponseBackend::generateLlm(const std::string& prompt) {
 }
 
 BackendResult EdgeResponseBackend::searchLocalRag(const std::string& query) {
-    const std::vector<SearchResult> results = rag_engine_.searchTopK(query, top_k_);
+    const std::vector<RetrievalResult> results = retriever_.searchTopK(query, top_k_);
 
     if (results.empty()) {
         return BackendResult::failure(
@@ -137,7 +137,7 @@ BackendResult EdgeResponseBackend::searchZmqRag(const std::string& query) {
     return BackendResult::success(answer);
 }
 
-std::string EdgeResponseBackend::buildLocalAnswer(const std::vector<SearchResult>& results) {
+std::string EdgeResponseBackend::buildLocalAnswer(const std::vector<RetrievalResult>& results) {
     std::ostringstream answer;
 
     answer << "根据车辆手册：\n";
@@ -146,9 +146,9 @@ std::string EdgeResponseBackend::buildLocalAnswer(const std::vector<SearchResult
         answer
             << i + 1
             << ". "
-            << results[i].document
+            << results[i].chunk.text
             << " [score="
-            << results[i].score
+            << results[i].final_score
             << "]";
 
         if (i + 1 < results.size()) {

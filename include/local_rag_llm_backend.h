@@ -6,7 +6,7 @@
 
 #include "cancellable_answer_backend.h"
 #include "llm_backend.h"
-#include "rag_engine.h"
+#include "retriever.h"
 #include "streaming_answer_backend.h"
 
 struct LocalRagLlmBackendConfig {
@@ -26,7 +26,7 @@ class LocalRagLlmBackend final
     , public CancellableAnswerBackend {
 public:
     LocalRagLlmBackend(
-        RagEngine& rag_engine,
+        Retriever& retriever,
         LlmBackend& llm_backend,
         LocalRagLlmBackendConfig config = {}
     );
@@ -43,7 +43,7 @@ public:
     ) const override;
 
 private:
-    RagEngine& rag_engine_;
+    Retriever& retriever_;
     LlmBackend& llm_backend_;
     LocalRagLlmBackendConfig config_;
 
@@ -58,7 +58,7 @@ private:
 
     std::string buildPrompt(
         const std::string& query,
-        const std::vector<SearchResult>& results
+        const std::vector<RetrievalResult>& results
     ) const;
 
     void clearActiveRequest(

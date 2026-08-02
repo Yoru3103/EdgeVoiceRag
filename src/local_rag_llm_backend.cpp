@@ -22,11 +22,11 @@ double elapsedMilliseconds(const Clock::time_point& start) {
 }   // namespace
 
 LocalRagLlmBackend::LocalRagLlmBackend(
-    RagEngine& rag_engine,
+    Retriever& retriever,
     LlmBackend& llm_backend,
     LocalRagLlmBackendConfig config
 )
-    : rag_engine_(rag_engine)
+    : retriever_(retriever)
     , llm_backend_(llm_backend)
     , config_(std::move(config)) {
     if (config_.top_k <= 0) {
@@ -99,8 +99,8 @@ RagStreamQueryResult LocalRagLlmBackend::query(
     std::string accumulated_answer;
 
     try {
-        const std::vector<SearchResult> search_results = 
-            rag_engine_.searchTopK(
+        const std::vector<RetrievalResult> search_results = 
+            retriever_.searchTopK(
                 request.query,
                 config_.top_k
             );
@@ -256,7 +256,7 @@ CancellationResult LocalRagLlmBackend::cancel(const std::string& request_id) con
 
 std::string LocalRagLlmBackend::buildPrompt(
     const std::string& query,
-    const std::vector<SearchResult>& results
+    const std::vector<RetrievalResult>& results
 ) const {
     std::ostringstream prompt;
 
@@ -274,7 +274,7 @@ std::string LocalRagLlmBackend::buildPrompt(
                 << '['
                 << i + 1
                 << "] "
-                << results[i].document
+                << results[i].chunk.text
                 << '\n';
         }
     }

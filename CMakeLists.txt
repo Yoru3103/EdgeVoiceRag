@@ -659,6 +659,12 @@ if(EDGE_ENABLE_SHERPA_ASR)
         NAME sherpa_onnx_asr_backend_tests
         COMMAND sherpa_onnx_asr_backend_tests
     )
+
+    set_tests_properties(
+        sherpa_onnx_asr_backend_tests
+        PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
 endif()
 
 if(EDGE_ENABLE_SHERPA_TTS)
@@ -678,6 +684,12 @@ if(EDGE_ENABLE_SHERPA_TTS)
         COMMAND
             sherpa_onnx_tts_backend_tests
             "${SHERPA_ONNX_TTS_MODEL_DIR}"
+    )
+
+    set_tests_properties(
+        sherpa_onnx_tts_backend_tests
+        PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     )
 endif()
 
@@ -731,8 +743,6 @@ set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
 set_tests_properties(
     edge_response_backend_tests
     local_rag_llm_backend_tests
-    sherpa_onnx_asr_backend_tests
-    sherpa_onnx_tts_backend_tests
     PROPERTIES
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )

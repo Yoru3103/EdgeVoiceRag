@@ -4,7 +4,7 @@
 #include <string>
 
 struct BoardAppConfig {
-    std::string knowledge_path = "docs/vehicle_manual.txt";
+    std::string knowledge_path = "vector_db/chunks.json";
 
     int top_k = 3;
 

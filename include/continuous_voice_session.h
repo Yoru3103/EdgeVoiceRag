@@ -69,7 +69,7 @@ private:
 
     ContinuousVoiceSessionConfig config_;
 
-    std::atomic_bool stop_requested_{false};
+    std::atomic_bool stop_requested_{false};                    // 停止标志
 
     static std::string makeRequestId(std::size_t sequence);
 

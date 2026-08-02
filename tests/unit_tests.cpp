@@ -48,7 +48,7 @@ static void testQueryRouter() {
 }
 
 static void testRagEngine() {
-    RagEngine rag_engine("docs/vehicle_manual.txt");
+    RagEngine rag_engine("vector_db/chunks.json");
 
     expectTrue(
         rag_engine.loadKnowledgeBase(),
@@ -56,7 +56,7 @@ static void testRagEngine() {
     );
 
     {
-        std::vector<SearchResult> results = rag_engine.searchTopK("空调怎么打开", 3);
+        std::vector<RetrievalResult> results = rag_engine.searchTopK("空调怎么打开", 3);
 
         expectTrue(
             !results.empty(),
@@ -65,7 +65,7 @@ static void testRagEngine() {
     }
 
     {
-        std::vector<SearchResult> results = rag_engine.searchTopK("蓝牙怎么连接", 3);
+        std::vector<RetrievalResult> results = rag_engine.searchTopK("蓝牙怎么连接", 3);
 
         expectTrue(
             !results.empty(),
@@ -74,14 +74,30 @@ static void testRagEngine() {
 
         if (!results.empty()) {
             expectTrue(
-                results[0].document.find("蓝牙连接") != std::string::npos,
+                results[0].chunk.title.find("蓝牙连接") != std::string::npos,
                 "RagEngine: bluetooth query should hit bluetooth document"
+            );
+            expectTrue(
+                results[0].chunk.text.find("蓝牙连接") != std::string::npos,
+                "RagEngine: bluetooth result should contain document text"
+            );
+            expectTrue(
+                results[0].sparse_score > 0.0F,
+                "RagEngine: sparse score should be positive"
+            );
+            expectTrue(
+                results[0].dense_score == 0.0F,
+                "RagEngine: dense score should not be used yet"
+            );
+            expectTrue(
+                results[0].final_score == results[0].sparse_score,
+                "RagEngine: final score should equal sparse score"
             );
         }
     }
 
     {
-        std::vector<SearchResult> results = rag_engine.searchTopK("完全无关的问题", 3);
+        std::vector<RetrievalResult> results = rag_engine.searchTopK("完全无关的问题", 3);
 
         expectTrue(
             results.empty(),
@@ -97,6 +113,24 @@ static void testRagEngine() {
         answer == "LLM 生成 answer",
         "RagResponseParser: should prefer generated_answer over answer"
     );
+    }
+
+    {
+        const std::vector<RetrievalResult> results = rag_engine.searchTopK("", 3);
+
+        expectTrue(
+            results.empty(),
+            "RagEngine: empty query should return no results"
+        );
+    }
+
+    {
+        const std::vector<RetrievalResult> results = rag_engine.searchTopK("空调怎么打开", 0);
+
+        expectTrue(
+            results.empty(),
+            "RagEngine: non-positive top_k should return no results"
+        );
     }
 }
 

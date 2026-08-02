@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 
 #include "edge_response_backend.h"
+#include "rag_engine.h"
 
 namespace {
 
@@ -84,7 +85,7 @@ public:
 };
 
 void testLocalRag() {
-    RagEngine rag_engine("docs/vehicle_manual.txt");
+    RagEngine rag_engine("vector_db/chunks.json");
 
     expectTrue(
         rag_engine.loadKnowledgeBase(),
@@ -114,7 +115,7 @@ void testLocalRag() {
 }
 
 void testZmqRag() {
-    RagEngine rag_engine("docs/vehicle_manual.txt");
+    RagEngine rag_engine("vector_db/chunks.json");
 
     FakeTextRequester requester;
 
@@ -148,7 +149,7 @@ void testZmqRag() {
 }
 
 void testZmqLlm() {
-    RagEngine rag_engine("docs/vehicle_manual.txt");
+    RagEngine rag_engine("vector_db/chunks.json");
 
     FakeTextRequester requester;
 
@@ -204,7 +205,7 @@ void testZmqLlm() {
 }
 
 void testRequesterFailure() {
-    RagEngine rag_engine("docs/vehicle_manual.txt");
+    RagEngine rag_engine("vector_db/chunks.json");
 
     FakeTextRequester requester;
 

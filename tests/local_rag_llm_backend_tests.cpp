@@ -65,7 +65,7 @@ public:
 
 void testLocalRagAndLlmAreConnected() {
     RagEngine rag_engine(
-        "docs/vehicle_manual.txt"
+        "vector_db/chunks.json"
     );
 
     expectTrue(
@@ -167,7 +167,7 @@ void testLocalRagAndLlmAreConnected() {
 
 void testInvalidRequestIsRejected() {
     RagEngine rag_engine(
-        "docs/vehicle_manual.txt"
+        "vector_db/chunks.json"
     );
 
     expectTrue(
@@ -211,7 +211,7 @@ void testInvalidRequestIsRejected() {
 
 void testBackendImplementsCancellationInterface() {
     RagEngine rag_engine(
-        "docs/vehicle_manual.txt"
+        "vector_db/chunks.json"
     );
 
     expectTrue(
