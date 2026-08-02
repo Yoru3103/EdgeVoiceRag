@@ -49,6 +49,10 @@ public:
         return audio_.channels;
     }
 
+    void cancelCurrentCapture() override {
+        capture_cancelled_ = true;
+    }
+
     PcmStreamResult capture(
         const PcmChunkHandler& handler
     ) override {
@@ -57,6 +61,8 @@ public:
                 "handler is empty"
             );
         }
+
+        capture_cancelled_ = false;
 
         const std::size_t channels =
             static_cast<std::size_t>(
@@ -67,6 +73,7 @@ public:
 
         while (
             !stopped_
+            && !capture_cancelled_
             && offset_frames < audio_.frameCount()
         ) {
             const std::size_t frames =
@@ -113,12 +120,14 @@ public:
 
     void stop() override {
         stopped_ = true;
+        capture_cancelled_ = true;
     }
 
 private:
     AudioBuffer audio_;
     std::size_t chunk_frames_;
     bool stopped_ = false;
+    bool capture_cancelled_ = false;
 };
 
 SherpaOnnxVadConfig makeVadConfig(

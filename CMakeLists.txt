@@ -55,6 +55,7 @@ add_library(edge_voice_rag_core
     src/wav_audio_reader.cpp
     src/wav_audio_recorder.cpp
     src/local_rag_llm_backend.cpp
+    src/continuous_voice_session.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/

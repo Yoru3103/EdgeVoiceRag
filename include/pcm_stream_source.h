@@ -52,5 +52,7 @@ public:
      */
     virtual PcmStreamResult capture(const PcmChunkHandler& handler) = 0;
 
+    virtual void cancelCurrentCapture() = 0;
+    
     virtual void stop() = 0;
 };

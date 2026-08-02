@@ -212,21 +212,35 @@ public:
         , stopped_(stopped)
         , vad_(createVad(config)) {}
 
-    AudioCaptureResult recordUtterance() {
+    // 一直等待，直到捕获到第一段完整语音，然后返回
+    AudioCaptureResult recordUtterance(
+        const SpeechStartedHandler& handler,
+        std::atomic_bool& cancel_requested
+    ) {
+        if (cancel_requested.load()) {
+            cancel_requested.store(false);
+
+            return AudioCaptureResult::failure(
+                "VAD recording was cancelled"
+            );
+        }
+
         std::lock_guard<std::mutex> lock(record_mutex_);
 
         if (stopped_.load()) {
             return AudioCaptureResult::failure("VAD recorder is stopped");
         }
 
+        // 复位VAD
         SherpaOnnxVoiceActivityDetectorReset(vad_.get());
 
         const auto start = std::chrono::steady_clock::now();
 
-        bool timed_out = false;
-        bool speech_started = false;
+        bool timed_out = false;         // 等待很久仍没有人说话
+        bool speech_started = false;    // 已经检测到说话
+        bool speech_handler_called = false;
 
-        std::size_t received_frames = 0;
+        std::size_t received_frames = 0;// 目前总共收到多少帧
 
         AudioBuffer utterance;
         utterance.sample_rate = config_.sample_rate;
@@ -234,20 +248,23 @@ public:
 
         const auto consumeFrontSegment = 
             [this, &utterance]() -> bool {
+                // 检测VAD已经完成的语音端队列是否为空
                 if (SherpaOnnxVoiceActivityDetectorEmpty(vad_.get())) {
                     return false;
                 }
 
+                // 取得队首完整语音段
                 SpeechSegmentPtr segment(
                     SherpaOnnxVoiceActivityDetectorFront(vad_.get())
                 );
 
                 if (
                     !segment
-                    || segment->samples == nullptr
-                    || segment->n <= 0
+                    || segment->samples == nullptr      // 语音浮点采样数据
+                    || segment->n <= 0                  // 采样点数量
                 ) {
                     if (segment) {
+                        // 存在问题 移除缓冲区数据
                         SherpaOnnxVoiceActivityDetectorPop(vad_.get());
                     }
 
@@ -266,7 +283,8 @@ public:
 
                 return true;
             };
-
+        
+        // 每块PCM的回调函数
         const PcmStreamResult stream_result = 
             source_.capture(
                 [
@@ -274,39 +292,56 @@ public:
                     &timed_out,
                     &speech_started,
                     &received_frames,
-                    &consumeFrontSegment
+                    &consumeFrontSegment,
+                    &handler,
+                    &speech_handler_called,
+                    &cancel_requested
                 ](const AudioBuffer& chunk) {
-                    if (stopped_.load()) {
+                    if (stopped_.load() || cancel_requested.load()) {
                         return false;
                     }
 
+                    // PCM16转浮点
                     const std::vector<float> samples = convertToMonoFloat(chunk);
                     
                     received_frames += chunk.frameCount();
 
+                    // 将音频送入VAD
                     SherpaOnnxVoiceActivityDetectorAcceptWaveform(
                         vad_.get(),
                         samples.data(),
                         static_cast<std::int32_t>(samples.size())
                     );
 
+
+                    // 检测语音是否已经开始
                     if (
                         SherpaOnnxVoiceActivityDetectorDetected(vad_.get()) 
                     ) {
-                        speech_started = true;
+                        speech_started = true;      // 当检测到语音开始时设置为true，不会再判断等待开始说话超时
+
+                        if (
+                            !speech_handler_called
+                            && handler
+                        ) {
+                            speech_handler_called = true;
+                            handler();
+                        }
                     }
 
+                    // 表示已经获得一个完整语音段返回true令ALS停止读取
                     if (consumeFrontSegment()) {
                         return false;
                     }
 
                     /*
                      * 使用已经收到的音频长度判断超时，
-                     * 而不是墙上时钟。这样测试不依赖机器速度。
+                     * 而不是时钟。这样测试不依赖机器速度。
                      */
                     const double received_seconds = 
                         static_cast<double>(received_frames) / static_cast<double>(config_.sample_rate);
                     
+                    // 一直没有检测到语音或录取时间超出最大时长
                     if (!speech_started && received_seconds >= config_.max_wait_seconds) {
                         timed_out = true;
                         return false;
@@ -315,6 +350,12 @@ public:
                     return true;
                 }
             );
+
+        if (cancel_requested.exchange(false)) {
+            return AudioCaptureResult::failure(
+                "VAD recording was cancelled"
+            );
+        }
         
         if (stopped_.load()) {
             return AudioCaptureResult::failure("VAD recording was interrupted");
@@ -370,9 +411,10 @@ private:
     static VadPtr createVad(const SherpaOnnxVadConfig& config) {
         const SherpaOnnxVadModelConfig vad_config = buildVadConfig(config);
 
+        // 创建VAD对象
         VadPtr vad(
             SherpaOnnxCreateVoiceActivityDetector(
-                &vad_config,
+                &vad_config,                    
                 config.buffer_size_seconds
             )
         );
@@ -384,12 +426,12 @@ private:
         return vad;
     }
 
-    PcmStreamSource& source_;
+    PcmStreamSource& source_;           // 音频采集模块
     SherpaOnnxVadConfig config_;
     std::atomic_bool& stopped_;
 
-    VadPtr vad_;
-    std::mutex record_mutex_;
+    VadPtr vad_;                        // ONNX CAD对象
+    std::mutex record_mutex_;           // 防止同时录制两个语句
 };
 
 SherpaOnnxVadAudioRecorder::SherpaOnnxVadAudioRecorder(
@@ -428,17 +470,32 @@ std::string SherpaOnnxVadAudioRecorder::name() const {
     return "sherpa_onnx_silero_vad";
 }
 
-AudioCaptureResult SherpaOnnxVadAudioRecorder::recordUtterance() {
+AudioCaptureResult SherpaOnnxVadAudioRecorder::recordUtterance(
+    const SpeechStartedHandler& handler
+) {
     if (!impl_) {
         return AudioCaptureResult::failure(
             "VAD recorder is not initialized"
         );
     }
 
-    return impl_->recordUtterance();
+    return impl_->recordUtterance(
+        handler,
+        cancel_requested_
+    );
+}
+
+AudioCaptureResult SherpaOnnxVadAudioRecorder::recordUtterance() {
+    return recordUtterance({});
+}
+
+void SherpaOnnxVadAudioRecorder::cancelCurrentRecording() {
+    cancel_requested_.store(true);
+    source_.cancelCurrentCapture();
 }
 
 void SherpaOnnxVadAudioRecorder::stop() {
+    cancel_requested_.store(true);
     stopped_.store(true);
     source_.stop();
 }

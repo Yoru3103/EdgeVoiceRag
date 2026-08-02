@@ -157,6 +157,8 @@ public:
             return PcmStreamResult::failure("ALSA PCM stream source is stopped");
         }
 
+        capture_cancelled_.store(false);
+
         if (handle_ == nullptr) {
             return PcmStreamResult::failure("ALSA PCM stream is not initialized");
         }
@@ -184,7 +186,7 @@ public:
         std::size_t total_frames = 0;
 
         try {
-            while (!stopped.load()) {
+            while (!stopped.load() && !capture_cancelled_.load()) {
                 // 从麦克风读取
                 const snd_pcm_sframes_t read_result = 
                     snd_pcm_readi(
@@ -198,7 +200,7 @@ public:
                 }
 
                 if (read_result < 0) {
-                    if (stopped.load()) {
+                    if (stopped.load() || capture_cancelled_.load()) {
                         // 关闭设备
                         snd_pcm_drop(handle_);
                         
@@ -272,12 +274,21 @@ public:
         }
     }
 
-    void stop() {
-        stopped.store(true);
+    void cancelCurrentCapture() {
+        capture_cancelled_.store(true);
 
+        /*
+        * 解除可能阻塞的 snd_pcm_readi()。
+        * 下一次 capture() 会重新调用 prepare。
+        */
         if (handle_ != nullptr) {
             snd_pcm_drop(handle_);
         }
+    }
+
+    void stop() {
+        stopped.store(true);
+        cancelCurrentCapture();
     }
 
 private:
@@ -285,6 +296,7 @@ private:
 
     snd_pcm_t *handle_ = nullptr;
 
+    std::atomic_bool capture_cancelled_{false};
     std::atomic_bool stopped{false};
     std::mutex capture_mutex_;
 };
@@ -320,6 +332,12 @@ PcmStreamResult AlsaPcmStreamSource::capture(
     }
 
     return impl_->capture(handler);
+}
+
+void AlsaPcmStreamSource::cancelCurrentCapture() {
+    if (impl_) {
+        impl_->cancelCurrentCapture();
+    }
 }
 
 void AlsaPcmStreamSource::stop() {

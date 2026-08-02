@@ -78,7 +78,7 @@ std::size_t calculateTargetFrames(const AlsaAudioRecorderConfig& config) {
     const std::int64_t numerator = static_cast<std::int64_t>(config.sample_rate) *
         static_cast<std::int64_t>(config.record_duration_ms);
 
-    const std::int64_t frames = numerator / 1000;
+    const std::int64_t frames = numerator / 1000;   // 单位ms
 
     if (frames <= 0) {
         throw std::invalid_argument("ALSA capture duration produces no audio frames");

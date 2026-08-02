@@ -6,6 +6,7 @@
 
 #include "audio_recorder.h"
 #include "pcm_stream_source.h"
+#include "interruptible_audio_recorder.h"
 
 struct SherpaOnnxVadConfig {
     std::string model_path;
@@ -17,7 +18,7 @@ struct SherpaOnnxVadConfig {
     float threshold = 0.25F;                // 语音概率高于该值认为存在语音
 
     float min_silence_duration = 0.8F;      // 连续静音多久认为用户说完
-    float min_speech_duration = 0.25F;      // 过滤敲击、咳嗽等短声音
+    float min_speech_duration = 0.25F;      // 过滤敲击、咳嗽等短声音；表示语音至少持续多久才算真正说话
     float max_speech_duration = 15.0F;      // 避免录音无限持续
     float max_wait_seconds = 10.0F;         // 等待用户开口的最长时间
 
@@ -28,7 +29,8 @@ struct SherpaOnnxVadConfig {
 };
 
 // 接收ALSA的chunk，使用Silero VAD判断语音开始和结束，返回AudioBuffer
-class SherpaOnnxVadAudioRecorder final : public AudioRecorder {
+class SherpaOnnxVadAudioRecorder final 
+    : public InterruptibleAudioRecorder {
 public:
     SherpaOnnxVadAudioRecorder(
         PcmStreamSource& source,
@@ -44,6 +46,12 @@ public:
 
     AudioCaptureResult recordUtterance() override;
 
+    AudioCaptureResult recordUtterance(
+        const SpeechStartedHandler& handler
+    ) override;
+
+    void cancelCurrentRecording() override;
+
     void stop() override;
 
     const SherpaOnnxVadConfig& config() const;
@@ -55,5 +63,6 @@ private:
     SherpaOnnxVadConfig config_;        
     std::unique_ptr<Impl> impl_;
 
+    std::atomic_bool cancel_requested_{false};
     std::atomic_bool stopped_{false};
 };

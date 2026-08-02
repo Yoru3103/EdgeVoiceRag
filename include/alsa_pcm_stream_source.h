@@ -37,6 +37,8 @@ public:
 
     PcmStreamResult capture(const PcmChunkHandler& handler) override;
 
+    void cancelCurrentCapture() override;
+
     void stop() override;
 
     const AlsaPcmStreamSourceConfig& config() const;
