@@ -582,6 +582,16 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    retrieval_benchmark
+    tools/retrieval_benchmark.cpp
+)
+target_link_libraries(
+    retrieval_benchmark
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests

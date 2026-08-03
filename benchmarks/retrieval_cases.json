@@ -1,0 +1,184 @@
+[
+  {
+    "id": "air-conditioner-lexical",
+    "category": "lexical",
+    "query": "空调怎么打开",
+    "relevant_chunk_ids": [0]
+  },
+  {
+    "id": "air-conditioner-paraphrase",
+    "category": "paraphrase",
+    "query": "制冷温度应该怎么调节",
+    "relevant_chunk_ids": [0]
+  },
+  {
+    "id": "air-conditioner-semantic",
+    "category": "semantic",
+    "query": "车里太热了，怎样凉快一点",
+    "relevant_chunk_ids": [0]
+  },
+
+  {
+    "id": "bluetooth-lexical",
+    "category": "lexical",
+    "query": "蓝牙怎么连接",
+    "relevant_chunk_ids": [1]
+  },
+  {
+    "id": "bluetooth-paraphrase",
+    "category": "paraphrase",
+    "query": "手机如何与车辆进行配对",
+    "relevant_chunk_ids": [1]
+  },
+  {
+    "id": "bluetooth-semantic",
+    "category": "semantic",
+    "query": "我换了新手机，怎样连到车机",
+    "relevant_chunk_ids": [1]
+  },
+
+  {
+    "id": "tire-pressure-lexical",
+    "category": "lexical",
+    "query": "胎压报警怎么办",
+    "relevant_chunk_ids": [2]
+  },
+  {
+    "id": "tire-pressure-paraphrase",
+    "category": "paraphrase",
+    "query": "轮胎气压低了如何处理",
+    "relevant_chunk_ids": [2]
+  },
+  {
+    "id": "tire-pressure-semantic",
+    "category": "semantic",
+    "query": "车胎是不是没气了",
+    "relevant_chunk_ids": [2]
+  },
+
+  {
+    "id": "seat-heating-lexical",
+    "category": "lexical",
+    "query": "座椅加热怎么打开",
+    "relevant_chunk_ids": [3]
+  },
+  {
+    "id": "seat-heating-paraphrase",
+    "category": "paraphrase",
+    "query": "座椅加热可以调几档",
+    "relevant_chunk_ids": [3]
+  },
+  {
+    "id": "seat-heating-semantic",
+    "category": "semantic",
+    "query": "冬天座位太凉了怎么办",
+    "relevant_chunk_ids": [3]
+  },
+
+  {
+    "id": "navigation-lexical",
+    "category": "lexical",
+    "query": "怎么导航到充电站",
+    "relevant_chunk_ids": [4]
+  },
+  {
+    "id": "navigation-paraphrase",
+    "category": "paraphrase",
+    "query": "如何输入目的地",
+    "relevant_chunk_ids": [4]
+  },
+  {
+    "id": "navigation-semantic",
+    "category": "semantic",
+    "query": "我想去附近补电",
+    "relevant_chunk_ids": [4]
+  },
+
+  {
+    "id": "wiper-lexical",
+    "category": "lexical",
+    "query": "雨刮怎么控制",
+    "relevant_chunk_ids": [5]
+  },
+  {
+    "id": "wiper-paraphrase",
+    "category": "paraphrase",
+    "query": "雨刷速度怎么调",
+    "relevant_chunk_ids": [5]
+  },
+  {
+    "id": "wiper-semantic",
+    "category": "semantic",
+    "query": "下雨后前挡风玻璃看不清怎么办",
+    "relevant_chunk_ids": [5]
+  },
+
+  {
+    "id": "window-lexical",
+    "category": "lexical",
+    "query": "车窗怎么升降",
+    "relevant_chunk_ids": [6]
+  },
+  {
+    "id": "window-paraphrase",
+    "category": "paraphrase",
+    "query": "窗户在哪里控制",
+    "relevant_chunk_ids": [6]
+  },
+  {
+    "id": "window-semantic",
+    "category": "semantic",
+    "query": "把旁边的玻璃降下来",
+    "relevant_chunk_ids": [6]
+  },
+
+  {
+    "id": "trunk-lexical",
+    "category": "lexical",
+    "query": "后备箱怎么打开",
+    "relevant_chunk_ids": [7]
+  },
+  {
+    "id": "trunk-paraphrase",
+    "category": "paraphrase",
+    "query": "尾门如何开启",
+    "relevant_chunk_ids": [7]
+  },
+  {
+    "id": "trunk-semantic",
+    "category": "semantic",
+    "query": "行李应该放在哪里",
+    "relevant_chunk_ids": [7]
+  },
+
+  {
+    "id": "negative-weather",
+    "category": "negative",
+    "query": "今天北京天气怎么样",
+    "relevant_chunk_ids": []
+  },
+  {
+    "id": "negative-cooking",
+    "category": "negative",
+    "query": "红烧肉应该怎么做",
+    "relevant_chunk_ids": []
+  },
+  {
+    "id": "negative-finance",
+    "category": "negative",
+    "query": "今天股票行情如何",
+    "relevant_chunk_ids": []
+  },
+  {
+    "id": "negative-science",
+    "category": "negative",
+    "query": "请解释量子纠缠实验",
+    "relevant_chunk_ids": []
+  },
+  {
+    "id": "negative-entertainment",
+    "category": "negative",
+    "query": "给我讲一个笑话",
+    "relevant_chunk_ids": []
+  }
+]

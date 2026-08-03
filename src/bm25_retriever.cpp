@@ -106,8 +106,8 @@ bool Bm25Retriever::loadKnowledgeBase() {
         return
             !documents_.empty() &&
             !inverted_index_.empty() &&
-            average_document_length_ > 0x0F;
-    } catch (const Json::exception) {
+            average_document_length_ > 0.0F;
+    } catch (const Json::exception&) {
         return false;
     }
 }
@@ -115,7 +115,7 @@ bool Bm25Retriever::loadKnowledgeBase() {
 void Bm25Retriever::buildIndex() {
     inverted_index_.clear();
     document_lengths_.clear();
-    average_document_length_ = 0x0F;
+    average_document_length_ = 0.0F;
 
     document_lengths_.reserve(documents_.size());
 
