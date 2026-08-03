@@ -57,6 +57,7 @@ add_library(edge_voice_rag_core
     src/local_rag_llm_backend.cpp
     src/continuous_voice_session.cpp
     src/board_app_config.cpp
+    src/chinese_text_tokenizer.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -561,6 +562,16 @@ target_link_libraries(
     Threads::Threads
 )
 
+add_executable(
+    chinese_text_tokenizer_tests
+    tests/chinese_text_tokenizer_tests.cpp
+)
+target_link_libraries(
+    chinese_text_tokenizer_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
@@ -641,6 +652,10 @@ add_test(
 add_test(
     NAME local_rag_llm_backend_tests
     COMMAND local_rag_llm_backend_tests
+)
+add_test(
+    NAME chinese_text_tokenizer_tests
+    COMMAND chinese_text_tokenizer_tests
 )
 
 if(EDGE_ENABLE_SHERPA_ASR)
