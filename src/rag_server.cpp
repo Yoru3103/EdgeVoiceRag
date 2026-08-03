@@ -5,8 +5,8 @@
 
 #include <zmq.hpp>
 
-#include "rag_engine.h"
 #include "app_config.h"
+#include "bm25_retriever.h"
 #include "logger.h"
 #include "perf_timer.h"
 
@@ -65,9 +65,9 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    RagEngine rag_engine(config.knowledgePath());
+    Bm25Retriever bm25_retriever(config.knowledgePath());
 
-    if (!rag_engine.loadKnowledgeBase()) {
+    if (!bm25_retriever.loadKnowledgeBase()) {
         Logger::log(LogLevel::Error, "Failed to load knowledge base: " + config.knowledgePath());
         return 1;
     }
@@ -80,6 +80,23 @@ int main(int argc, char *argv[]) {
         std::ostringstream oss;
         oss << "RAG top_k: " << config.topK();
         Logger::log(LogLevel::Info, oss.str());
+    }
+
+    {
+        std::ostringstream message;
+
+        message
+            << "BM25 index loaded: documents="
+            << bm25_retriever.documentCount()
+            << ", vocabulary="
+            << bm25_retriever.vocabularySize()
+            << ", average_document_length="
+            << bm25_retriever.averageDocumentLength();
+
+        Logger::log(
+            LogLevel::Info,
+            message.str()
+        );
     }
 
     zmq::context_t context(1);
@@ -111,7 +128,7 @@ int main(int argc, char *argv[]) {
 
         PerfTimer timer("rag_server_search");
 
-        std::vector<RetrievalResult> results = rag_engine.searchTopK(query, config.topK());
+        std::vector<RetrievalResult> results = bm25_retriever.searchTopK(query, config.topK());
         std::string reply = buildRagAnswer(results);
 
         socket.send(zmq::buffer(reply), zmq::send_flags::none);

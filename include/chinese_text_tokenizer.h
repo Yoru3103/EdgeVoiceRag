@@ -44,7 +44,7 @@ private:
     // 把 Unicode 码点重新编码为 UTF-8 字符串。
     static std::string encodeUtf8(char32_t code_point);
 
-    static bool isAsciiAplhanumeric(char32_t code_point);
+    static bool isAsciiAlphanumeric(char32_t code_point);
     static bool isCjkCharacter(char32_t code_point);
     
     static char toLowerAscii(char value);

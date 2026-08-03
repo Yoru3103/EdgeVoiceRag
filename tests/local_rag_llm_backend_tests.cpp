@@ -4,7 +4,7 @@
 
 #include "local_rag_llm_backend.h"
 #include "mock_llm_backend.h"
-#include "rag_engine.h"
+#include "bm25_retriever.h"
 
 namespace {
 
@@ -64,19 +64,19 @@ public:
 };
 
 void testLocalRagAndLlmAreConnected() {
-    RagEngine rag_engine(
+    Bm25Retriever bm25_retriever(
         "vector_db/chunks.json"
     );
 
     expectTrue(
-        rag_engine.loadKnowledgeBase(),
+        bm25_retriever.loadKnowledgeBase(),
         "load vehicle manual"
     );
 
     RecordingLlmBackend llm_backend;
 
     LocalRagLlmBackend backend(
-        rag_engine,
+        bm25_retriever,
         llm_backend
     );
 
@@ -166,19 +166,19 @@ void testLocalRagAndLlmAreConnected() {
 }
 
 void testInvalidRequestIsRejected() {
-    RagEngine rag_engine(
+    Bm25Retriever bm25_retriever(
         "vector_db/chunks.json"
     );
 
     expectTrue(
-        rag_engine.loadKnowledgeBase(),
+        bm25_retriever.loadKnowledgeBase(),
         "load manual for invalid request test"
     );
 
     RecordingLlmBackend llm_backend;
 
     LocalRagLlmBackend backend(
-        rag_engine,
+        bm25_retriever,
         llm_backend
     );
 
@@ -210,19 +210,19 @@ void testInvalidRequestIsRejected() {
 }
 
 void testBackendImplementsCancellationInterface() {
-    RagEngine rag_engine(
+    Bm25Retriever bm25_retriever(
         "vector_db/chunks.json"
     );
 
     expectTrue(
-        rag_engine.loadKnowledgeBase(),
+        bm25_retriever.loadKnowledgeBase(),
         "load manual for cancellation test"
     );
 
     MockLlmBackend llm_backend;
 
     LocalRagLlmBackend backend(
-        rag_engine,
+        bm25_retriever,
         llm_backend
     );
 

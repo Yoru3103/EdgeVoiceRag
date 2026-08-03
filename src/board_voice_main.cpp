@@ -9,7 +9,7 @@
 #include "continuous_voice_session.h"
 #include "llm_backend_factory.h"
 #include "local_rag_llm_backend.h"
-#include "rag_engine.h"
+#include "bm25_retriever.h"
 #include "sherpa_onnx_asr_backend.h"
 #include "sherpa_onnx_tts_backend.h"
 #include "sherpa_onnx_vad_audio_recorder.h"
@@ -60,9 +60,9 @@ int main(int argc, char* argv[]) {
     try {
         const BoardAppConfig config = BoardAppConfig::load(config_path);
 
-        RagEngine rag_engine(config.knowledge_path);
+        Bm25Retriever bm25_retriever(config.knowledge_path);
 
-        if (!rag_engine.loadKnowledgeBase()) {
+        if (!bm25_retriever.loadKnowledgeBase()) {
             throw std::runtime_error(
                 "failed to load knowledge base: " + config.knowledge_path
             );
@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) {
         rag_config.top_k = config.top_k;
 
         LocalRagLlmBackend answer_backend(
-            rag_engine,
+            bm25_retriever,
             *llm_backend,
             rag_config
         );

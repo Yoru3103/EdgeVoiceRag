@@ -4,12 +4,12 @@
 #include <string>
 
 #include "app_config.h"
+#include "bm25_retriever.h"
 #include "command_line_options.h"
 #include "edge_response_backend.h"
 #include "logger.h"
 #include "multi_level_response_system.h"
 #include "perf_timer.h"
-#include "rag_engine.h"
 #include "zmq_text_client.h"
 
 namespace {
@@ -87,9 +87,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    RagEngine rag_engine(config.knowledgePath());
+    Bm25Retriever bm25_retriever(config.knowledgePath());
 
-    if (config.ragBackend() == "local" && !rag_engine.loadKnowledgeBase()) {
+    if (config.ragBackend() == "local" && !bm25_retriever.loadKnowledgeBase()) {
         Logger::log(LogLevel::Error, "Failed to load knowledge base: " + config.knowledgePath());
 
         return 1;
@@ -98,7 +98,7 @@ int main(int argc, char* argv[]) {
     ZmqTextClient requester;
 
     EdgeResponseBackend backend(
-        rag_engine,
+        bm25_retriever,
         requester,
         config.ragBackend(),
         config.ragEndpoint(),

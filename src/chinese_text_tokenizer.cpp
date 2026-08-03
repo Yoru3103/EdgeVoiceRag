@@ -63,7 +63,7 @@ std::vector<std::string> ChineseTextTokenizer::tokenize(std::string_view text) c
             continue;
         }
 
-        if (isAsciiAplhanumeric(code_point)) {
+        if (isAsciiAlphanumeric(code_point)) {
             flushCjkRun();
 
             ascii_run.push_back(toLowerAscii(static_cast<char>(code_point)));
@@ -114,7 +114,7 @@ bool ChineseTextTokenizer::decodeNextUtf8(
 
     std::size_t sequence_length = 0;
     std::uint32_t value = 0;
-    std::uint32_t minium_value = 0;
+    std::uint32_t minimum_value = 0;
 
     /*
      * 两字节 UTF-8：
@@ -123,7 +123,7 @@ bool ChineseTextTokenizer::decodeNextUtf8(
     if ((first & 0xE0U) == 0xC0U) {
         sequence_length = 2;
         value = first & 0x1Fu;
-        minium_value = 0x80U;
+        minimum_value = 0x80U;
     }
     /*
      * 三字节 UTF-8：
@@ -134,7 +134,7 @@ bool ChineseTextTokenizer::decodeNextUtf8(
     else if ((first & 0xF0U) == 0xE0U) {
         sequence_length = 3;
         value = first & 0x0Fu;
-        minium_value = 0x800U;
+        minimum_value = 0x800U;
     }
     /*
      * 四字节 UTF-8：
@@ -143,7 +143,7 @@ bool ChineseTextTokenizer::decodeNextUtf8(
     else if ((first & 0xF8U) == 0xF0U) {
         sequence_length = 4;
         value = first & 0x07U;
-        minium_value = 0x10000U;
+        minimum_value = 0x10000U;
     } else {
         offset++;
         return false;
@@ -173,7 +173,7 @@ bool ChineseTextTokenizer::decodeNextUtf8(
      * 3. 超过 Unicode 最大码点。
      */
     if (
-        value < minium_value ||
+        value < minimum_value ||
         (value >= 0xD800U && value <= 0xDFFFU) ||
         value > 0x10FFFFU
     ) {
@@ -182,7 +182,7 @@ bool ChineseTextTokenizer::decodeNextUtf8(
     }
 
     offset += sequence_length;
-    code_point = static_cast<uint32_t>(value);
+    code_point = static_cast<char32_t>(value);
 
     return true;
 }
@@ -233,7 +233,7 @@ bool ChineseTextTokenizer::isCjkCharacter(char32_t code_point) {
         (value >= 0x30000U && value <= 0x323AFU);
 }
 
-bool ChineseTextTokenizer::isAsciiAplhanumeric(char32_t code_point) {
+bool ChineseTextTokenizer::isAsciiAlphanumeric(char32_t code_point) {
     return
         (code_point >= U'a' && code_point <= U'z') ||
         (code_point >= U'A' && code_point <= U'Z') ||

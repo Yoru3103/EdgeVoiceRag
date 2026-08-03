@@ -5,7 +5,7 @@
 #include <nlohmann/json.hpp>
 
 #include "edge_response_backend.h"
-#include "rag_engine.h"
+#include "bm25_retriever.h"
 
 namespace {
 
@@ -85,17 +85,17 @@ public:
 };
 
 void testLocalRag() {
-    RagEngine rag_engine("vector_db/chunks.json");
+    Bm25Retriever bm25_retriever("vector_db/chunks.json");
 
     expectTrue(
-        rag_engine.loadKnowledgeBase(),
+        bm25_retriever.loadKnowledgeBase(),
         "load local knowledge base"
     );
 
     FakeTextRequester requester;
 
     EdgeResponseBackend backend(
-        rag_engine,
+        bm25_retriever,
         requester,
         "local",
         "tcp://localhost:5555",
@@ -115,7 +115,7 @@ void testLocalRag() {
 }
 
 void testZmqRag() {
-    RagEngine rag_engine("vector_db/chunks.json");
+    Bm25Retriever bm25_retriever("vector_db/chunks.json");
 
     FakeTextRequester requester;
 
@@ -130,7 +130,7 @@ void testZmqRag() {
     );
 
     EdgeResponseBackend backend(
-        rag_engine,
+        bm25_retriever,
         requester,
         "python_zmq",
         "tcp://localhost:5556",
@@ -149,14 +149,14 @@ void testZmqRag() {
 }
 
 void testZmqLlm() {
-    RagEngine rag_engine("vector_db/chunks.json");
+    Bm25Retriever bm25_retriever("vector_db/chunks.json");
 
     FakeTextRequester requester;
 
     requester.responses["tcp://localhost:8899"] = BackendResult::success("{}");
 
     EdgeResponseBackend backend(
-        rag_engine,
+        bm25_retriever,
         requester,
         "local",
         "tcp://localhost:5555",
@@ -205,14 +205,14 @@ void testZmqLlm() {
 }
 
 void testRequesterFailure() {
-    RagEngine rag_engine("vector_db/chunks.json");
+    Bm25Retriever bm25_retriever("vector_db/chunks.json");
 
     FakeTextRequester requester;
 
     requester.responses["tcp://localhost:8899"] = BackendResult::failure("timeout");
 
     EdgeResponseBackend backend(
-        rag_engine,
+        bm25_retriever,
         requester,
         "local",
         "tcp://localhost:5555",

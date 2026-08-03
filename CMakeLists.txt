@@ -30,7 +30,7 @@ add_library(edge_voice_rag_core
     src/multi_level_response_system.cpp
     src/logger.cpp
     src/perf_timer.cpp
-    src/rag_engine.cpp
+    src/bm25_retriever.cpp
     src/app_config.cpp
     src/command_line_options.cpp
     src/rag_client_zmq.cpp
@@ -572,6 +572,16 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    bm25_retriever_tests
+    tests/bm25_retriever_tests.cpp
+)
+target_link_libraries(
+    bm25_retriever_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
@@ -656,6 +666,10 @@ add_test(
 add_test(
     NAME chinese_text_tokenizer_tests
     COMMAND chinese_text_tokenizer_tests
+)
+add_test(
+    NAME bm25_retriever_tests
+    COMMAND bm25_retriever_tests
 )
 
 if(EDGE_ENABLE_SHERPA_ASR)
@@ -758,6 +772,7 @@ set_tests_properties(edge_voice_rag_unit_tests PROPERTIES
 set_tests_properties(
     edge_response_backend_tests
     local_rag_llm_backend_tests
+    bm25_retriever_tests
     PROPERTIES
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )

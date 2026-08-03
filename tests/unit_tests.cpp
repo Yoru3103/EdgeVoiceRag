@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "query_router.h"
-#include "rag_engine.h"
+#include "bm25_retriever.h"
 #include "rag_response_parser.h"
 #include "query_classifier.h"
 
@@ -48,60 +48,60 @@ static void testQueryRouter() {
 }
 
 static void testRagEngine() {
-    RagEngine rag_engine("vector_db/chunks.json");
+    Bm25Retriever bm25_retriever("vector_db/chunks.json");
 
     expectTrue(
-        rag_engine.loadKnowledgeBase(),
-        "RagEngine: load knowledge base"
+        bm25_retriever.loadKnowledgeBase(),
+        "Bm25Retriever: load knowledge base"
     );
 
     {
-        std::vector<RetrievalResult> results = rag_engine.searchTopK("空调怎么打开", 3);
+        std::vector<RetrievalResult> results = bm25_retriever.searchTopK("空调怎么打开", 3);
 
         expectTrue(
             !results.empty(),
-            "RagEngine: air conditioner query should return results"
+            "Bm25Retriever: air conditioner query should return results"
         );
     }
 
     {
-        std::vector<RetrievalResult> results = rag_engine.searchTopK("蓝牙怎么连接", 3);
+        std::vector<RetrievalResult> results = bm25_retriever.searchTopK("蓝牙怎么连接", 3);
 
         expectTrue(
             !results.empty(),
-            "RagEngine: bluetooth query should return results"
+            "Bm25Retriever: bluetooth query should return results"
         );
 
         if (!results.empty()) {
             expectTrue(
                 results[0].chunk.title.find("蓝牙连接") != std::string::npos,
-                "RagEngine: bluetooth query should hit bluetooth document"
+                "Bm25Retriever: bluetooth query should hit bluetooth document"
             );
             expectTrue(
                 results[0].chunk.text.find("蓝牙连接") != std::string::npos,
-                "RagEngine: bluetooth result should contain document text"
+                "Bm25Retriever: bluetooth result should contain document text"
             );
             expectTrue(
                 results[0].sparse_score > 0.0F,
-                "RagEngine: sparse score should be positive"
+                "Bm25Retriever: sparse score should be positive"
             );
             expectTrue(
                 results[0].dense_score == 0.0F,
-                "RagEngine: dense score should not be used yet"
+                "Bm25Retriever: dense score should not be used yet"
             );
             expectTrue(
                 results[0].final_score == results[0].sparse_score,
-                "RagEngine: final score should equal sparse score"
+                "Bm25Retriever: final score should equal sparse score"
             );
         }
     }
 
     {
-        std::vector<RetrievalResult> results = rag_engine.searchTopK("完全无关的问题", 3);
+        std::vector<RetrievalResult> results = bm25_retriever.searchTopK("完全无关的问题", 3);
 
         expectTrue(
             results.empty(),
-            "RagEngine: unrelated query should return empty results"
+            "Bm25Retriever: unrelated query should return empty results"
         );
     }
 
@@ -116,20 +116,20 @@ static void testRagEngine() {
     }
 
     {
-        const std::vector<RetrievalResult> results = rag_engine.searchTopK("", 3);
+        const std::vector<RetrievalResult> results = bm25_retriever.searchTopK("", 3);
 
         expectTrue(
             results.empty(),
-            "RagEngine: empty query should return no results"
+            "Bm25Retriever: empty query should return no results"
         );
     }
 
     {
-        const std::vector<RetrievalResult> results = rag_engine.searchTopK("空调怎么打开", 0);
+        const std::vector<RetrievalResult> results = bm25_retriever.searchTopK("空调怎么打开", 0);
 
         expectTrue(
             results.empty(),
-            "RagEngine: non-positive top_k should return no results"
+            "Bm25Retriever: non-positive top_k should return no results"
         );
     }
 }
