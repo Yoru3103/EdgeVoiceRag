@@ -87,7 +87,7 @@ std::vector<EvaluationCase> loadEvaluationCases(const std::string& path) {
 
         EvaluationCase evaluation_case;
         evaluation_case.id = item.at("id").get<std::string>();
-        evaluation_case.category = item.at("id").get<std::string>();
+        evaluation_case.category = item.at("category").get<std::string>();
         evaluation_case.query = item.at("query").get<std::string>();
         evaluation_case.relevant_chunk_ids = item.at("relevant_chunk_ids").get<std::vector<int>>();
 
