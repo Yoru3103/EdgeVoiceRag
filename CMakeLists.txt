@@ -58,6 +58,7 @@ add_library(edge_voice_rag_core
     src/continuous_voice_session.cpp
     src/board_app_config.cpp
     src/chinese_text_tokenizer.cpp
+    src/dense_vector_index.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -583,6 +584,16 @@ target_link_libraries(
 )
 
 add_executable(
+    dense_vector_index_tests
+    tests/dense_vector_index_tests.cpp
+)
+target_link_libraries(
+    dense_vector_index_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
+add_executable(
     retrieval_benchmark
     tools/retrieval_benchmark.cpp
 )
@@ -680,6 +691,10 @@ add_test(
 add_test(
     NAME bm25_retriever_tests
     COMMAND bm25_retriever_tests
+)
+add_test(
+    NAME dense_vector_index_tests
+    COMMAND dense_vector_index_tests
 )
 
 if(EDGE_ENABLE_SHERPA_ASR)
