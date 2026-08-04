@@ -2,14 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
-#include <fstream>
 #include <stdexcept>
 #include <unordered_set>
 #include <utility>
 
-#include <nlohmann/json.hpp>
-
-using Json = nlohmann::json;
+#include "knowledge_base_loader.h"
 
 Bm25Retriever::Bm25Retriever(
     std::string knowledge_path,
@@ -35,81 +32,24 @@ Bm25Retriever::Bm25Retriever(
 }
 
 bool Bm25Retriever::loadKnowledgeBase() {
-    std::ifstream input(knowledge_path_);
+    KnowledgeBaseLoadResult load_result = loadDocumentChunks(knowledge_path_);
 
-    if (!input.is_open()) {
+    if (!load_result.ok) {
         return false;
     }
 
-    try {
-        Json root;
-        input >> root;
-
-        if (!root.is_array()) {
+    // BM25额外要求每篇文档能产生token
+    for (const DocumentChunk& document : load_result.documents) {
+        if (tokenizer_.tokenize(document.text).empty()) {
             return false;
         }
-
-        std::vector<DocumentChunk> loaded_documents;
-        std::unordered_set<int> loaded_ids;
-
-        loaded_documents.reserve(root.size());
-
-        for (const auto& item : root) {
-            if (!item.is_object()) {
-                return false;
-            }
-
-            if (
-                !item.contains("chunk_id") ||
-                !item.contains("title") ||
-                !item.contains("content")
-            ) {
-                return false;
-            }
-
-            DocumentChunk chunk;
-            chunk.chunk_id = item.at("chunk_id").get<int>();
-            chunk.title = item.at("title").get<std::string>();
-            chunk.content =item.at("content").get<std::string>();
-            chunk.text = item.value("text", chunk.title + ": " + chunk.content);
-
-            if (
-                chunk.chunk_id < 0 ||
-                chunk.title.empty() ||
-                chunk.content.empty() ||
-                chunk.text.empty()
-            ) {
-                return false;
-            }
-
-            const bool inserted = loaded_ids.insert(chunk.chunk_id).second;
-
-            if (!inserted) {    // chunkid不唯一
-                return false;
-            }
-
-            if (tokenizer_.tokenize(chunk.text).empty()) {
-                return false;
-            }
-
-            loaded_documents.push_back(std::move(chunk));
-        }
-
-        if (loaded_documents.empty()) {
-            return false;
-        }
-
-        documents_ = std::move(loaded_documents);
-
-        buildIndex();
-
-        return
-            !documents_.empty() &&
-            !inverted_index_.empty() &&
-            average_document_length_ > 0.0F;
-    } catch (const Json::exception&) {
-        return false;
     }
+
+    documents_ = std::move(load_result.documents);
+
+    buildIndex();
+
+    return !documents_.empty() && !inverted_index_.empty() && average_document_length_ > 0.0F;
 }
 
 void Bm25Retriever::buildIndex() {

@@ -66,6 +66,7 @@ add_library(edge_voice_rag_core
     src/board_app_config.cpp
     src/chinese_text_tokenizer.cpp
     src/dense_vector_index.cpp
+    src/knowledge_base_loader.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -117,6 +118,7 @@ if(EDGE_ENABLE_BGE_EMBEDDER)
         edge_voice_rag_core
         PRIVATE
         src/bge_embedder.cpp
+        src/dense_retriever.cpp
     )
 
     target_include_directories(
@@ -918,9 +920,18 @@ if(EDGE_ENABLE_BGE_EMBEDDER)
         bge_embedder_tests
         tests/bge_embedder_tests.cpp
     )
-
     target_link_libraries(
         bge_embedder_tests
+        PRIVATE
+        edge_voice_rag_core
+    )
+
+    add_executable(
+        dense_retriever_tests
+        tests/dense_retriever_tests.cpp
+    )
+    target_link_libraries(
+        dense_retriever_tests
         PRIVATE
         edge_voice_rag_core
     )
@@ -929,6 +940,15 @@ if(EDGE_ENABLE_BGE_EMBEDDER)
         NAME bge_embedder_tests
         COMMAND
             bge_embedder_tests
+            "${BGE_MODEL_DIR}"
+            "${BGE_INDEX_DIR}"
+    )
+
+    add_test(
+        NAME dense_retriever_tests
+        COMMAND
+            dense_retriever_tests
+            "${CMAKE_SOURCE_DIR}/vector_db/chunks.json"
             "${BGE_MODEL_DIR}"
             "${BGE_INDEX_DIR}"
     )
