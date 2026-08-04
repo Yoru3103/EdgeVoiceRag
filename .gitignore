@@ -20,3 +20,5 @@ voice_input/
 voice_output/
 *.pcm
 perf_logs/
+build-bge/
+third_party/onnxruntime-linux-*/
