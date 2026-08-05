@@ -10,15 +10,155 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
-#include "bm25_retriever.h"
+#include "retriever_runtime.h"
 
 using Json = nlohmann::json;
 
 namespace {
+
+struct BenchmarkOptions {
+    std::string backend;
+    std::string chunks_path;
+    std::string cases_path;
+
+    int top_k = 3;
+    int runs = 10;
+
+    std::string model_dir;
+    std::string index_dir;
+};
+
+int parsePositiveInt(
+    const std::string& text,
+    const std::string& argument_name
+) {
+    std::size_t parsed_characters = 0;
+
+    int value = 0;
+
+    try {
+        value = std::stoi(
+            text,
+            &parsed_characters
+        );
+    } catch (const std::exception&) {
+        throw std::invalid_argument(
+            argument_name
+            + " must be a positive integer"
+        );
+    }
+
+    if (
+        parsed_characters != text.size()
+        || value <= 0
+    ) {
+        throw std::invalid_argument(
+            argument_name
+            + " must be a positive integer"
+        );
+    }
+
+    return value;
+}
+
+BenchmarkOptions parseOptions(
+    int argc,
+    char* argv[]
+) {
+    if (argc < 2) {
+        throw std::invalid_argument(
+            "retrieval backend is missing"
+        );
+    }
+
+    BenchmarkOptions options;
+    options.backend = argv[1];
+
+    if (
+        options.backend != "bm25"
+        && options.backend != "dense"
+        && options.backend != "hybrid"
+    ) {
+        throw std::invalid_argument(
+            "backend must be bm25, dense or hybrid"
+        );
+    }
+
+    const bool requires_dense_files =
+        options.backend == "dense"
+        || options.backend == "hybrid";
+
+    const int expected_argument_count =
+        requires_dense_files ? 8 : 6;
+
+    if (argc != expected_argument_count) {
+        throw std::invalid_argument(
+            requires_dense_files
+                ? "dense/hybrid requires model_dir and index_dir"
+                : "bm25 does not require model_dir or index_dir"
+        );
+    }
+
+    options.chunks_path = argv[2];
+    options.cases_path = argv[3];
+
+    options.top_k = parsePositiveInt(
+        argv[4],
+        "top_k"
+    );
+
+    options.runs = parsePositiveInt(
+        argv[5],
+        "runs"
+    );
+
+    if (requires_dense_files) {
+        options.model_dir = argv[6];
+        options.index_dir = argv[7];
+    }
+
+    return options;
+}
+
+RetrieverRuntimeConfig makeRuntimeConfig(
+    const BenchmarkOptions& options
+) {
+    RetrieverRuntimeConfig config;
+
+    config.backend = options.backend;
+    config.knowledge_path = options.chunks_path;
+
+    config.dense_minimum_similarity = -1.0F;
+
+    config.hybrid_rrf_k = 60.0F;
+    config.hybrid_sparse_weight = 1.0F;
+    config.hybrid_dense_weight = 1.0F;
+    config.hybrid_candidate_top_k = 20;
+
+    if (
+        options.backend == "dense"
+        || options.backend == "hybrid"
+    ) {
+        config.bge_model_path =
+            options.model_dir + "/model.onnx";
+
+        config.bge_tokenizer_path =
+            options.model_dir + "/tokenizer.json";
+
+        config.dense_index_metadata_path =
+            options.index_dir + "/index_meta.json";
+
+        config.dense_embeddings_path =
+            options.index_dir + "/embeddings.f32";
+    }
+
+    return config;
+}
 
 struct EvaluationCase {
     std::string id;
@@ -363,7 +503,10 @@ std::vector<double> measureLatencyMicroseconds(
 void printSummary(
     const QualityMetrics& quality,
     std::vector<double> latency_samples,
-    int top_k
+    const std::string& backend,
+    int top_k,
+    int runs,
+    double load_time_ms
 ) {
     const double positive_count =
         static_cast<double>(
@@ -441,6 +584,22 @@ void printSummary(
         latency_samples.empty()
             ? 0.0
             : latency_samples.back();
+
+    std::cout
+        << "\nBenchmark configuration\n"
+        << "-----------------------\n"
+        << "backend: "
+        << backend
+        << '\n'
+        << "top_k: "
+        << top_k
+        << '\n'
+        << "runs: "
+        << runs
+        << '\n'
+        << "load_time_ms: "
+        << load_time_ms
+        << '\n';
 
     std::cout
         << "\nOverall quality\n"
@@ -534,38 +693,20 @@ void printSummary(
      */
     Json metrics_json;
 
-    metrics_json["positive_cases"] =
-        quality.positive_case_count;
-
-    metrics_json["top1_accuracy"] =
-        top1_accuracy;
-
-    metrics_json[
-        "recall_at_" + std::to_string(top_k)
-    ] = recall_at_k;
-
-    metrics_json[
-        "mrr_at_" + std::to_string(top_k)
-    ] = mean_reciprocal_rank;
-
-    metrics_json["negative_cases"] =
-        quality.negative_case_count;
-
-    metrics_json[
-        "negative_rejection_accuracy"
-    ] = rejection_accuracy;
-
-    metrics_json["latency_mean_us"] =
-        mean_latency;
-
-    metrics_json["latency_p50_us"] =
-        p50_latency;
-
-    metrics_json["latency_p95_us"] =
-        p95_latency;
-
-    metrics_json["latency_max_us"] =
-        maximum_latency;
+    metrics_json["positive_cases"] = quality.positive_case_count;
+    metrics_json["top1_accuracy"] = top1_accuracy;
+    metrics_json["recall_at_" + std::to_string(top_k)] = recall_at_k;
+    metrics_json["mrr_at_" + std::to_string(top_k)] = mean_reciprocal_rank;
+    metrics_json["negative_cases"] = quality.negative_case_count;
+    metrics_json["negative_rejection_accuracy"] = rejection_accuracy;
+    metrics_json["latency_mean_us"] = mean_latency;
+    metrics_json["latency_p50_us"] = p50_latency;
+    metrics_json["latency_p95_us"] = p95_latency;
+    metrics_json["latency_max_us"] = maximum_latency;
+    metrics_json["backend"] = backend;
+    metrics_json["top_k"] = top_k;
+    metrics_json["runs"] = runs;
+    metrics_json["load_time_ms"] = load_time_ms;
 
     Json category_json = Json::object();
 
@@ -622,99 +763,106 @@ void printSummary(
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 3 || argc > 4) {
-        std::cerr
-            << "Usage:\n  "
-            << argv[0]
-            << " <chunks.json>"
-            << " <retrieval_cases.json>"
-            << " [runs]\n";
-
-        return 1;
-    }
-
-    const std::string chunks_path =
-        argv[1];
-
-    const std::string cases_path =
-        argv[2];
-
-    int runs = 100;
-
     try {
-        if (argc == 4) {
-            runs = std::stoi(argv[3]);
-        }
-
-        if (runs <= 0) {
-            throw std::invalid_argument(
-                "runs must be positive"
-            );
-        }
-
-        Bm25Retriever retriever(
-            chunks_path
-        );
-
-        if (!retriever.loadKnowledgeBase()) {
-            throw std::runtime_error(
-                "failed to load BM25 knowledge base: " +
-                chunks_path
-            );
-        }
+        const BenchmarkOptions options =
+            parseOptions(argc, argv);
 
         const std::vector<EvaluationCase> cases =
             loadEvaluationCases(
-                cases_path
+                options.cases_path
             );
 
-        constexpr int top_k = 3;
+        RetrieverRuntimeConfig runtime_config =
+            makeRuntimeConfig(options);
+
+        const auto load_start =
+            std::chrono::steady_clock::now();
+
+        RetrieverRuntime runtime(
+            std::move(runtime_config)
+        );
+
+        if (!runtime.load()) {
+            throw std::runtime_error(
+                runtime.lastError()
+            );
+        }
+
+        const auto load_end =
+            std::chrono::steady_clock::now();
+
+        const double load_time_ms =
+            std::chrono::duration<double, std::milli>(
+                load_end - load_start
+            ).count();
+
+        Retriever& retriever =
+            runtime.retriever();
 
         std::cout
-            << "Retriever: BM25\n"
-            << "Documents: "
-            << retriever.documentCount()
+            << "Retriever: "
+            << runtime.backendName()
             << '\n'
-            << "Vocabulary: "
-            << retriever.vocabularySize()
-            << '\n'
-            << "Average document length: "
-            << retriever.averageDocumentLength()
+            << "Knowledge: "
+            << options.chunks_path
             << '\n'
             << "Evaluation cases: "
             << cases.size()
             << '\n'
             << "Top-K: "
-            << top_k
+            << options.top_k
             << '\n'
             << "Latency runs: "
-            << runs
-            << '\n';
+            << options.runs
+            << '\n'
+            << "Load time: "
+            << load_time_ms
+            << " ms\n";
 
         const QualityMetrics quality =
             evaluateQuality(
                 retriever,
                 cases,
-                top_k
+                options.top_k
             );
 
         std::vector<double> latency_samples =
             measureLatencyMicroseconds(
                 retriever,
                 cases,
-                top_k,
-                runs
+                options.top_k,
+                options.runs
             );
 
         printSummary(
             quality,
             std::move(latency_samples),
-            top_k
+            options.backend,
+            options.top_k,
+            options.runs,
+            load_time_ms
         );
 
         return 0;
     } catch (const std::exception& error) {
         std::cerr
+            << "Usage:\n"
+            << "  "
+            << argv[0]
+            << " bm25"
+            << " <chunks.json>"
+            << " <retrieval_cases.json>"
+            << " <top_k>"
+            << " <runs>\n"
+            << "  "
+            << argv[0]
+            << " dense|hybrid"
+            << " <chunks.json>"
+            << " <retrieval_cases.json>"
+            << " <top_k>"
+            << " <runs>"
+            << " <model_dir>"
+            << " <index_dir>\n\n"
             << "retrieval benchmark failed: "
             << error.what()
             << '\n';

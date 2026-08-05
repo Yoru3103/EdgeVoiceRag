@@ -13,7 +13,7 @@
 #endif // EDGE_ENABLE_BGE_EMBEDDER
 
 struct RetrieverRuntime::Impl {
-    explicit Impl(RetrieverRuntimeConfig runtime_config)\
+    explicit Impl(RetrieverRuntimeConfig runtime_config)
         : config(std::move(runtime_config)){}
 
     void clear() {
@@ -23,7 +23,7 @@ struct RetrieverRuntime::Impl {
 #ifdef EDGE_ENABLE_BGE_EMBEDDER
         hybrid_retriever.reset();
         dense_retriever.reset();
-#endif // DEBUG
+#endif // EDGE_ENABLE_BGE_EMBEDDER
 
         bm25_retriever.reset();     
     }

@@ -35,7 +35,7 @@ public:
     ~RetrieverRuntime();
 
     RetrieverRuntime(const RetrieverRuntime&) = delete;
-    const RetrieverRuntime& operator=(const RetrieverRuntime&) = delete;
+    RetrieverRuntime& operator=(const RetrieverRuntime&) = delete;
 
     bool load();
 
