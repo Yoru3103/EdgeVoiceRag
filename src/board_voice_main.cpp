@@ -73,6 +73,10 @@ int main(int argc, char* argv[]) {
         retriever_config.hybrid_dense_weight = config.hybrid_dense_weight;
         retriever_config.hybrid_sparse_weight = config.hybrid_sparse_weight;
         retriever_config.hybrid_candidate_top_k = config.hybrid_candidate_top_k;
+        retriever_config.relevance_filter_enabled = config.relevance_filter_enabled;
+        retriever_config.relevance_minimum_sparse_score = config.relevance_minimum_sparse_score;
+        retriever_config.relevance_minimum_dense_similarity = config.relevance_minimum_dense_similarity;
+        retriever_config.relevance_candidate_top_k = config.relevance_candidate_top_k;
 
         RetrieverRuntime retriever_runtime(std::move(retriever_config));
 
@@ -189,6 +193,12 @@ int main(int argc, char* argv[]) {
             << "EdgeVoiceRAG board assistant\n"
             << "Retriever: "
             << retriever_runtime.backendName()
+            << "\nRelevance filter: "
+            << (
+                retriever_runtime.relevanceFilterEnabled()
+                    ? "enabled"
+                    : "disabled"
+            )
             << "\nLLM: "
             << llm_backend->name()
             << "\nASR: "

@@ -1,5 +1,6 @@
 #include "board_app_config.h"
 
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -65,6 +66,36 @@ ConfigMap loadValues(const std::string& path) {
     }
 
     return values;
+}
+
+bool parseBoolean(const std::string& text, const std::string& key) {
+    if (text == "true" || text == "1") {
+        return true;
+    }
+
+    if (text == "false" || text == "0") {
+        return false;
+    }
+
+    throw std::runtime_error(
+        "invalid boolean config value for "
+            + key
+            + ": "
+            + text
+    );
+}
+
+bool getBoolean(const ConfigMap& values, const std::string& key, bool default_value) {
+    const auto item = values.find(key);
+
+    if (item == values.end()) {
+        return default_value;
+    }
+
+    return parseBoolean(
+        item->second,
+        key
+    );
 }
 
 std::string getString(
@@ -201,6 +232,34 @@ BoardAppConfig BoardAppConfig::load(const std::string& path) {
             "hybrid_candidate_top_k",
             config.hybrid_candidate_top_k
         );
+
+    config.relevance_filter_enabled =
+            getBoolean(
+                values,
+                "relevance_filter_enabled",
+                config.relevance_filter_enabled
+            );
+
+        config.relevance_minimum_sparse_score =
+            getNumber<float>(
+                values,
+                "relevance_minimum_sparse_score",
+                config.relevance_minimum_sparse_score
+            );
+
+        config.relevance_minimum_dense_similarity =
+            getNumber<float>(
+                values,
+                "relevance_minimum_dense_similarity",
+                config.relevance_minimum_dense_similarity
+            );
+
+        config.relevance_candidate_top_k =
+            getNumber<int>(
+                values,
+                "relevance_candidate_top_k",
+                config.relevance_candidate_top_k
+            );
 
     config.capture_device = getString(
         values,
@@ -402,6 +461,38 @@ void BoardAppConfig::validate() const {
             "greater than zero"
         );
     }
+
+    if (
+        !std::isfinite(
+            relevance_minimum_sparse_score
+        )
+        || relevance_minimum_sparse_score <= 0.0F
+    ) {
+        throw std::invalid_argument(
+            "relevance_minimum_sparse_score "
+            "must be finite and greater than zero"
+        );
+    }
+
+    if (
+        !std::isfinite(
+            relevance_minimum_dense_similarity
+        )
+        || relevance_minimum_dense_similarity <= 0.0F
+        || relevance_minimum_dense_similarity >= 1.0F
+    ) {
+        throw std::invalid_argument(
+            "relevance_minimum_dense_similarity "
+            "must be finite and between zero and one"
+        );
+    }
+
+    if (relevance_candidate_top_k <= 0) {
+        throw std::invalid_argument(
+            "relevance_candidate_top_k "
+            "must be greater than zero"
+        );
+    }   
 
     if (
         capture_device.empty()

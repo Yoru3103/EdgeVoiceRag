@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "bm25_retriever.h"
+#include "relevance_filtering_retriever.h"
 
 #ifdef EDGE_ENABLE_BGE_EMBEDDER
 #include "dense_retriever.h"
@@ -19,6 +20,8 @@ struct RetrieverRuntime::Impl {
     void clear() {
         active_retriever = nullptr;
 
+        relevance_filter.reset();   // 先销毁
+
         // hybrid本身包含dense和bm25，因此需要先reset hybrid再reset剩余retriever
 #ifdef EDGE_ENABLE_BGE_EMBEDDER
         hybrid_retriever.reset();
@@ -26,6 +29,26 @@ struct RetrieverRuntime::Impl {
 #endif // EDGE_ENABLE_BGE_EMBEDDER
 
         bm25_retriever.reset();     
+    }
+
+    void activateRetriever(Retriever& base_retriever) {
+        if (!config.relevance_filter_enabled) {
+            active_retriever = &base_retriever;
+
+            return;
+        }
+
+        RelevanceFilteringRetrieverConfig filter_config;
+        filter_config.minimum_sparse_score = config.relevance_minimum_sparse_score;
+        filter_config.minimum_dense_similarity = config.relevance_minimum_dense_similarity;
+        filter_config.candidate_top_k = config.relevance_candidate_top_k;
+
+        relevance_filter = std::make_unique<RelevanceFilteringRetriever>(
+            base_retriever,
+            filter_config
+        );
+
+        active_retriever = relevance_filter.get();
     }
     
     RetrieverRuntimeConfig config;
@@ -38,6 +61,7 @@ struct RetrieverRuntime::Impl {
     std::unique_ptr<edge_voice_rag::HybridRetriever> hybrid_retriever;
 #endif // EDGE_ENABLE_BGE_EMBEDDER
 
+    std::unique_ptr<RelevanceFilteringRetriever> relevance_filter;
     Retriever* active_retriever = nullptr;
 
     std::string last_error;
@@ -85,7 +109,7 @@ bool RetrieverRuntime::load() {
         }
 
         if (backend == "bm25") {
-            impl_->active_retriever = impl_->bm25_retriever.get();
+            impl_->activateRetriever(*impl_->bm25_retriever);
 
             return true;
         }
@@ -129,7 +153,7 @@ bool RetrieverRuntime::load() {
         }
 
         if (backend == "dense") {
-            impl_->active_retriever = impl_->dense_retriever.get();
+            impl_->activateRetriever(*impl_->dense_retriever);
 
             return true;
         }
@@ -146,7 +170,7 @@ bool RetrieverRuntime::load() {
             hybrid_config
         );
 
-        impl_->active_retriever = impl_->hybrid_retriever.get();
+        impl_->activateRetriever(*impl_->hybrid_retriever);
 
         return true;
 #endif // !EDGE_ENABLE_BGE_EMBEDDER
@@ -188,4 +212,8 @@ const std::string& RetrieverRuntime::backendName() const noexcept {
 
 const std::string& RetrieverRuntime::lastError() const noexcept {
     return impl_->last_error;
+}
+
+bool RetrieverRuntime::relevanceFilterEnabled() const noexcept {
+    return impl_->config.relevance_filter_enabled;
 }

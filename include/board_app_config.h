@@ -22,6 +22,13 @@ struct BoardAppConfig {
 
     int hybrid_candidate_top_k = 20;
 
+    bool relevance_filter_enabled = true;
+
+    float relevance_minimum_sparse_score = 6.0F;
+    float relevance_minimum_dense_similarity = 0.40F;
+
+    int relevance_candidate_top_k = 20;
+
     std::string capture_device = "plughw:CARD=rockchipes8388,DEV=0";
     std::string playback_device = "plughw:CARD=rockchipes8388,DEV=0";
 

@@ -31,6 +31,8 @@ struct BenchmarkOptions {
 
     std::string model_dir;
     std::string index_dir;
+
+    bool enable_relevance_filter = false;
 };
 
 int parsePositiveInt(
@@ -93,15 +95,33 @@ BenchmarkOptions parseOptions(
         options.backend == "dense"
         || options.backend == "hybrid";
 
-    const int expected_argument_count =
+    const int base_argument_count =
         requires_dense_files ? 8 : 6;
 
-    if (argc != expected_argument_count) {
+    if (
+        argc != base_argument_count
+        && argc != base_argument_count + 1
+    ) {
         throw std::invalid_argument(
             requires_dense_files
-                ? "dense/hybrid requires model_dir and index_dir"
-                : "bm25 does not require model_dir or index_dir"
+                ? "dense/hybrid requires "
+                "model_dir and index_dir"
+                : "invalid BM25 benchmark arguments"
         );
+    }
+
+    if (argc == base_argument_count + 1) {
+        const std::string final_argument =
+            argv[argc - 1];
+
+        if (final_argument != "--filter") {
+            throw std::invalid_argument(
+                "the only supported optional "
+                "argument is --filter"
+            );
+        }
+
+        options.enable_relevance_filter = true;
     }
 
     options.chunks_path = argv[2];
@@ -139,6 +159,11 @@ RetrieverRuntimeConfig makeRuntimeConfig(
     config.hybrid_sparse_weight = 1.0F;
     config.hybrid_dense_weight = 1.0F;
     config.hybrid_candidate_top_k = 20;
+
+    config.relevance_filter_enabled = options.enable_relevance_filter;
+    config.relevance_minimum_sparse_score = 6.0F;
+    config.relevance_minimum_dense_similarity = 0.40F;
+    config.relevance_candidate_top_k = 20;
 
     if (
         options.backend == "dense"
@@ -504,6 +529,7 @@ void printSummary(
     const QualityMetrics& quality,
     std::vector<double> latency_samples,
     const std::string& backend,
+    bool relevance_filter_enabled,
     int top_k,
     int runs,
     double load_time_ms
@@ -599,6 +625,13 @@ void printSummary(
         << '\n'
         << "load_time_ms: "
         << load_time_ms
+        << "relevance_filter: "
+        << (
+            relevance_filter_enabled
+                ? "enabled"
+                : "disabled"
+        )
+        << '\n'
         << '\n';
 
     std::cout
@@ -707,6 +740,7 @@ void printSummary(
     metrics_json["top_k"] = top_k;
     metrics_json["runs"] = runs;
     metrics_json["load_time_ms"] = load_time_ms;
+    metrics_json["relevance_filter_enabled"] = relevance_filter_enabled;
 
     Json category_json = Json::object();
 
@@ -838,6 +872,7 @@ int main(int argc, char* argv[]) {
             quality,
             std::move(latency_samples),
             options.backend,
+            options.enable_relevance_filter,
             options.top_k,
             options.runs,
             load_time_ms
@@ -853,7 +888,8 @@ int main(int argc, char* argv[]) {
             << " <chunks.json>"
             << " <retrieval_cases.json>"
             << " <top_k>"
-            << " <runs>\n"
+            << " <runs>"
+            << " [--filter]\n"
             << "  "
             << argv[0]
             << " dense|hybrid"
@@ -862,7 +898,8 @@ int main(int argc, char* argv[]) {
             << " <top_k>"
             << " <runs>"
             << " <model_dir>"
-            << " <index_dir>\n\n"
+            << " <index_dir>"
+            << " [--filter]\n\n"
             << "retrieval benchmark failed: "
             << error.what()
             << '\n';

@@ -26,6 +26,14 @@ struct RetrieverRuntimeConfig {
     float hybrid_dense_weight = 1.0F;
 
     int hybrid_candidate_top_k = 20;
+
+    // 默认关闭
+    bool relevance_filter_enabled = false;
+
+    float relevance_minimum_sparse_score = 6.0F;
+    float relevance_minimum_dense_similarity = 0.40F;
+
+    int relevance_candidate_top_k = 20;
 };
 
 class RetrieverRuntime final {
@@ -38,6 +46,7 @@ public:
     RetrieverRuntime& operator=(const RetrieverRuntime&) = delete;
 
     bool load();
+    bool relevanceFilterEnabled() const noexcept;
 
     Retriever& retriever();
     const Retriever& retriever() const;

@@ -87,6 +87,74 @@ void testUnloadedAccess() {
     );
 }
 
+void enableRelevanceFilter(
+    RetrieverRuntimeConfig& config
+) {
+    config.relevance_filter_enabled = true;
+
+    config.relevance_minimum_sparse_score =
+        6.0F;
+
+    config.relevance_minimum_dense_similarity =
+        0.40F;
+
+    config.relevance_candidate_top_k = 20;
+}
+
+void testFilteredBm25Runtime(
+    const std::string& knowledge_path
+) {
+    RetrieverRuntimeConfig config;
+    config.backend = "bm25";
+    config.knowledge_path = knowledge_path;
+
+    enableRelevanceFilter(config);
+
+    RetrieverRuntime runtime(config);
+
+    expect(
+        runtime.load(),
+        "filtered BM25 runtime failed: "
+            + runtime.lastError()
+    );
+
+    expect(
+        runtime.relevanceFilterEnabled(),
+        "BM25 filter should be enabled"
+    );
+
+    const auto positive_results =
+        runtime.retriever().searchTopK(
+            "车里太热了，怎样凉快一点",
+            3
+        );
+
+    expect(
+        !positive_results.empty(),
+        "filtered BM25 should retain "
+        "vehicle query"
+    );
+
+    expect(
+        positive_results.front()
+            .chunk.chunk_id == 0,
+        "filtered BM25 should retain "
+        "air conditioner result"
+    );
+
+    const auto negative_results =
+        runtime.retriever().searchTopK(
+            "今天北京天气怎么样",
+            3
+        );
+
+    expect(
+        negative_results.empty(),
+        "filtered BM25 should reject "
+        "weather query"
+    );
+}
+
 #ifdef EDGE_ENABLE_BGE_EMBEDDER
 
 RetrieverRuntimeConfig makeDenseConfig(
@@ -191,6 +259,71 @@ void testHybridRuntime(
     );
 }
 
+void testFilteredHybridRuntime(
+    const std::string& knowledge_path,
+    const std::string& model_dir,
+    const std::string& index_dir
+) {
+    RetrieverRuntimeConfig config =
+        makeDenseConfig(
+            knowledge_path,
+            model_dir,
+            index_dir
+        );
+
+    config.backend = "hybrid";
+
+    enableRelevanceFilter(config);
+
+    RetrieverRuntime runtime(config);
+
+    expect(
+        runtime.load(),
+        "filtered Hybrid runtime failed: "
+            + runtime.lastError()
+    );
+
+    const auto positive_results =
+        runtime.retriever().searchTopK(
+            "行李应该放在哪里",
+            3
+        );
+
+    expect(
+        !positive_results.empty(),
+        "filtered Hybrid should retain "
+        "trunk query"
+    );
+
+    expect(
+        positive_results.front()
+            .chunk.chunk_id == 7,
+        "filtered Hybrid should return trunk"
+    );
+
+    const std::vector<std::string>
+        negative_queries{
+            "今天北京天气怎么样",
+            "红烧肉应该怎么做",
+            "今天股票行情如何",
+            "请解释量子纠缠实验",
+            "给我讲一个笑话"
+        };
+
+    for (
+        const std::string& query :
+        negative_queries
+    ) {
+        expect(
+            runtime.retriever()
+                .searchTopK(query, 3)
+                .empty(),
+            "filtered Hybrid should reject: "
+                + query
+        );
+    }
+}
+
 #else
 
 void testDisabledDenseBackend(
@@ -236,6 +369,7 @@ int main(int argc, char* argv[]) {
 
         testBm25Runtime(knowledge_path);
         testUnsupportedBackend(knowledge_path);
+        testFilteredBm25Runtime(knowledge_path);
         testUnloadedAccess();
 
 #ifdef EDGE_ENABLE_BGE_EMBEDDER
@@ -246,6 +380,12 @@ int main(int argc, char* argv[]) {
         );
 
         testHybridRuntime(
+            knowledge_path,
+            model_dir,
+            index_dir
+        );
+
+        testFilteredHybridRuntime(
             knowledge_path,
             model_dir,
             index_dir

@@ -723,6 +723,16 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    board_app_config_tests
+    tests/board_app_config_tests.cpp
+)
+target_link_libraries(
+    board_app_config_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 
 add_test(
@@ -843,6 +853,12 @@ add_test(
 add_test(
     NAME relevance_filtering_retriever_tests
     COMMAND relevance_filtering_retriever_tests
+)
+add_test(
+    NAME board_app_config_tests
+    COMMAND
+        board_app_config_tests
+        "${CMAKE_SOURCE_DIR}/config/board_wsl.conf"
 )
 
 if(EDGE_ENABLE_SHERPA_ASR)
