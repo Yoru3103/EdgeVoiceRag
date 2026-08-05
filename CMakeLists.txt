@@ -69,6 +69,7 @@ add_library(edge_voice_rag_core
     src/knowledge_base_loader.cpp
     src/hybrid_retriever.cpp
     src/retriever_runtime.cpp
+    src/relevance_filtering_retriever.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -712,6 +713,16 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    relevance_filtering_retriever_tests
+    tests/relevance_filtering_retriever_tests.cpp
+)
+target_link_libraries(
+    relevance_filtering_retriever_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 
 add_test(
@@ -828,6 +839,10 @@ add_test(
     COMMAND
         knowledge_base_loader_tests
         "${CMAKE_SOURCE_DIR}/vector_db/chunks.json"
+)
+add_test(
+    NAME relevance_filtering_retriever_tests
+    COMMAND relevance_filtering_retriever_tests
 )
 
 if(EDGE_ENABLE_SHERPA_ASR)
