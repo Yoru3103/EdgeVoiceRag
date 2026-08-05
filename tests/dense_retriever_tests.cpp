@@ -170,6 +170,13 @@ int main(
         "DenseRetriever: semantic trunk"
     );
 
+    expectTopChunk(
+        retriever,
+        "车里太热了，怎样凉快一点",
+        0,
+        "DenseRetriever: semantic air conditioner"
+    );
+
     const std::vector<RetrievalResult> top_two =
         retriever.searchTopK(
             "手机如何与车辆进行配对",

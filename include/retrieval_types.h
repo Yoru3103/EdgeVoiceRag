@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <string>
+#include <vector>
 
 /*
  * 知识库中的一个文档块。
@@ -20,11 +21,14 @@ struct DocumentChunk {
     std::string title;
     std::string content;
 
-    /*
-     * 用于检索的完整文本。
-     * 一般为：title + ": " + content
-     */
+    // 给LLM的原始车辆手册文本
     std::string text;
+
+    // 用户可能使用的同义表达，不属于车辆手册事实，只参与检索
+    std::vector<std::string> aliases;
+
+    // BM25和Dense使用text + aliases构建索引
+    std::string retrieval_text;
 };
 
 // 检索结果

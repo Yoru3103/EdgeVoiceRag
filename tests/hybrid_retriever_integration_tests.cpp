@@ -109,6 +109,12 @@ int main(int argc, char* argv[]) {
             "后备箱怎么打开",
             7);
 
+        expectTopChunk(
+            hybrid_retriever,
+            "车里太热了，怎样凉快一点",
+            0
+        );
+
         const auto air_conditioner_results =
             hybrid_retriever.searchTopK("空调怎么打开", 3);
 

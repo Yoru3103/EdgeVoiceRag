@@ -40,7 +40,7 @@ bool Bm25Retriever::loadKnowledgeBase() {
 
     // BM25额外要求每篇文档能产生token
     for (const DocumentChunk& document : load_result.documents) {
-        if (tokenizer_.tokenize(document.text).empty()) {
+        if (tokenizer_.tokenize(document.retrieval_text).empty()) {
             return false;
         }
     }
@@ -66,7 +66,8 @@ void Bm25Retriever::buildIndex() {
         document_index < documents_.size();
         document_index++
     ) {
-        const std::vector<std::string> tokens = tokenizer_.tokenize(documents_[document_index].text);
+        const std::vector<std::string> tokens = 
+            tokenizer_.tokenize(documents_[document_index].retrieval_text);
 
         document_lengths_.push_back(tokens.size());
 

@@ -18,6 +18,27 @@ KnowledgeBaseLoadResult failureResult(const std::string& error) {
     return result;
 }
 
+std::string buildRetrievalText(
+    const std::string& text,
+    const std::vector<std::string>& aliases
+) {
+    if (aliases.empty()) {
+        return text;
+    }
+
+    std::string retrieval_text = text + "\n相关表达: ";
+
+    for (std::size_t index = 0; index < aliases.size(); index++) {
+        if (index > 0) {
+            retrieval_text += "；";
+        }
+
+        retrieval_text += aliases[index];
+    }
+
+    return retrieval_text;
+}
+
 } // namespace
 
 KnowledgeBaseLoadResult loadDocumentChunks(const std::string& path) {
@@ -81,6 +102,73 @@ KnowledgeBaseLoadResult loadDocumentChunks(const std::string& path) {
                 chunk.title + ": " + chunk.content
             );
 
+            if (item.contains("aliases")) {
+                const Json& aliases_value = item.at("aliases");
+
+                if (!aliases_value.is_array()) {
+                    return failureResult(
+                        "chunk aliases must be an array"
+                    );
+                }
+
+                std::unordered_set<std::string> loaded_aliases;
+
+                for (const Json& alias_value : aliases_value) {
+                    if (!alias_value.is_string()) {
+                        return failureResult(
+                            "chunk alias must be a string"
+                        );
+                    }
+                    const std::string alias = alias_value.get<std::string>();
+
+                    if (alias.empty()) {
+                        return failureResult(
+                            "chunk alias must not be empty"
+                        );
+                    }
+
+                    const bool inserted = loaded_aliases.insert(alias).second;
+
+                    if (!inserted) {
+                        return failureResult(
+                            "duplicate alias in chunk: "
+                            + std::to_string(chunk.chunk_id)
+                        );
+                    }
+
+                    chunk.aliases.push_back(alias);
+                }
+            }
+
+            const std::string expected_retrieval_text =
+                buildRetrievalText(
+                    chunk.text,
+                    chunk.aliases
+                );
+
+            if (item.contains("retrieval_text")) {
+                if (!item.at("retrieval_text").is_string()) {
+                    return failureResult(
+                        "chunk retrieval_text must be a string"
+                    );
+                }
+
+                const std::string stored_retrieval_text =
+                    item.at("retrieval_text").get<std::string>();
+
+                if (
+                    stored_retrieval_text != expected_retrieval_text
+                ) {
+                    return failureResult(
+                        "chunk retrieval_text does not "
+                        "match text and aliases: "
+                        + std::to_string(chunk.chunk_id)
+                    );
+                }
+            }
+
+            chunk.retrieval_text = expected_retrieval_text;
+
             if (chunk.chunk_id < 0) {
                 return failureResult(
                     "chunk_id must not be negative"
@@ -90,7 +178,8 @@ KnowledgeBaseLoadResult loadDocumentChunks(const std::string& path) {
             if (
                 chunk.title.empty() ||
                 chunk.content.empty() ||
-                chunk.text.empty()
+                chunk.text.empty() ||
+                chunk.retrieval_text.empty()
             ) {
                 return failureResult(
                     "knowledge base chunk contains "

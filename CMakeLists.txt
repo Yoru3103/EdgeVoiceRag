@@ -702,7 +702,18 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    knowledge_base_loader_tests
+    tests/knowledge_base_loader_tests.cpp
+)
+target_link_libraries(
+    knowledge_base_loader_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
+
 add_test(
     NAME edge_voice_rag_unit_tests
     COMMAND unit_tests
@@ -791,6 +802,11 @@ add_test(
     NAME bm25_retriever_tests
     COMMAND bm25_retriever_tests
 )
+set_tests_properties(
+    bm25_retriever_tests
+    PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
 add_test(
     NAME dense_vector_index_tests
     COMMAND dense_vector_index_tests
@@ -806,6 +822,12 @@ add_test(
         "${CMAKE_SOURCE_DIR}/vector_db/chunks.json"
         "${BGE_MODEL_DIR}"
         "${BGE_INDEX_DIR}"
+)
+add_test(
+    NAME knowledge_base_loader_tests
+    COMMAND
+        knowledge_base_loader_tests
+        "${CMAKE_SOURCE_DIR}/vector_db/chunks.json"
 )
 
 if(EDGE_ENABLE_SHERPA_ASR)

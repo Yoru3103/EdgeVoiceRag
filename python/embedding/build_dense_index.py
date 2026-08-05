@@ -30,6 +30,19 @@ def sha256_file(path: Path) -> str:
             
     return digest.hexdigest()
 
+def build_retrieval_text(
+    text: str,
+    aliases: List[str],
+) -> str:
+    if not aliases:
+        return text
+
+    return (
+        text
+        + "\n相关表达: "
+        + "；".join(aliases)
+    )
+
 def load_chunks(path: Path) -> List[dict]:
     if not path.exists():
         raise FileNotFoundError(
@@ -77,6 +90,58 @@ def load_chunks(path: Path) -> List[dict]:
             )
         )
         
+        aliases_value = item.get(
+            "aliases",
+            [],
+        )
+        
+        if not isinstance(aliases_value, list):
+            raise ValueError(f"aliases must be a list: {chunk_id}")
+        
+        aliases: List[str] = []
+        loaded_aliases = set()
+        
+        for alias_value in aliases_value:
+            if not isinstance(alias_value, str):
+                raise ValueError(f"alias must be a string: {chunk_id}")
+            
+            alias = alias_value.strip()
+            
+            if not alias:
+                raise ValueError(f"alias must not be empty: {chunk_id}")
+            
+            if alias in loaded_aliases:
+                raise ValueError(f"duplicate alias in chunk: {chunk_id}")
+            
+            loaded_aliases.add(alias)
+            aliases.append(alias)
+            
+        expected_retrieval_text = (
+            build_retrieval_text(
+                text,
+                aliases,
+            )
+        )
+        
+        stored_retrieval_text = item.get(
+            "retrieval_text",
+            expected_retrieval_text,
+        )
+
+        if not isinstance(
+            stored_retrieval_text,
+            str,
+        ):
+            raise ValueError(
+                f"retrieval_text must be a string: "
+                f"{chunk_id}"
+            )
+
+        if stored_retrieval_text != expected_retrieval_text:
+            raise ValueError(
+                f"retrieval_text mismatch: {chunk_id}"
+            )
+        
         if (
             chunk_id < 0
             or not title
@@ -100,6 +165,8 @@ def load_chunks(path: Path) -> List[dict]:
                 "title": title,
                 "content": content,
                 "text": text,
+                "aliases": aliases,
+                "retrieval_text": expected_retrieval_text,
             }
         )
         
@@ -294,7 +361,7 @@ def build_index(
     )
 
     texts = [
-        str(chunk["text"])
+        str(chunk["retrieval_text"])
         for chunk in chunks
     ]
 

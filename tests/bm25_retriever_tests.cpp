@@ -236,6 +236,39 @@ void testInvalidConfiguration() {
     );
 }
 
+void testAirConditionerSemanticQuery() {
+    Bm25Retriever retriever =
+        createRetriever();
+
+    const auto results =
+        retriever.searchTopK(
+            "车里太热了，怎样凉快一点",
+            3
+        );
+
+    expectTrue(
+        !results.empty(),
+        "BM25: semantic air conditioner "
+        "query should return result"
+    );
+
+    if (!results.empty()) {
+        expectTrue(
+            results.front().chunk.chunk_id == 0,
+            "BM25: semantic air conditioner "
+            "should rank first"
+        );
+
+        expectTrue(
+            results.front().chunk.text.find(
+                "相关表达"
+            ) == std::string::npos,
+            "BM25: answer text must not "
+            "contain aliases"
+        );
+    }
+}
+
 } // namespace
 
 int main() {
@@ -247,6 +280,7 @@ int main() {
     testInvalidInput();
     testMissingKnowledgeBase();
     testInvalidConfiguration();
+    testAirConditionerSemanticQuery();
 
     if (g_failed_count == 0) {
         std::cout
