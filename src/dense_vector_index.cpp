@@ -11,6 +11,26 @@
 #include <nlohmann/json.hpp>
 
 using Json = nlohmann::json;
+namespace {
+
+bool isLowercaseHexFingerprint(const std::string& value) {
+    if (value.size() != 16) {
+        return false;
+    }
+
+    for (const char character : value) {
+        const bool digit = character >= '0' && character <= '9';
+        const bool lowercase_hex = character >= 'a' && character <= 'f';
+
+        if (!digit && !lowercase_hex) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+}   // namespace
 
 DenseVectorIndex::DenseVectorIndex(
     std::string metadata_path,
@@ -29,6 +49,7 @@ void DenseVectorIndex::resetData() {
     model_id_.clear();
     pooling_.clear();
     query_instruction_.clear();
+    chunks_fingerprint_.clear();
 
     chunk_ids_.clear();
     embeddings_.clear();
@@ -90,6 +111,7 @@ bool DenseVectorIndex::load() {
         const std::string model_id = metadata.at("model_id").get<std::string>();
         const std::string pooling = metadata.at("pooling").get<std::string>();
         const std::string query_instruction = metadata.at("query_instruction").get<std::string>();
+        const std::string chunks_fingerprint = metadata.at("chunks_fnv1a64").get<std::string>();
         const int max_length = metadata.at("max_length").get<int>();
 
         if (
@@ -101,9 +123,11 @@ bool DenseVectorIndex::load() {
             );
         }
 
-        if(version != 1) {
+        if(version != 2) {
             return fail(
-                "unsupported dense index version"
+                "unsupported dense index version: "
+                + std::to_string(version)
+                + "; rebuild the dense index"
             );
         }
 
@@ -135,6 +159,10 @@ bool DenseVectorIndex::load() {
             return fail(
                 "invalid embedding model metadata"
             );
+        }
+        
+        if (!isLowercaseHexFingerprint(chunks_fingerprint)) {
+            return fail("invalid chunks_fnv1a64 in dense index metadata");
         }
 
         const Json& rows_value = metadata.at("rows");
@@ -353,14 +381,12 @@ bool DenseVectorIndex::load() {
 
         model_id_ = model_id;
         pooling_ = pooling;
-        query_instruction_ =
-            query_instruction;
+        query_instruction_ = query_instruction;
+        chunks_fingerprint_ = chunks_fingerprint;
 
-        chunk_ids_ =
-            std::move(chunk_ids);
+        chunk_ids_ = std::move(chunk_ids);
 
-        embeddings_ =
-            std::move(embeddings);
+        embeddings_ = std::move(embeddings);
 
         loaded_ = true;
         last_error_.clear();
@@ -489,4 +515,8 @@ const std::string& DenseVectorIndex::queryInstruction() const noexcept {
 
 const std::string& DenseVectorIndex::lastError() const noexcept {
     return last_error_;
+}
+
+const std::string& DenseVectorIndex::chunksFingerprint() const noexcept {
+    return chunks_fingerprint_;
 }

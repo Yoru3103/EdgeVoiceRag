@@ -22,6 +22,26 @@ def sha256_file(path: Path) -> str:
 
     return digest.hexdigest()
 
+def fnv1a64_file(path: Path) -> str:
+    offset_basis = 14695981039346656037
+    prime = 1099511628211
+    mask = 0xFFFFFFFFFFFFFFFF
+    
+    fingerprint = offset_basis
+    
+    with path.open("rb") as file:
+        while True:
+            block = file.read(1024 * 1024)
+            
+            if not block:
+                break
+            
+            for byte in block:
+                fingerprint ^= byte
+                fingerprint = (fingerprint * prime) & mask
+                
+    return f"{fingerprint:016x}"
+
 
 def load_json(path: Path):
     with path.open(
@@ -80,7 +100,7 @@ def verify_index(
             "unsupported dense index format"
         )
 
-    if metadata.get("version") != 1:
+    if metadata.get("version") != 2:
         raise ValueError(
             "unsupported dense index version"
         )
@@ -123,6 +143,15 @@ def verify_index(
             "invalid embeddings file size: "
             f"expected={expected_bytes}, "
             f"actual={actual_bytes}"
+        )
+        
+    actual_chunks_fnv1a64 = fnv1a64_file(chunks_path)
+    
+    if (
+        metadata.get("chunks_fnv1a64") != actual_chunks_fnv1a64
+    ):
+        raise ValueError(
+            "FNV-1a mismatch: chunks_fnv1a64"
         )
 
     expected_hashes = {

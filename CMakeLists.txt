@@ -70,6 +70,7 @@ add_library(edge_voice_rag_core
     src/hybrid_retriever.cpp
     src/retriever_runtime.cpp
     src/relevance_filtering_retriever.cpp
+    src/file_fingerprint.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -733,6 +734,16 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    file_fingerprint_tests
+    tests/file_fingerprint_tests.cpp
+)
+target_link_libraries(
+    file_fingerprint_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 
 add_test(
@@ -859,6 +870,10 @@ add_test(
     COMMAND
         board_app_config_tests
         "${CMAKE_SOURCE_DIR}/config/board_wsl.conf"
+)
+add_test(
+    NAME file_fingerprint_tests
+    COMMAND file_fingerprint_tests
 )
 
 if(EDGE_ENABLE_SHERPA_ASR)
@@ -1032,6 +1047,16 @@ if(EDGE_ENABLE_BGE_EMBEDDER)
         PRIVATE
         edge_voice_rag_core
     )
+
+    add_executable(
+        dense_index_consistency_tests
+        tests/dense_index_consistency_tests.cpp
+    )
+    target_link_libraries(
+        dense_index_consistency_tests
+        PRIVATE
+        edge_voice_rag_core
+    )
     
     add_test(
         NAME bge_embedder_tests
@@ -1056,5 +1081,14 @@ if(EDGE_ENABLE_BGE_EMBEDDER)
             ${CMAKE_SOURCE_DIR}/vector_db/chunks.json
             ${CMAKE_SOURCE_DIR}/models/embedding/bge-small-zh-v1.5
             ${CMAKE_SOURCE_DIR}/vector_db/bge-small-zh-v1.5
+    )
+
+    add_test(
+        NAME dense_index_consistency_tests
+        COMMAND
+            dense_index_consistency_tests
+            "${CMAKE_SOURCE_DIR}/vector_db/chunks.json"
+            "${BGE_MODEL_DIR}"
+            "${BGE_INDEX_DIR}"
     )
 endif()

@@ -100,7 +100,7 @@ void writeMetadata(
         },
         {
             "version",
-            1
+            2
         },
         {
             "model_id",
@@ -133,6 +133,10 @@ void writeMetadata(
         {
             "query_instruction",
             "测试检索指令："
+        },
+        {
+            "chunks_fnv1a64",
+            "0123456789abcdef"
         },
         {
             "chunk_ids",
@@ -254,6 +258,13 @@ void testLoadValidIndex() {
         index.queryInstruction() ==
             "测试检索指令：",
         "DenseVectorIndex: query instruction"
+    );
+
+    expectTrue(
+        index.chunksFingerprint()
+            == "0123456789abcdef",
+        "DenseVectorIndex: "
+        "chunks fingerprint"
     );
 }
 

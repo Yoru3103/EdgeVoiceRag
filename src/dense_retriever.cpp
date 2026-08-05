@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "file_fingerprint.h"
 #include "knowledge_base_loader.h"
 
 DenseRetriever::DenseRetriever(DenseRetrieverConfig config)
@@ -40,6 +41,22 @@ bool DenseRetriever::load() {
 
     if (!index_.load()) {
         last_error_ = "failed to load dense vector index: " + index_.lastError();
+
+        return false;
+    }
+
+    const FileFingerprintResult knowledge_fingerprint = calculateFileFnv1a64(config_.knowledge_path);
+    if (!knowledge_fingerprint.ok) {
+        last_error_ = knowledge_fingerprint.error;
+
+        return false;
+    }
+
+    if (knowledge_fingerprint.fingerprint != index_.chunksFingerprint()) {
+        last_error_ = "dense index is stale: chunks "
+            "fingerprint does not match "
+            "knowledge base; rebuild the "
+            "dense index";
 
         return false;
     }

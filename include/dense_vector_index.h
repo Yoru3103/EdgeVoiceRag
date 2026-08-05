@@ -59,6 +59,7 @@ public:
     const std::string& pooling() const noexcept;
     const std::string& queryInstruction() const noexcept;
     const std::string& lastError() const noexcept;
+    const std::string& chunksFingerprint() const noexcept;
 
 private:
     std::string metadata_path_;
@@ -73,6 +74,7 @@ private:
     std::string model_id_;
     std::string pooling_;
     std::string query_instruction_;
+    std::string chunks_fingerprint_;
 
     std::vector<int> chunk_ids_;
 

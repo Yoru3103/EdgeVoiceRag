@@ -30,6 +30,26 @@ def sha256_file(path: Path) -> str:
             
     return digest.hexdigest()
 
+def fnv1a64_file(path: Path) -> str:
+    offset_basis = 14695981039346656037
+    prime = 1099511628211
+    mask = 0xFFFFFFFFFFFFFFFF
+    
+    fingerprint = offset_basis
+    
+    with path.open("rb") as file:
+        while True:
+            block = file.read(1024 * 1024)
+            
+            if not block:
+                break
+            
+            for byte in block:
+                fingerprint ^= byte
+                fingerprint = (fingerprint * prime) & mask
+                
+    return f"{fingerprint:016x}"
+
 def build_retrieval_text(
     text: str,
     aliases: List[str],
@@ -423,7 +443,7 @@ def build_index(
 
     metadata = {
         "format": "edge_voice_rag_dense_index",
-        "version": 1,
+        "version": 2,
         "model_id": model_id,
         "pooling": "cls",
         "normalized": True,
@@ -441,6 +461,8 @@ def build_index(
             int(chunk["chunk_id"])
             for chunk in chunks
         ],
+        "chunks_fnv1a64":
+            fnv1a64_file(chunks_path),
         "chunks_sha256":
             sha256_file(chunks_path),
         "model_sha256":
