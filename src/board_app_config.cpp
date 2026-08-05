@@ -137,6 +137,71 @@ BoardAppConfig BoardAppConfig::load(const std::string& path) {
         config.top_k
     );
 
+    config.retrieval_backend = getString(
+        values,
+        "retrieval_backend",
+        config.retrieval_backend
+    );
+
+    config.bge_model_path = getString(
+        values,
+        "bge_model_path",
+        config.bge_model_path
+    );
+
+    config.bge_tokenizer_path = getString(
+        values,
+        "bge_tokenizer_path",
+        config.bge_tokenizer_path
+    );
+
+    config.dense_index_metadata_path = getString(
+        values,
+        "dense_index_metadata_path",
+        config.dense_index_metadata_path
+    );
+
+    config.dense_embeddings_path = getString(
+        values,
+        "dense_embeddings_path",
+        config.dense_embeddings_path
+    );
+
+    config.dense_minimum_similarity =
+        getNumber<float>(
+            values,
+            "dense_minimum_similarity",
+            config.dense_minimum_similarity
+        );
+
+    config.hybrid_rrf_k =
+        getNumber<float>(
+            values,
+            "hybrid_rrf_k",
+            config.hybrid_rrf_k
+        );
+
+    config.hybrid_sparse_weight =
+        getNumber<float>(
+            values,
+            "hybrid_sparse_weight",
+            config.hybrid_sparse_weight
+        );
+
+    config.hybrid_dense_weight =
+        getNumber<float>(
+            values,
+            "hybrid_dense_weight",
+            config.hybrid_dense_weight
+        );
+
+    config.hybrid_candidate_top_k =
+        getNumber<int>(
+            values,
+            "hybrid_candidate_top_k",
+            config.hybrid_candidate_top_k
+        );
+
     config.capture_device = getString(
         values,
         "capture_device",
@@ -267,6 +332,74 @@ void BoardAppConfig::validate() const {
     if (top_k <= 0) {
         throw std::invalid_argument(
             "top_k must be greater than zero"
+        );
+    }
+
+    if (
+        retrieval_backend != "bm25" &&
+        retrieval_backend != "dense" &&
+        retrieval_backend != "hybrid"
+    ) {
+        throw std::invalid_argument(
+            "retrieval_backend must be "
+            "bm25, dense or hybrid"
+        );
+    }
+
+    if (
+        retrieval_backend == "dense"
+        || retrieval_backend == "hybrid"
+    ) {
+        if (
+            bge_model_path.empty()
+            || bge_tokenizer_path.empty()
+            || dense_index_metadata_path.empty()
+            || dense_embeddings_path.empty()
+        ) {
+            throw std::invalid_argument(
+                "dense retrieval paths must not be empty"
+            );
+        }
+    }
+
+    if (
+        dense_minimum_similarity < -1.0F
+        || dense_minimum_similarity > 1.0F
+    ) {
+        throw std::invalid_argument(
+            "dense_minimum_similarity must be "
+            "between -1 and 1"
+        );
+    }
+
+    if (hybrid_rrf_k <= 0.0F) {
+        throw std::invalid_argument(
+            "hybrid_rrf_k must be greater than zero"
+        );
+    }
+
+    if (
+        hybrid_sparse_weight < 0.0F
+        || hybrid_dense_weight < 0.0F
+    ) {
+        throw std::invalid_argument(
+            "hybrid weights must be non-negative"
+        );
+    }
+
+    if (
+        hybrid_sparse_weight == 0.0F
+        && hybrid_dense_weight == 0.0F
+    ) {
+        throw std::invalid_argument(
+            "hybrid weights cannot both be zero"
+        );
+    }
+
+    if (hybrid_candidate_top_k <= 0) {
+        throw std::invalid_argument(
+            "hybrid_candidate_top_k must be "
+            "greater than zero"
         );
     }
 

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "alsa_audio_player.h"
 #include "alsa_pcm_stream_source.h"
@@ -9,7 +10,7 @@
 #include "continuous_voice_session.h"
 #include "llm_backend_factory.h"
 #include "local_rag_llm_backend.h"
-#include "bm25_retriever.h"
+#include "retriever_runtime.h"
 #include "sherpa_onnx_asr_backend.h"
 #include "sherpa_onnx_tts_backend.h"
 #include "sherpa_onnx_vad_audio_recorder.h"
@@ -60,11 +61,24 @@ int main(int argc, char* argv[]) {
     try {
         const BoardAppConfig config = BoardAppConfig::load(config_path);
 
-        Bm25Retriever bm25_retriever(config.knowledge_path);
+        RetrieverRuntimeConfig retriever_config;
+        retriever_config.backend = config.retrieval_backend;
+        retriever_config.knowledge_path = config.knowledge_path;
+        retriever_config.bge_model_path = config.bge_model_path;
+        retriever_config.bge_tokenizer_path = config.bge_tokenizer_path;
+        retriever_config.dense_index_metadata_path = config.dense_index_metadata_path;
+        retriever_config.dense_embeddings_path = config.dense_embeddings_path;
+        retriever_config.dense_minimum_similarity = config.dense_minimum_similarity;
+        retriever_config.hybrid_rrf_k = config.hybrid_rrf_k;
+        retriever_config.hybrid_dense_weight = config.hybrid_dense_weight;
+        retriever_config.hybrid_sparse_weight = config.hybrid_sparse_weight;
+        retriever_config.hybrid_candidate_top_k = config.hybrid_candidate_top_k;
 
-        if (!bm25_retriever.loadKnowledgeBase()) {
+        RetrieverRuntime retriever_runtime(std::move(retriever_config));
+
+        if (!retriever_runtime.load()) {
             throw std::runtime_error(
-                "failed to load knowledge base: " + config.knowledge_path
+                retriever_runtime.lastError()
             );
         }
 
@@ -80,7 +94,7 @@ int main(int argc, char* argv[]) {
         rag_config.top_k = config.top_k;
 
         LocalRagLlmBackend answer_backend(
-            bm25_retriever,
+            retriever_runtime.retriever(),
             *llm_backend,
             rag_config
         );
@@ -173,7 +187,9 @@ int main(int argc, char* argv[]) {
 
         std::cout
             << "EdgeVoiceRAG board assistant\n"
-            << "LLM: "
+            << "Retriever: "
+            << retriever_runtime.backendName()
+            << "\nLLM: "
             << llm_backend->name()
             << "\nASR: "
             << asr_backend.name()

@@ -68,6 +68,7 @@ add_library(edge_voice_rag_core
     src/dense_vector_index.cpp
     src/knowledge_base_loader.cpp
     src/hybrid_retriever.cpp
+    src/retriever_runtime.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -691,6 +692,16 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    retriever_runtime_tests
+    tests/retriever_runtime_tests.cpp
+)
+target_link_libraries(
+    retriever_runtime_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 add_test(
     NAME edge_voice_rag_unit_tests
@@ -787,6 +798,14 @@ add_test(
 add_test(
     NAME hybrid_retriever_tests
     COMMAND hybrid_retriever_tests
+)
+add_test(
+    NAME retriever_runtime_tests
+    COMMAND
+        retriever_runtime_tests
+        "${CMAKE_SOURCE_DIR}/vector_db/chunks.json"
+        "${BGE_MODEL_DIR}"
+        "${BGE_INDEX_DIR}"
 )
 
 if(EDGE_ENABLE_SHERPA_ASR)

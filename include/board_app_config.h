@@ -8,6 +8,20 @@ struct BoardAppConfig {
 
     int top_k = 3;
 
+    std::string retrieval_backend = "bm25";
+    std::string bge_model_path = "models/embedding/bge-small-zh-v1.5/model.onnx";
+    std::string bge_tokenizer_path = "models/embedding/bge-small-zh-v1.5/tokenizer.json";
+    std::string dense_index_metadata_path = "vector_db/bge-small-zh-v1.5/index_meta.json";
+    std::string dense_embeddings_path = "vector_db/bge-small-zh-v1.5/embeddings.f32";
+
+    float dense_minimum_similarity = -1.0F;
+
+    float hybrid_rrf_k = 60.0F;
+    float hybrid_sparse_weight = 1.0F;
+    float hybrid_dense_weight = 1.0F;
+
+    int hybrid_candidate_top_k = 20;
+
     std::string capture_device = "plughw:CARD=rockchipes8388,DEV=0";
     std::string playback_device = "plughw:CARD=rockchipes8388,DEV=0";
 

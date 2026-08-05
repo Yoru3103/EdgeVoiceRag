@@ -69,15 +69,15 @@ std::vector<RetrievalResult> HybridRetriever::searchTopK(
     const std::string& query,
     int top_k
 ) const {
-    if (query.empty() || top_k < 0) {
+    if (query.empty() || top_k <= 0) {
         return {};
     }
 
     // 最终只返回 top_k，但融合时应获取更多候选文档。
-    const int candiate_top_k = std::max(top_k, config_.candidate_top_k);
+    const int candidate_top_k = std::max(top_k, config_.candidate_top_k);
 
-    const std::vector<RetrievalResult> sparse_results = sparse_retriever_.searchTopK(query, candiate_top_k);
-    const std::vector<RetrievalResult> dense_results = dense_retriever_.searchTopK(query, candiate_top_k);
+    const std::vector<RetrievalResult> sparse_results = sparse_retriever_.searchTopK(query, candidate_top_k);
+    const std::vector<RetrievalResult> dense_results = dense_retriever_.searchTopK(query, candidate_top_k);
 
     std::unordered_map<int, Candidate> candidates;
     candidates.reserve(sparse_results.size() + dense_results.size());
