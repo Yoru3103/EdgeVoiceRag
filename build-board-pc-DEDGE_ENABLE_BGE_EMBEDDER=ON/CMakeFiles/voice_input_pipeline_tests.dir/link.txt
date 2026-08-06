@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/voice_input_pipeline_tests.dir/tests/voice_input_pipeline_tests.cpp.o -o voice_input_pipeline_tests  libedge_voice_rag_core.a -lzmq 

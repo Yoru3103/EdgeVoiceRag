@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/continuous_voice_session_tests.dir/tests/continuous_voice_session_tests.cpp.o -o continuous_voice_session_tests  libedge_voice_rag_core.a -lzmq 

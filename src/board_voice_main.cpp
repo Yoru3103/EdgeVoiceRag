@@ -44,7 +44,7 @@ void printEvent(const VoiceSessionEvent& event) {
                 << "[PERF_JSON] "
                 << VoicePerformanceReport::encode(event)
                 << '\n';
-                
+
             break;
 
         case VoiceSessionEventType::BargeInDetected:
@@ -63,6 +63,9 @@ void printEvent(const VoiceSessionEvent& event) {
 }   // namespace
 
 int main(int argc, char* argv[]) {
+    // 调试日志使用，正常情况下可注释
+    std::cout << std::unitbuf;
+    std::cout << std::unitbuf;
     const std::string config_path = argc >= 2 ? argv[1] : "config/board_rk3576.conf";
 
     try {

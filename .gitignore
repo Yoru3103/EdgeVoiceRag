@@ -1,6 +1,7 @@
 build/
 build-sherpa/
-build-board-pc
+build-board-pc/
+build-board-pc-DEDGE_ENABLE_BGE_EMBEDDER=ON/
 .cache/
 __pycache__/
 .pytest_cache/
@@ -22,3 +23,4 @@ voice_output/
 perf_logs/
 build-bge/
 third_party/onnxruntime-linux-*/
+voice_session.log

@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/file_fingerprint_tests.dir/tests/file_fingerprint_tests.cpp.o -o file_fingerprint_tests  libedge_voice_rag_core.a -lzmq 

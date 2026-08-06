@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/hybrid_retriever_tests.dir/tests/hybrid_retriever_tests.cpp.o -o hybrid_retriever_tests  libedge_voice_rag_core.a -lzmq 

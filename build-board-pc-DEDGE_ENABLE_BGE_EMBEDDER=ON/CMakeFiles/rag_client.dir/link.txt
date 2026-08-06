@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/rag_client.dir/src/rag_client.cpp.o -o rag_client  -lzmq 

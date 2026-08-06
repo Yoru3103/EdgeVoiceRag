@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/local_rag_llm_backend_tests.dir/tests/local_rag_llm_backend_tests.cpp.o -o local_rag_llm_backend_tests  libedge_voice_rag_core.a -lzmq 

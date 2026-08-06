@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/edge_response_backend_tests.dir/tests/edge_response_backend_tests.cpp.o -o edge_response_backend_tests  libedge_voice_rag_core.a -lzmq 

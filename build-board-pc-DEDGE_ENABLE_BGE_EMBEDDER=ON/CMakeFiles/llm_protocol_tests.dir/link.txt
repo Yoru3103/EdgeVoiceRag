@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/llm_protocol_tests.dir/tests/llm_protocol_tests.cpp.o -o llm_protocol_tests  libedge_voice_rag_core.a -lzmq 

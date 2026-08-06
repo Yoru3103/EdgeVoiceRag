@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/llm_server.dir/src/llm_server.cpp.o -o llm_server  libedge_voice_rag_core.a -lzmq 

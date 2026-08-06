@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/zmq_req_client.dir/src/zmq_req_client.cpp.o -o zmq_req_client  -lzmq 
