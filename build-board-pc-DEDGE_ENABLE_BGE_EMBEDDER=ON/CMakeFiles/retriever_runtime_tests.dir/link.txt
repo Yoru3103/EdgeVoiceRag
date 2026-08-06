@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/retriever_runtime_tests.dir/tests/retriever_runtime_tests.cpp.o -o retriever_runtime_tests  libedge_voice_rag_core.a -lzmq 

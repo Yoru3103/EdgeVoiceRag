@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/knowledge_base_loader_tests.dir/tests/knowledge_base_loader_tests.cpp.o -o knowledge_base_loader_tests  libedge_voice_rag_core.a -lzmq 

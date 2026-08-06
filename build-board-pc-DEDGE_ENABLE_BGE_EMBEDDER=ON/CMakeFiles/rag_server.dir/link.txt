@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/rag_server.dir/src/rag_server.cpp.o -o rag_server  libedge_voice_rag_core.a -lzmq 

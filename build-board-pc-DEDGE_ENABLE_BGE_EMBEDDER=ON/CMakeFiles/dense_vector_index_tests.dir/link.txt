@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/dense_vector_index_tests.dir/tests/dense_vector_index_tests.cpp.o -o dense_vector_index_tests  libedge_voice_rag_core.a -lzmq 

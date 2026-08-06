@@ -63,6 +63,7 @@ add_library(edge_voice_rag_core
     src/wav_audio_recorder.cpp
     src/local_rag_llm_backend.cpp
     src/continuous_voice_session.cpp
+    src/voice_performance_report.cpp
     src/board_app_config.cpp
     src/chinese_text_tokenizer.cpp
     src/dense_vector_index.cpp
@@ -635,6 +636,16 @@ target_link_libraries(
 )
 
 add_executable(
+    voice_performance_report_tests
+    tests/voice_performance_report_tests.cpp
+)
+target_link_libraries(
+    voice_performance_report_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
+add_executable(
     wav_audio_reader_tests
     tests/wav_audio_reader_tests.cpp
 )
@@ -832,6 +843,10 @@ add_test(
 add_test(
     NAME continuous_voice_session_tests
     COMMAND continuous_voice_session_tests
+)
+add_test(
+    NAME voice_performance_report_tests
+    COMMAND voice_performance_report_tests
 )
 add_test(
     NAME wav_audio_reader_tests

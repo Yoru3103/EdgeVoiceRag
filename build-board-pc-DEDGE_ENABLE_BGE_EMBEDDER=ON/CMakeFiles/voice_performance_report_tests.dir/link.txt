@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/voice_performance_report_tests.dir/tests/voice_performance_report_tests.cpp.o -o voice_performance_report_tests  libedge_voice_rag_core.a -lzmq 

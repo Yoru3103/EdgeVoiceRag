@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/retrieval_benchmark.dir/tools/retrieval_benchmark.cpp.o -o retrieval_benchmark  libedge_voice_rag_core.a -lzmq 

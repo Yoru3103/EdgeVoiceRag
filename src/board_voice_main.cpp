@@ -15,6 +15,7 @@
 #include "sherpa_onnx_tts_backend.h"
 #include "sherpa_onnx_vad_audio_recorder.h"
 #include "voice_assistant.h"
+#include "voice_performance_report.h"
 
 namespace {
 
@@ -38,6 +39,12 @@ void printEvent(const VoiceSessionEvent& event) {
                 << "[ANSWER] "
                 << event.text
                 << '\n';
+
+            std::cout
+                << "[PERF_JSON] "
+                << VoicePerformanceReport::encode(event)
+                << '\n';
+                
             break;
 
         case VoiceSessionEventType::BargeInDetected:

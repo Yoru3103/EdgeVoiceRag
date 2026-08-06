@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/board_app_config_tests.dir/tests/board_app_config_tests.cpp.o -o board_app_config_tests  libedge_voice_rag_core.a -lzmq 

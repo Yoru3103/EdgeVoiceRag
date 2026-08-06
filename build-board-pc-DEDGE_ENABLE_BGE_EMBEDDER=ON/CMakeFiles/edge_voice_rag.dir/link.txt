@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/edge_voice_rag.dir/src/main.cpp.o -o edge_voice_rag  libedge_voice_rag_core.a -lzmq 

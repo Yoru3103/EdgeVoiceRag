@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/bounded_blocking_queue_tests.dir/tests/bounded_blocking_queue_tests.cpp.o -o bounded_blocking_queue_tests  libedge_voice_rag_core.a -lzmq 

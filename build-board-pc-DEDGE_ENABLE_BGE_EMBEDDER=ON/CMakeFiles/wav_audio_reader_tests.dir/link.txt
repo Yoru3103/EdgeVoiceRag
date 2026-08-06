@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/wav_audio_reader_tests.dir/tests/wav_audio_reader_tests.cpp.o -o wav_audio_reader_tests  libedge_voice_rag_core.a -lzmq 

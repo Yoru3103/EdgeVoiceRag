@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/chinese_text_tokenizer_tests.dir/tests/chinese_text_tokenizer_tests.cpp.o -o chinese_text_tokenizer_tests  libedge_voice_rag_core.a -lzmq 
