@@ -11,9 +11,33 @@
 #include "audio_player.h"
 #include "bounded_blocking_queue.h"
 #include "cancellable_answer_backend.h"
+#include "perf_timer.h"
 #include "streaming_answer_backend.h"
 #include "streaming_sentence_buffer.h"
 #include "tts_backend.h"
+
+struct VoiceAssistantTiming {
+    // processText() 开始，到收到第一段有效回答文本。
+    bool first_answer_text_observed = false;
+    double first_answer_text_ms = 0.0;
+
+    // processText() 开始，到第一段 TTS 音频合成完成。
+    bool first_audio_ready_observed = false;
+    double first_audio_ready_ms = 0.0;
+
+    // processText() 开始，到第一次调用播放器。
+    bool first_playback_started = false;
+    double first_playback_start_ms = 0.0;
+
+    // 所有 TTS synthesize() 调用的累计耗时。
+    double tts_elapsed_ms = 0.0;
+
+    // 所有 AudioPlayer::play() 调用的累计耗时。
+    double playback_elapsed_ms = 0.0;
+
+    // 整个 processText() 的执行时间。
+    double total_elapsed_ms = 0.0;
+};
 
 struct VoiceAssistantResult {
     bool ok = false;
@@ -32,8 +56,13 @@ struct VoiceAssistantResult {
 
     // answer_backend的总耗时，对本地是检索+prompt+llm；对远程还会包含网络传输
     double answer_backend_elapsed_ms = 0.0;
+
     // 本地RAG/LLM的细分计时，远程后端保持默认零值
     RagQueryTiming rag_timing;
+
+    // VoiceAssistant 的 TTS、播放和整轮时间。
+    VoiceAssistantTiming timing;
+
 
     static VoiceAssistantResult failure(
         const std::string& request_id,
@@ -104,6 +133,9 @@ private:
         std::string error;
 
         std::size_t spoken_sentence_count = 0;
+
+        PerfTimer timer{"voice_assistant_request"};
+        VoiceAssistantTiming timing;
     };
 
     struct SentenceTask {
@@ -188,4 +220,20 @@ private:
     void setActiveState(const std::shared_ptr<RequestState>& state);
 
     void clearActiveState(const std::shared_ptr<RequestState>& state);
+
+    static double elapsedMilliseconds(const std::chrono::steady_clock::time_point& started_at);
+
+    static void markFirstAnswerText(const std::shared_ptr<RequestState>& state);
+
+    static void addTtsElapsed(
+        const std::shared_ptr<RequestState>& state,
+        double elapsed_ms);
+
+    static void markFirstAudioReady(const std::shared_ptr<RequestState>& state);
+
+    static void markFirstPlaybackStarted(const std::shared_ptr<RequestState>& state);
+
+    static void addPlaybackElapsed(
+        const std::shared_ptr<RequestState>& state,
+        double elapsed_ms);
 };

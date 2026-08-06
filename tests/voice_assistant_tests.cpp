@@ -352,31 +352,62 @@ void testStreamedAnswerIsSynthesizedAndPlayed() {
             == 10.0,
         "preserve answer backend elapsed time"
     );
-
     expectTrue(
         result.rag_timing
             .retrieval_elapsed_ms
             == 1.5,
         "preserve retrieval elapsed time"
     );
-
     expectTrue(
         result.rag_timing
             .llm_time_to_first_token_ms
             == 2.5,
         "preserve LLM TTFT"
     );
-
     expectTrue(
         result.rag_timing
             .llm_elapsed_ms
             == 8.0,
         "preserve LLM total time"
     );
-
     expectTrue(
         result.rag_timing.first_token_observed,
         "preserve first token state"
+    );
+    expectTrue(
+        result.timing.first_answer_text_observed,
+        "observe first answer text"
+    );
+    expectTrue(
+        result.timing.first_audio_ready_observed,
+        "observe first synthesized audio"
+    );
+    expectTrue(
+        result.timing.first_playback_started,
+        "observe first playback start"
+    );
+    expectTrue(
+        result.timing.first_answer_text_ms
+            <= result.timing.first_audio_ready_ms,
+        "answer text precedes synthesized audio"
+    );
+    expectTrue(
+        result.timing.first_audio_ready_ms
+            <= result.timing.first_playback_start_ms,
+        "synthesized audio precedes playback"
+    );
+    expectTrue(
+        result.timing.first_playback_start_ms
+            <= result.timing.total_elapsed_ms,
+        "playback starts before request completion"
+    );
+    expectTrue(
+        result.timing.tts_elapsed_ms >= 0.0,
+        "record TTS elapsed time"
+    );
+    expectTrue(
+        result.timing.playback_elapsed_ms >= 0.0,
+        "record playback elapsed time"
     );
 }
 
@@ -466,6 +497,18 @@ void testNonStreamingFallback() {
         tts.synthesized_texts[0] ==
             "这是完整回答。",
         "fallback uses final answer"
+    );
+    expectTrue(
+        result.timing.first_answer_text_observed,
+        "non-streaming answer observes first text"
+    );
+    expectTrue(
+        result.timing.first_audio_ready_observed,
+        "non-streaming answer observes first audio"
+    );
+    expectTrue(
+        result.timing.first_playback_started,
+        "non-streaming answer observes playback"
     );
 }
 

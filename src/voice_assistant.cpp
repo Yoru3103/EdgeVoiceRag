@@ -225,6 +225,12 @@ VoiceAssistantResult VoiceAssistant::processText(
                     return;
                 }
 
+                if (event.delta.empty()) {
+                    return;
+                }
+
+                markFirstAnswerText(state);
+
                 result.received_chunk_count++;
 
                 const auto sentences = sentence_buffer_.append(event.delta);
@@ -256,6 +262,10 @@ VoiceAssistantResult VoiceAssistant::processText(
             // 兼容不支持流式后端的情况（即不发送chunk的情况）
             // 如果没有chunk，就把完整答案送入缓冲器
             if (result.received_chunk_count == 0) {
+                if (!answer_result.answer.empty()) {
+                    markFirstAnswerText(state);
+                }
+
                 const auto sentences = sentence_buffer_.append(answer_result.answer);
 
                 for (const auto& sentence : sentences) {
@@ -301,6 +311,9 @@ VoiceAssistantResult VoiceAssistant::processText(
         std::lock_guard<std::mutex> lock(state->mutex);
 
         result.spoken_sentence_count = state->spoken_sentence_count;
+
+        state->timing.total_elapsed_ms = state->timer.elapsedMilliseconds();
+        result.timing = state->timing;
 
         if (state->failed) {
             result.ok = false;
@@ -368,8 +381,15 @@ void VoiceAssistant::ttsWorker() {
             continue;
         }
 
+        PerfTimer tts_timer("tts_synthesis");
+
         try {
             TtsSynthesisResult synthesis = tts_backend_.synthesize(task->text);
+
+            addTtsElapsed(
+                task->state,
+                tts_timer.elapsedMilliseconds()
+            );
 
             if (!synthesis.ok) {
                 failState(task->state, "TTS failed: " + synthesis.error);
@@ -384,6 +404,8 @@ void VoiceAssistant::ttsWorker() {
             if (stateFailed(task->state)) {
                 continue;
             }
+
+            markFirstAudioReady(task->state);
 
             AudioTask audio_task;
             audio_task.state = task->state;
@@ -420,8 +442,17 @@ void VoiceAssistant::playbackWorker() {
             continue;
         }
 
+        markFirstPlaybackStarted(task->state);
+
+        PerfTimer playback_timer("audio_playback");
+
         try {
             const AudioPlaybackResult playback = audio_player_.play(task->audio);
+
+            addPlaybackElapsed(
+                task->state,
+                playback_timer.elapsedMilliseconds()
+            );
 
             if (!playback.ok) {
                 failState(task->state, "audio playback failed: " + playback.error);
@@ -434,6 +465,11 @@ void VoiceAssistant::playbackWorker() {
                 incrementSpokenCount(task->state);
             }
         } catch (const std::exception& error) {
+            addPlaybackElapsed(
+                task->state,
+                playback_timer.elapsedMilliseconds()
+            );
+
             failState(task->state, "audio playback exception: " + std::string(error.what()));
         }
     }
@@ -570,4 +606,45 @@ VoiceAssistantInterruptResult VoiceAssistant::interruptActiveRequest(const std::
     }
 
     return result;
+}
+
+void VoiceAssistant::markFirstAnswerText(const std::shared_ptr<RequestState>& state) {
+    std::lock_guard<std::mutex> lock(state->mutex);
+
+    if (!state->timing.first_answer_text_observed) {
+        state->timing.first_answer_text_observed = true;
+        state->timing.first_answer_text_ms = state->timer.elapsedMilliseconds();
+    }
+}
+
+void VoiceAssistant::addTtsElapsed(
+    const std::shared_ptr<RequestState>& state,
+    double elapsed_ms) {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    state->timing.tts_elapsed_ms += elapsed_ms;
+}
+
+void VoiceAssistant::markFirstAudioReady(const std::shared_ptr<RequestState>& state) {
+    std::lock_guard<std::mutex> lock(state->mutex);
+
+    if (!state->timing.first_audio_ready_observed) {
+        state->timing.first_audio_ready_observed = true;
+        state->timing.first_audio_ready_ms = state->timer.elapsedMilliseconds();
+    }
+}
+
+void VoiceAssistant::markFirstPlaybackStarted(const std::shared_ptr<RequestState>& state) {
+    std::lock_guard<std::mutex> lock(state->mutex);
+
+    if (!state->timing.first_playback_started) {
+        state->timing.first_playback_started = true;
+        state->timing.first_playback_start_ms = state->timer.elapsedMilliseconds();
+    }
+}
+
+void VoiceAssistant::addPlaybackElapsed(
+    const std::shared_ptr<RequestState>& state,
+    double elapsed_ms) {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    state->timing.playback_elapsed_ms += elapsed_ms;
 }
