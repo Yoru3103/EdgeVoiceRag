@@ -52,6 +52,8 @@ RagStreamQueryResult LocalRagLlmBackend::query(
 ) const {
     const auto start = Clock::now();
 
+    RagQueryTiming timing;
+
     if (request.request_id.empty()) {
         return RagStreamQueryResult::failure(
             request.request_id,
@@ -99,17 +101,21 @@ RagStreamQueryResult LocalRagLlmBackend::query(
     std::string accumulated_answer;
 
     try {
+        const auto retrieval_start = Clock::now();
         const std::vector<RetrievalResult> search_results = 
             retriever_.searchTopK(
                 request.query,
                 config_.top_k
             );
 
+        timing.retrieval_elapsed_ms = elapsedMilliseconds(retrieval_start);
+
         const std::string prompt = buildPrompt(
             request.query,
             search_results
         );
 
+        const auto llm_start = Clock::now();
         const LlmGenerationResult generation = 
             llm_backend_.generateStream(
                 prompt,
@@ -119,10 +125,18 @@ RagStreamQueryResult LocalRagLlmBackend::query(
                     &sequence,
                     &accumulated_answer,
                     &start,
+                    &timing,
+                    &llm_start,
                     this
                 ](const std::string& chunk) {
                     if (chunk.empty()) {
                         return;
+                    }
+
+                    if (!timing.first_token_observed) {
+                        timing.first_token_observed = true;
+
+                        timing.llm_time_to_first_token_ms = elapsedMilliseconds(llm_start);
                     }
 
                     accumulated_answer += chunk;
@@ -144,6 +158,8 @@ RagStreamQueryResult LocalRagLlmBackend::query(
                 }
             );
 
+        timing.llm_elapsed_ms = elapsedMilliseconds(llm_start);
+
         if (!generation.ok) {
             RagStreamEvent error_event;
             error_event.type = RagStreamEventType::Error;
@@ -162,7 +178,9 @@ RagStreamQueryResult LocalRagLlmBackend::query(
 
             return RagStreamQueryResult::failure(
                 request.request_id,
-                generation.error
+                generation.error,
+                elapsedMilliseconds(start),
+                timing
             );
         }
 
@@ -199,18 +217,23 @@ RagStreamQueryResult LocalRagLlmBackend::query(
             generation.answer,
             name(),
             llm_backend_.name(),
-            finished_event.elapsed_ms
+            finished_event.elapsed_ms,
+            timing
         );
     } catch (const std::exception& error) {
         return RagStreamQueryResult::failure(
             request.request_id,
             "local RAG LLM query failed: "
-                + std::string(error.what())
+                + std::string(error.what()),
+            elapsedMilliseconds(start),
+            timing
         );
     } catch (...) {
         return RagStreamQueryResult::failure(
             request.request_id,
-            "local RAG LLM query failed with unknown error"
+            "local RAG LLM query failed with unknown error",
+            elapsedMilliseconds(start),
+            timing
         );
     }
 }

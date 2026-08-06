@@ -239,6 +239,9 @@ VoiceAssistantResult VoiceAssistant::processText(
             }
         );
 
+        result.answer_backend_elapsed_ms = answer_result.elapsed_ms;
+        result.rag_timing = answer_result.timing;
+
         // state状态为真且结果已输出但结果为假
         if (!stateFailed(state) && !answer_result.ok) {
             failState(

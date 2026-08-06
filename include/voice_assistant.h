@@ -30,6 +30,11 @@ struct VoiceAssistantResult {
     std::size_t received_chunk_count = 0;
     std::size_t spoken_sentence_count = 0;
 
+    // answer_backend的总耗时，对本地是检索+prompt+llm；对远程还会包含网络传输
+    double answer_backend_elapsed_ms = 0.0;
+    // 本地RAG/LLM的细分计时，远程后端保持默认零值
+    RagQueryTiming rag_timing;
+
     static VoiceAssistantResult failure(
         const std::string& request_id,
         const std::string& query,

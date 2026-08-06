@@ -102,12 +102,19 @@ public:
             handler(finished);
         }
 
+        RagQueryTiming timing;
+        timing.retrieval_elapsed_ms = 1.5;
+        timing.llm_time_to_first_token_ms = 2.5;
+        timing.llm_elapsed_ms = 8.0;
+        timing.first_token_observed = true;
+
         return RagStreamQueryResult::success(
             request.request_id,
             final_answer,
             "mock_rag",
             "mock_llm",
-            10.0
+            10.0,
+            timing
         );
     }
 };
@@ -339,6 +346,37 @@ void testStreamedAnswerIsSynthesizedAndPlayed() {
     expectTrue(
         player.played_audio.size() == 2,
         "player receives two audio buffers"
+    );
+    expectTrue(
+        result.answer_backend_elapsed_ms
+            == 10.0,
+        "preserve answer backend elapsed time"
+    );
+
+    expectTrue(
+        result.rag_timing
+            .retrieval_elapsed_ms
+            == 1.5,
+        "preserve retrieval elapsed time"
+    );
+
+    expectTrue(
+        result.rag_timing
+            .llm_time_to_first_token_ms
+            == 2.5,
+        "preserve LLM TTFT"
+    );
+
+    expectTrue(
+        result.rag_timing
+            .llm_elapsed_ms
+            == 8.0,
+        "preserve LLM total time"
+    );
+
+    expectTrue(
+        result.rag_timing.first_token_observed,
+        "preserve first token state"
     );
 }
 

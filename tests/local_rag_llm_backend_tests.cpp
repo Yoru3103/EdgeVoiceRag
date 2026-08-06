@@ -163,6 +163,36 @@ void testLocalRagAndLlmAreConnected() {
         events[3].sequence == 3,
         "finished event follows all chunks"
     );
+
+    expectTrue(
+        result.timing.retrieval_elapsed_ms >= 0.0,
+        "report retrieval elapsed time"
+    );
+
+    expectTrue(
+        result.elapsed_ms >= 0.0,
+        "report total backend time"
+    );
+
+    expectTrue(
+        result.timing.first_token_observed,
+        "observe first streamed token"
+    );
+
+    expectTrue(
+        result.timing.llm_time_to_first_token_ms >= 0.0,
+        "report LLM time to first token"
+    );
+
+    expectTrue(
+        result.timing.llm_elapsed_ms >= result.timing.llm_time_to_first_token_ms,
+        "LLM total time should not be less than TTFT"
+    );
+
+    expectTrue(
+        result.elapsed_ms >= result.timing.retrieval_elapsed_ms,
+        "backend total time should not be less than retrieval time"
+    );
 }
 
 void testInvalidRequestIsRejected() {

@@ -133,12 +133,19 @@ public:
             handler(event);
         }
 
+        RagQueryTiming timing;
+        timing.retrieval_elapsed_ms = 0.5;
+        timing.llm_time_to_first_token_ms = 1.0;
+        timing.llm_elapsed_ms = 1.5;
+        timing.first_token_observed = true;
+
         return RagStreamQueryResult::success(
             request.request_id,
             "请检查车辆胎压。",
             "mock_rag",
             "mock_llm",
-            2.0
+            2.0,
+            timing
         );
     }
 };
@@ -282,6 +289,37 @@ void testCompleteVoiceInputPipeline() {
     expectTrue(
         result.asr_elapsed_ms == 25.0,
         "preserve ASR elapsed time"
+    );
+
+    expectTrue(
+        result.assistant_result
+            .answer_backend_elapsed_ms
+            == 2.0,
+        "preserve answer backend time"
+    );
+
+    expectTrue(
+        result.assistant_result
+            .rag_timing
+            .retrieval_elapsed_ms
+            == 0.5,
+        "preserve retrieval time"
+    );
+
+    expectTrue(
+        result.assistant_result
+            .rag_timing
+            .llm_time_to_first_token_ms
+            == 1.0,
+        "preserve LLM TTFT"
+    );
+
+    expectTrue(
+        result.assistant_result
+            .rag_timing
+            .llm_elapsed_ms
+            == 1.5,
+        "preserve LLM total time"
     );
 }
 
