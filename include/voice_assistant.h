@@ -221,8 +221,6 @@ private:
 
     void clearActiveState(const std::shared_ptr<RequestState>& state);
 
-    static double elapsedMilliseconds(const std::chrono::steady_clock::time_point& started_at);
-
     static void markFirstAnswerText(const std::shared_ptr<RequestState>& state);
 
     static void addTtsElapsed(

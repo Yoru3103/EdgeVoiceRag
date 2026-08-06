@@ -24,6 +24,15 @@ struct VoiceSessionEvent {
     std::string request_id;
     std::string text;
     std::string error;
+
+    // 当前用户语音的录制时间
+    double capture_elapsed_ms = 0.0;
+
+    // 当前用户语音的ASR推理时间
+    double asr_elapsed_ms = 0.0;
+
+    //  RAG、LLM、TTS 和播放结果。
+    VoiceAssistantResult assistant_result;
 };
 
 using VoiceSessionEventHandler = std::function<void(const VoiceSessionEvent&)>;

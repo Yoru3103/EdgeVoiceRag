@@ -624,6 +624,17 @@ target_link_libraries(
 )
 
 add_executable(
+    continuous_voice_session_tests
+    tests/continuous_voice_session_tests.cpp
+)
+target_link_libraries(
+    continuous_voice_session_tests
+    PRIVATE
+    edge_voice_rag_core
+    Threads::Threads
+)
+
+add_executable(
     wav_audio_reader_tests
     tests/wav_audio_reader_tests.cpp
 )
@@ -817,6 +828,10 @@ add_test(
 add_test(
     NAME voice_input_pipeline_tests
     COMMAND voice_input_pipeline_tests
+)
+add_test(
+    NAME continuous_voice_session_tests
+    COMMAND continuous_voice_session_tests
 )
 add_test(
     NAME wav_audio_reader_tests

@@ -51,10 +51,11 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
     );
 
     /*
-     * 用户打断时，VAD 已经获得了下一轮语音。
-     * pending_audio 用于跳过下一次普通录音。
+     * 用户打断时，VAD 已经获得了下一轮完整录音结果。
+     * 保存 AudioCaptureResult，避免丢失录音耗时。
      */
-    std::optional<AudioBuffer> pending_audio;
+    std::optional<AudioCaptureResult> pending_capture;
+    AudioBuffer user_audio;
 
     std::size_t request_sequence = 0;
 
@@ -68,12 +69,11 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
 
         const std::string request_id = makeRequestId(++request_sequence);
 
-        AudioBuffer user_audio;
+        AudioCaptureResult capture;
 
-        if (pending_audio.has_value()) {
-            user_audio = std::move(pending_audio.value());
-
-            pending_audio.reset();
+        if (pending_capture.has_value()) {
+            capture = std::move(pending_capture.value());
+            pending_capture.reset();
         } else {
             // 先通知正在等待说话，然后调用录音器（非VAD）
             emitEvent(
@@ -86,32 +86,32 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
                 }
             );
 
-            AudioCaptureResult capture = normal_recorder_.recordUtterance();
+            capture = normal_recorder_.recordUtterance();
 
             if (stop_requested_.load()) {
                 break;
             }
-
-            if (!capture.ok) {
-                session_result.error = "normal recording failed: " + capture.error;
-
-                emitEvent(
-                    handler,
-                    VoiceSessionEvent{
-                        VoiceSessionEventType::Error,
-                        request_id,
-                        "",
-                        session_result.error
-                    }
-                );
-
-                return session_result;
-            }
-
-            user_audio = std::move(capture.audio);
         }
 
-        const AsrTranscriptionResult transcription = 
+        if (!capture.ok) {
+            session_result.error =
+                "normal recording failed: " + capture.error;
+
+            emitEvent(
+                handler,
+                VoiceSessionEvent{
+                    VoiceSessionEventType::Error,
+                    request_id,
+                    "",
+                    session_result.error
+                }
+            );
+
+            return session_result;
+        }
+
+        user_audio = std::move(capture.audio);
+        const AsrTranscriptionResult transcription =
             asr_backend_.transcribe(user_audio);
 
         if (!transcription.ok) {
@@ -136,14 +136,16 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
             return session_result;
         }
 
+        VoiceSessionEvent recognized_event;
+        recognized_event.type = VoiceSessionEventType::RecognizedText;
+        recognized_event.request_id = request_id;
+        recognized_event.text = transcription.text;
+        recognized_event.capture_elapsed_ms = capture.elapsed_ms;
+        recognized_event.asr_elapsed_ms = transcription.elapsed_ms;
+
         emitEvent(
             handler,
-            VoiceSessionEvent{
-                VoiceSessionEventType::RecognizedText,
-                request_id,
-                transcription.text,
-                ""
-            }
+            std::move(recognized_event)
         );
 
         /*
@@ -234,14 +236,17 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
 
                 session_result.completed_turns++;
 
+                VoiceSessionEvent completed_event;
+                completed_event.type = VoiceSessionEventType::AnswerCompleted;
+                completed_event.request_id = request_id;
+                completed_event.text = answer.answer;
+                completed_event.capture_elapsed_ms = capture.elapsed_ms;
+                completed_event.asr_elapsed_ms = transcription.elapsed_ms;
+                completed_event.assistant_result = answer;
+
                 emitEvent(
                     handler,
-                    VoiceSessionEvent{
-                        VoiceSessionEventType::AnswerCompleted,
-                        request_id,
-                        answer.answer,
-                        ""
-                    }
+                    std::move(completed_event)
                 );
 
                 iteration_finished = true;
@@ -274,7 +279,7 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
                 const VoiceAssistantResult interrupted = answer_future.get();
                 (void)interrupted;
 
-                pending_audio = std::move(barge_audio.audio);
+                pending_capture = std::move(barge_audio);
 
                 session_result.completed_turns++;
                 session_result.interruption_count++;
