@@ -254,12 +254,26 @@ BoardAppConfig BoardAppConfig::load(const std::string& path) {
                 config.relevance_minimum_dense_similarity
             );
 
-        config.relevance_candidate_top_k =
-            getNumber<int>(
-                values,
-                "relevance_candidate_top_k",
-                config.relevance_candidate_top_k
-            );
+    config.relevance_candidate_top_k =
+        getNumber<int>(
+            values,
+            "relevance_candidate_top_k",
+            config.relevance_candidate_top_k
+        );
+
+    config.response_direct_minimum_sparse_score =
+        getNumber<float>(
+            values,
+            "response_direct_minimum_sparse_score",
+            config.response_direct_minimum_sparse_score
+        );
+
+    config.response_direct_minimum_dense_similarity =
+        getNumber<float>(
+            values,
+            "response_direct_minimum_dense_similarity",
+            config.response_direct_minimum_dense_similarity
+        );
 
     config.capture_device = getString(
         values,
@@ -492,7 +506,28 @@ void BoardAppConfig::validate() const {
             "relevance_candidate_top_k "
             "must be greater than zero"
         );
-    }   
+    }
+
+    if (
+        !std::isfinite(response_direct_minimum_sparse_score)
+        || response_direct_minimum_sparse_score <= 0.0F
+    ) {
+        throw std::invalid_argument(
+            "response_direct_minimum_sparse_score "
+            "must be finite and greater than zero"
+        );
+    }
+
+    if (
+        !std::isfinite(response_direct_minimum_dense_similarity)
+        || response_direct_minimum_dense_similarity <= 0.0F
+        || response_direct_minimum_dense_similarity >= 1.0F
+    ) {
+        throw std::invalid_argument(
+            "response_direct_minimum_dense_similarity "
+            "must be finite and between zero and one"
+        );
+    }
 
     if (
         capture_device.empty()

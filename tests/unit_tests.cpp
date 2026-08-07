@@ -97,7 +97,12 @@ static void testRagEngine() {
     }
 
     {
-        std::vector<RetrievalResult> results = bm25_retriever.searchTopK("完全无关的问题", 3);
+        // “完全无关的问题”中的“全/关”会分别命中“安全/相关表达”；
+        // 使用词表外 ASCII 查询验证真正的零命中行为。
+        std::vector<RetrievalResult> results = bm25_retriever.searchTopK(
+            "quantum physics",
+            3
+        );
 
         expectTrue(
             results.empty(),

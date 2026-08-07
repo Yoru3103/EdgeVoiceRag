@@ -51,6 +51,12 @@ struct VoiceAssistantResult {
     std::string tts_backend;
     std::string audio_backend;
 
+    std::string response_mode;
+    std::string response_reason;
+    std::string query_category;
+    float classification_confidence = 0.0F;
+    std::size_t retrieval_result_count = 0;
+
     std::size_t received_chunk_count = 0;
     std::size_t spoken_sentence_count = 0;
 

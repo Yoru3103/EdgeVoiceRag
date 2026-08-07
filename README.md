@@ -4,11 +4,53 @@ A C++ + Python edge-side RAG assistant prototype for vehicle manual question ans
 
 This project starts from a lightweight C++ mock RAG core and gradually evolves into a mixed C++ / Python / ZeroMQ architecture. The C++ side handles the main assistant workflow, query routing, configuration, logging, performance timing, ZeroMQ communication, and JSON answer parsing. The Python side provides document chunking, Chinese tokenization, TF-IDF retrieval, query expansion, and local LLM generation.
 
-Current version:
+Current board version:
 
 ```text
-V4: Local LLM Integration
+RK3576 offline voice assistant with policy routing and barge-in
 ```
+
+---
+
+## Current RK3576 Board Route
+
+The primary board entry point is `src/board_voice_main.cpp`. It runs the
+audio, retrieval, RKLLM, TTS, playback, interruption, and response-policy
+components in one C++ process:
+
+```text
+ALSA capture
+    ↓
+Silero VAD → SenseVoice ASR
+    ↓
+QueryClassifier + ResponsePolicy
+    ├── safety         fixed guardrail + relevant manual evidence
+    ├── direct_rag     high-confidence factual answer without LLM
+    ├── rag_llm        relevant manual evidence synthesized by RKLLM
+    ├── llm_only       creative/general generation without retrieval
+    └── clarification  ambiguous query without reliable evidence
+    ↓
+streaming sentence buffer
+    ↓
+sherpa-onnx VITS TTS → ALSA playback
+    ↖ playback-time VAD can cancel audio and RKLLM generation
+```
+
+Direct RAG uses stricter thresholds than the general relevance filter:
+
+```ini
+relevance_minimum_sparse_score=6.0
+relevance_minimum_dense_similarity=0.40
+
+response_direct_minimum_sparse_score=8.0
+response_direct_minimum_dense_similarity=0.55
+```
+
+Each completed turn prints a `[POLICY]` line and includes `response_mode`,
+`response_reason`, `query_category`, `classification_confidence`, and
+`retrieval_result_count` in its `PERF_JSON` report. The older command-line,
+Python, and ZeroMQ routes documented below remain available for development
+and compatibility, but they are not the primary RK3576 voice path.
 
 ---
 

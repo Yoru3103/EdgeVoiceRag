@@ -62,6 +62,8 @@ add_library(edge_voice_rag_core
     src/wav_audio_reader.cpp
     src/wav_audio_recorder.cpp
     src/local_rag_llm_backend.cpp
+    src/response_policy.cpp
+    src/policy_routing_answer_backend.cpp
     src/continuous_voice_session.cpp
     src/voice_performance_report.cpp
     src/voice_performance_statistics.cpp
@@ -678,6 +680,17 @@ target_link_libraries(
 )
 
 add_executable(
+    policy_routing_answer_backend_tests
+    tests/policy_routing_answer_backend_tests.cpp
+)
+target_link_libraries(
+    policy_routing_answer_backend_tests
+    PRIVATE
+    edge_voice_rag_core
+    Threads::Threads
+)
+
+add_executable(
     chinese_text_tokenizer_tests
     tests/chinese_text_tokenizer_tests.cpp
 )
@@ -880,6 +893,15 @@ add_test(
 add_test(
     NAME local_rag_llm_backend_tests
     COMMAND local_rag_llm_backend_tests
+)
+add_test(
+    NAME policy_routing_answer_backend_tests
+    COMMAND policy_routing_answer_backend_tests
+)
+set_tests_properties(
+    policy_routing_answer_backend_tests
+    PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 add_test(
     NAME chinese_text_tokenizer_tests

@@ -247,6 +247,13 @@ VoiceAssistantResult VoiceAssistant::processText(
 
         result.answer_backend_elapsed_ms = answer_result.elapsed_ms;
         result.rag_timing = answer_result.timing;
+        result.response_mode = answer_result.response_mode;
+        result.response_reason = answer_result.response_reason;
+        result.query_category = answer_result.query_category;
+        result.classification_confidence =
+            answer_result.classification_confidence;
+        result.retrieval_result_count =
+            answer_result.retrieval_result_count;
 
         // state状态为真且结果已输出但结果为假
         if (!stateFailed(state) && !answer_result.ok) {

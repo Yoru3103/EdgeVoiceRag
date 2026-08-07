@@ -49,6 +49,12 @@ VoiceSessionEvent makeCompletedEvent() {
     assistant.tts_backend = "sherpa_onnx_tts";
     assistant.audio_backend = "alsa";
 
+    assistant.response_mode = "rag_llm";
+    assistant.response_reason = "manual evidence requires generated synthesis";
+    assistant.query_category = "complex";
+    assistant.classification_confidence = 0.75F;
+    assistant.retrieval_result_count = 3;
+
     assistant.received_chunk_count = 4;
     assistant.spoken_sentence_count = 1;
 
@@ -117,6 +123,24 @@ void testEncodeCompletedEvent() {
         report.at("retrieval_elapsed_ms").get<double>()
             == 20.0,
         "encode retrieval time"
+    );
+
+    expectTrue(
+        report.at("response_mode").get<std::string>()
+            == "rag_llm",
+        "encode response mode"
+    );
+
+    expectTrue(
+        report.at("query_category").get<std::string>()
+            == "complex",
+        "encode query category"
+    );
+
+    expectTrue(
+        report.at("retrieval_result_count").get<std::size_t>()
+            == 3,
+        "encode retrieval result count"
     );
 
     expectTrue(

@@ -9,7 +9,7 @@
 #include "board_app_config.h"
 #include "continuous_voice_session.h"
 #include "llm_backend_factory.h"
-#include "local_rag_llm_backend.h"
+#include "policy_routing_answer_backend.h"
 #include "retriever_runtime.h"
 #include "sherpa_onnx_asr_backend.h"
 #include "sherpa_onnx_tts_backend.h"
@@ -38,6 +38,19 @@ void printEvent(const VoiceSessionEvent& event) {
             std::cout
                 << "[ANSWER] "
                 << event.text
+                << '\n';
+
+            std::cout
+                << "[POLICY] mode="
+                << event.assistant_result.response_mode
+                << " category="
+                << event.assistant_result.query_category
+                << " confidence="
+                << event.assistant_result.classification_confidence
+                << " retrieved="
+                << event.assistant_result.retrieval_result_count
+                << " reason="
+                << event.assistant_result.response_reason
                 << '\n';
 
             std::cout
@@ -104,13 +117,17 @@ int main(int argc, char* argv[]) {
 
         std::unique_ptr<LlmBackend> llm_backend = createLlmBackend(llm_options);
 
-        LocalRagLlmBackendConfig rag_config;
-        rag_config.top_k = config.top_k;
+        PolicyRoutingAnswerBackendConfig answer_config;
+        answer_config.top_k = config.top_k;
+        answer_config.policy.direct_rag_minimum_sparse_score =
+            config.response_direct_minimum_sparse_score;
+        answer_config.policy.direct_rag_minimum_dense_similarity =
+            config.response_direct_minimum_dense_similarity;
 
-        LocalRagLlmBackend answer_backend(
+        PolicyRoutingAnswerBackend answer_backend(
             retriever_runtime.retriever(),
             *llm_backend,
-            rag_config
+            answer_config
         );
 
         // 语音转文字
@@ -211,6 +228,8 @@ int main(int argc, char* argv[]) {
             )
             << "\nLLM: "
             << llm_backend->name()
+            << "\nResponse policy: "
+            << answer_backend.name()
             << "\nASR: "
             << asr_backend.name()
             << "\nTTS: "

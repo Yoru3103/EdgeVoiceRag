@@ -29,6 +29,9 @@ struct BoardAppConfig {
 
     int relevance_candidate_top_k = 20;
 
+    float response_direct_minimum_sparse_score = 8.0F;
+    float response_direct_minimum_dense_similarity = 0.55F;
+
     std::string capture_device = "plughw:CARD=rockchipes8388,DEV=0";
     std::string playback_device = "plughw:CARD=rockchipes8388,DEV=0";
 

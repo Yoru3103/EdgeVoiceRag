@@ -63,6 +63,22 @@ int main(int argc, char* argv[]) {
             "unexpected relevance candidate_top_k"
         );
 
+        expect(
+            std::fabs(
+                config.response_direct_minimum_sparse_score
+                - 8.0F
+            ) < 0.0001F,
+            "unexpected direct RAG sparse threshold"
+        );
+
+        expect(
+            std::fabs(
+                config.response_direct_minimum_dense_similarity
+                - 0.55F
+            ) < 0.0001F,
+            "unexpected direct RAG dense threshold"
+        );
+
         std::cout
             << "board_app_config_tests passed\n";
 

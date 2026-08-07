@@ -63,6 +63,12 @@ std::string VoicePerformanceReport::encode(const VoiceSessionEvent& event) {
         {"tts_backend", assistant.tts_backend},
         {"audio_backend", assistant.audio_backend},
 
+        {"response_mode", assistant.response_mode},
+        {"response_reason", assistant.response_reason},
+        {"query_category", assistant.query_category},
+        {"classification_confidence", assistant.classification_confidence},
+        {"retrieval_result_count", assistant.retrieval_result_count},
+
         {"received_chunk_count", assistant.received_chunk_count},
         {"spoken_sentence_count", assistant.spoken_sentence_count},
 

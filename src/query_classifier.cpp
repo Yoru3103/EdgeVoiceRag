@@ -1,3 +1,7 @@
+/*
+ * 分类器主要区分为5类，Emergency、Factual、Creative、Complex、Unknown
+ * 优先级排序：Emergency -> Factual -> Creative -> Complex -> Unknown
+ */
 #include "query_classifier.h"
 
 #include <algorithm>
@@ -26,16 +30,42 @@ QueryClassifier::QueryClassifier()
         {
             "emergency",
             {
-                "故障",
-                "警告",
                 "危险",
                 "紧急",
-                "异常",
-                "失灵",
-                "失效",
-                "安全气囊",
+                "起火",
+                "冒烟",
+                "无法制动",
+                "刹车失灵",
+                "制动失灵",
+                "转向失灵",
+                "方向盘失控",
                 "制动故障",
                 "发动机故障"
+            }
+        },
+        {
+            "fault",
+            {
+                "故障",
+                "警告",
+                "报警",
+                "异常",
+                "失灵",
+                "失效"
+            }
+        },
+        {
+            "critical",
+            {
+                "发动机",
+                "动力",
+                "制动",
+                "刹车",
+                "转向",
+                "方向盘",
+                "轮胎",
+                "胎压",
+                "安全气囊"
             }
         },
         {
@@ -79,9 +109,14 @@ QueryClassifier::QueryClassifier()
                 "导航",
                 "空调控制",
                 "座椅调节",
+                "座椅加热",
                 "雨刷",
+                "雨刮",
                 "灯光",
-                "蓝牙"
+                "蓝牙",
+                "车窗",
+                "后备箱",
+                "尾门"
             }
         },
         {
@@ -152,6 +187,16 @@ QueryFeatures QueryClassifier::analyze(const std::string& query) const {
         )
     );
 
+    features.contains_fault_words = containsAny(
+        query,
+        keyword_dictionary_.at("fault")
+    );
+
+    features.contains_critical_system_words = containsAny(
+        query,
+        keyword_dictionary_.at("critical")
+    );
+
     features.contains_technical_words = (
         containsAny(
             query,
@@ -169,9 +214,17 @@ QueryClassification QueryClassifier::classify(const std::string& query) const {
 
     QueryClassification result;
 
+    /*
+     * Emergency判别
+     * 1. 只要出现明确高风险表达（见哈希表）
+     * 2. 同时出现故障类词与关键系统词
+     */
     if (
         features.contains_emergency_words
-        || features.urgency_score >= 0.7F
+        || (
+            features.contains_fault_words
+            && features.contains_critical_system_words
+        )
     ) {
         result.category = QueryCategory::Emergency;
         result.confidence = std::max(
@@ -185,7 +238,11 @@ QueryClassification QueryClassifier::classify(const std::string& query) const {
         return result;
     }
 
-    if (features.factual_score >= 0.5F) {
+    /*
+     * Factual判别
+     * 评分决定：技术词（0.4）、保养词（0.4）、功能词（0.5）
+     */
+    if (features.factual_score >= 0.4F) {
         result.category = QueryCategory::Factual;
         result.confidence = (
             features.factual_score
@@ -197,7 +254,11 @@ QueryClassification QueryClassifier::classify(const std::string& query) const {
         return result;
     }
 
-    if (features.creative_score >= 0.6F) {
+    /*
+     * Creative判别
+     * creative词语评分+0.3
+     */
+    if (features.creative_score >= 0.3F) {
         result.category = QueryCategory::Creative;
         result.confidence = (
             features.creative_score
@@ -208,6 +269,10 @@ QueryClassification QueryClassifier::classify(const std::string& query) const {
         return result;
     }
 
+    /*
+     * Complex判别：
+     * 由三部分组成：查询长度、关键词数量、车辆技术词数量
+     */
     if (features.complexity_score >= 0.6F) {
         result.category = QueryCategory::Complex;
         result.confidence = (

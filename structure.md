@@ -1,32 +1,38 @@
-src/main.cpp
-    │
-    ├── CommandLineOptions
-    │       解析 --config、--once
-    │
-    ├── AppConfig
-    │       加载 RAG/LLM 地址、超时、知识库路径
-    │
-    ├── RagEngine
-    │       本地 C++ 车辆知识检索
-    │
-    ├── ZmqTextClient
-    │       访问远程 RAG/LLM 服务
-    │
-    ├── EdgeResponseBackend
-    │       在本地 RAG、远程 RAG、远程 LLM 之间适配
-    │
-    └── MultiLevelResponseSystem
-            │
-            ├── QueryClassifier
-            ├── 选择 RagOnly/LlmOnly/Hybrid
-            └── 缓存回答
+# 当前板载主路线
 
-# 实际流程
-用户问题
+src/board_voice_main.cpp
+    │
+    ├── ALSA PCM + Silero VAD
+    ├── SenseVoice ASR
+    ├── RetrieverRuntime
+    │       BM25 / Dense / Hybrid + relevance filter
+    ├── PolicyRoutingAnswerBackend
+    │   ├── QueryClassifier
+    │   ├── ResponsePolicy
+    │   ├── Safety
+    │   ├── DirectRag
+    │   ├── RagLlm
+    │   ├── LlmOnly
+    │   └── Clarification
+    ├── RKLLM / Mock LLM
+    ├── sherpa-onnx VITS TTS
+    ├── ALSA playback
+    └── ContinuousVoiceSession
+            播放期间 VAD 打断并取消 RKLLM
+
+# 板载决策流程
+
+ASR 文本
   → QueryClassifier
-  → ResponseMode
-      ├── Emergency → RagOnly
-      ├── Factual   → RagOnly
-      ├── Complex   → Hybrid
-      ├── Creative  → LlmOnly
-      └── Unknown   → Hybrid
+  → Creative                    → LlmOnly（跳过检索）
+  → 其他类型                    → 检索一次
+      ├── Emergency             → Safety
+      ├── Factual + 高置信结果  → DirectRag
+      ├── 有相关结果            → RagLlm
+      ├── Complex + 无结果      → LlmOnly
+      └── Unknown + 无结果      → Clarification
+
+# 兼容命令行路线
+
+src/main.cpp 仍使用旧的 MultiLevelResponseSystem 和 ResponseBackend，
+用于命令行、ZeroMQ 与早期架构兼容，不是当前板载语音入口。

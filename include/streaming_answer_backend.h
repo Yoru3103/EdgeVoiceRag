@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <functional>
 #include <string>
 
@@ -34,6 +35,13 @@ struct RagStreamQueryResult {
 
     double elapsed_ms = 0.0;
     RagQueryTiming timing;
+
+    // 可选的响应策略元数据。普通后端保持默认空值。
+    std::string response_mode;
+    std::string response_reason;
+    std::string query_category;
+    float classification_confidence = 0.0F;
+    std::size_t retrieval_result_count = 0;
 
     static RagStreamQueryResult success(
         const std::string& request_id,

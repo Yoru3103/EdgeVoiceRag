@@ -24,6 +24,8 @@ struct QueryFeatures {
 
     bool contains_question_words = false;
     bool contains_emergency_words = false;
+    bool contains_fault_words = false;
+    bool contains_critical_system_words = false;
     bool contains_technical_words = false;
 };
 
