@@ -75,6 +75,11 @@ add_library(edge_voice_rag_core
     src/retriever_runtime.cpp
     src/relevance_filtering_retriever.cpp
     src/file_fingerprint.cpp
+    src/agent/tool_registry.cpp
+    src/agent/vehicle_device.cpp
+    src/agent/vehicle_tools.cpp
+    src/agent/rule_agent_planner.cpp
+    src/agent/agent_executor.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -421,6 +426,17 @@ add_executable(
 
 target_link_libraries(
     llm_server
+    PRIVATE
+    edge_voice_rag_core
+)
+
+add_executable(
+    agent_demo
+    src/agent/agent_demo.cpp
+)
+
+target_link_libraries(
+    agent_demo
     PRIVATE
     edge_voice_rag_core
 )
@@ -800,6 +816,16 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    agent_executor_tests
+    tests/agent_executor_tests.cpp
+)
+target_link_libraries(
+    agent_executor_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 
 add_test(
@@ -951,6 +977,10 @@ add_test(
 add_test(
     NAME file_fingerprint_tests
     COMMAND file_fingerprint_tests
+)
+add_test(
+    NAME agent_executor_tests
+    COMMAND agent_executor_tests
 )
 
 if(EDGE_ENABLE_SHERPA_ASR)
