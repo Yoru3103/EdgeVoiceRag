@@ -288,4 +288,8 @@ AgentAction LlmAgentPlanner::parseFinalAnswer(const nlohmann::json& root) {
     return AgentAction::finalAnswer(answer);
 }
 
+bool LlmAgentPlanner::cancel() {
+    return llm_backend_.cancel();
+}
+
 }   // namespace edge::agent

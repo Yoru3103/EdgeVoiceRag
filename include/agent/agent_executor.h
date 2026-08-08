@@ -30,6 +30,8 @@ public:
 
     void clearSession(const std::string& session_id);
 
+    bool cancel(const std::string& session_id);
+
 private:
     struct PendingAction {
         AgentPlanningContext context;
@@ -55,11 +57,6 @@ private:
     );
 
     static nlohmann::json buildTrace(const AgentPlanningContext& context);
-
-    AgentResponse processAction(
-        const std::string& session_id,
-        const AgentAction& action
-    );
 
     static bool isConfirmation(const std::string& text);
 

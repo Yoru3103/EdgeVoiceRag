@@ -256,4 +256,22 @@ std::string AgentExecutor::buildConfirmationPrompt(const AgentToolCall& call) {
            "请回答“确认”或“取消”。";
 }
 
+bool AgentExecutor::cancel(const std::string& session_id) {
+    if (session_id.empty()) {
+        return false;
+    }
+
+    bool pending_action_removed = false;
+
+    {
+        std::lock_guard<std::mutex> lock(pending_mutex_);
+
+        pending_action_removed = pending_actions_.erase(session_id) > 0;
+    }
+
+    const bool planner_cancelled = planner_.cancel();
+
+    return pending_action_removed || planner_cancelled;
+}
+
 }   // namespace edge::agent

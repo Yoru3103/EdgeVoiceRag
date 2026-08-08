@@ -14,6 +14,10 @@ public:
     virtual std::string name() const = 0;
 
     virtual AgentAction plan(const AgentPlanningContext& context) = 0;
+
+    virtual bool cancel() {
+        return false;
+    }
 };
 
 }   // namespace edge::agent

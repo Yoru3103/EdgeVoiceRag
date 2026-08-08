@@ -39,6 +39,9 @@ public:
 
     std::string buildPrompt(const AgentPlanningContext& context) const;
 
+    // 语音打断时，agent可以取消正在运行的RKLLM推理
+    bool cancel() override;
+
 private:
     LlmBackend& llm_backend_;
     const ToolRegistry& registry_;

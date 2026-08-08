@@ -81,6 +81,7 @@ add_library(edge_voice_rag_core
     src/agent/rule_agent_planner.cpp
     src/agent/agent_executor.cpp
     src/agent/llm_agent_planner.cpp
+    src/agent/agent_answer_backend.cpp
 )
 
 target_include_directories(edge_voice_rag_core PUBLIC include)  # PUBLIC: edge_voice_rag_core 自己需要 include/ 链接 edge_voice_rag_core 的目标也需要 include/
@@ -847,6 +848,16 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    agent_answer_backend_tests
+    tests/agent_answer_backend_tests.cpp
+)
+target_link_libraries(
+    agent_answer_backend_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 
 add_test(
@@ -1010,6 +1021,10 @@ add_test(
 add_test(
     NAME agent_workflow_tests
     COMMAND agent_workflow_tests
+)
+add_test(
+    NAME agent_answer_backend_tests
+    COMMAND agent_answer_backend_tests
 )
 
 if(EDGE_ENABLE_SHERPA_ASR)
