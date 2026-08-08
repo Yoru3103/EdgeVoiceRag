@@ -10,7 +10,7 @@ class RuleAgentPlanner final : public AgentPlanner {
 public:
     std::string name() const override;
 
-    AgentAction plan(const std::string& user_input) const override;
+    AgentAction plan(const std::string& user_input) override;
 
 private:
     static bool contains(

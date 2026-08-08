@@ -13,7 +13,7 @@ public:
 
     virtual std::string name() const = 0;
 
-    virtual AgentAction plan(const std::string& user_input) const = 0;
+    virtual AgentAction plan(const std::string& user_input) = 0;
 };
 
 }   // namespace edge::agent

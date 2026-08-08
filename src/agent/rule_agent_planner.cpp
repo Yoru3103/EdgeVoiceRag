@@ -6,7 +6,7 @@ std::string RuleAgentPlanner::name() const {
     return "rule_agent_planner";
 }
 
-AgentAction RuleAgentPlanner::plan(const std::string& user_input) const {
+AgentAction RuleAgentPlanner::plan(const std::string& user_input) {
     const std::string msg = "user input must not be empty";
     if (user_input.empty()) {
         return AgentAction::failure(
