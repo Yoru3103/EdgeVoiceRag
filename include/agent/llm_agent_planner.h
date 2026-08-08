@@ -32,12 +32,12 @@ public:
 
     std::string name() const override;
 
-    AgentAction plan(const std::string& user_input) override;
+    AgentAction plan(const AgentPlanningContext& context) override;
 
     // 暴露给测试，验证模型输出解析逻辑。
     AgentAction parseResponse(const std::string& response) const;
 
-    std::string buildPrompt(const std::string& user_input) const;
+    std::string buildPrompt(const AgentPlanningContext& context) const;
 
 private:
     LlmBackend& llm_backend_;

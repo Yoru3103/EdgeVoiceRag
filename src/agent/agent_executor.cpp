@@ -18,10 +18,18 @@ std::string formatNumber(float value) {
 
 AgentExecutor::AgentExecutor(
     AgentPlanner& planner,
-    ToolRegistry& registry
+    ToolRegistry& registry,
+    AgentExecutorConfig config
 )
     : planner_(planner)
-    , registry_(registry) {}
+    , registry_(registry)
+    , config_(config) {
+    if (config_.maximum_steps == 0) {
+        throw std::invalid_argument(
+            "agent maximum_steps must be greater than zero"
+        );
+    }
+}
 
 AgentResponse AgentExecutor::run(
     const std::string& session_id,
@@ -46,9 +54,85 @@ AgentResponse AgentExecutor::run(
         );
     }
 
-    const AgentAction action = planner_.plan(user_input);
+    AgentPlanningContext context;
+    context.user_input = user_input;
 
-    return processAction(session_id, action);
+    return continueExecution(session_id, std::move(context));
+}
+
+AgentResponse AgentExecutor::continueExecution(
+    const std::string& session_id,
+    AgentPlanningContext context
+) {
+    while (context.observations.size() < config_.maximum_steps) {
+        const AgentAction action = planner_.plan(context);
+
+        if (action.type == AgentActionType::Error) {
+            return AgentResponse::failure(
+                action.error.empty()
+                    ? "agent planning failed"
+                    : action.error
+            );
+        }
+
+        if (action.type == AgentActionType::FinalAnswer) {
+            std::string last_tool;
+            nlohmann::json last_observation = nlohmann::json::object();
+
+            if (!context.observations.empty()) {
+                const AgentObservation& last = context.observations.back();
+
+                last_tool = last.tool_call.name;
+                last_observation = last.tool_result.data;
+            }
+
+            return AgentResponse::completed(
+                action.answer,
+                last_tool,
+                last_observation,
+                buildTrace(context)
+            );
+        }
+
+        AgentTool* tool = registry_.find(action.tool_call.name);
+
+        if (tool == nullptr) {
+            return AgentResponse::failure(
+                "planner requested an unregistered tool: "
+                + action.tool_call.name
+            );
+        }
+
+        if (tool->requiresConfirmation()) {
+            {
+                std::lock_guard<std::mutex> lock(pending_mutex_);
+
+                pending_actions_[session_id] = {
+                    context,
+                    action.tool_call
+                };
+            }
+
+            AgentResponse response = AgentResponse::waiting(
+                buildConfirmationPrompt(action.tool_call)
+            );
+
+            response.trace = buildTrace(context);
+            return response;
+        }
+
+        const AgentToolResult result = registry_.execute(action.tool_call);
+
+        context.observations.push_back({
+            action.tool_call,
+            result
+        });
+    }
+
+    AgentResponse response = AgentResponse::failure("agent exceeded maximum execution steps");
+
+    response.trace = buildTrace(context);
+    return response;
 }
 
 bool AgentExecutor::hasPendingAction(const std::string& session_id) const {
@@ -59,6 +143,7 @@ bool AgentExecutor::hasPendingAction(const std::string& session_id) const {
 
 void AgentExecutor::clearSession(const std::string& session_id) {
     std::lock_guard<std::mutex> lock(pending_mutex_);
+
     pending_actions_.erase(session_id);
 }
 
@@ -81,142 +166,61 @@ AgentResponse AgentExecutor::handlePendingAction(
         );
     }
 
-    AgentToolCall call;
+    PendingAction pending;
 
     {
         std::lock_guard<std::mutex> lock(pending_mutex_);
 
         const auto it = pending_actions_.find(session_id);
-
+    
         if (it == pending_actions_.end()) {
             return AgentResponse::failure(
                 "pending action no longer exists"
             );
         }
 
-        call = it->second.tool_call;
+        pending = std::move(it->second);
         pending_actions_.erase(it);
     }
 
-    return executeTool(call);
-}
+    const AgentToolResult result = registry_.execute(pending.tool_call);
 
-AgentResponse AgentExecutor::processAction(
-    const std::string& session_id,
-    const AgentAction& action
-) {
-    switch (action.type) {
-        case AgentActionType::FinalAnswer:
-            return AgentResponse::completed(action.answer);
+    pending.context.observations.push_back({
+        pending.tool_call,
+        result
+    });
 
-        case AgentActionType::Error:
-            return AgentResponse::failure(action.error.empty() ? "agent planning failed" : action.error);
-
-        case AgentActionType::ToolCall:
-            break;
-    }
-
-    const AgentTool* tool = registry_.find(action.tool_call.name);
-
-    if (tool == nullptr) {
-        return AgentResponse::failure(
-            "planner requested an unregistered tool: "
-            + action.tool_call.name
-        );
-    }
-
-    if (tool->requiresConfirmation()) {
-        {
-            std::lock_guard<std::mutex> lock(pending_mutex_);
-
-            pending_actions_[session_id] = {action.tool_call};
-        }
-
-        return AgentResponse::waiting(
-            buildConfirmationPrompt(action.tool_call)
-        );
-    }
-
-    return executeTool(action.tool_call);
-}
-
-AgentResponse AgentExecutor::executeTool(const AgentToolCall& call) {
-    const AgentToolResult result = registry_.execute(call);
-
-    return renderToolResult(call, result);
-}
-
-AgentResponse AgentExecutor::renderToolResult(
-    const AgentToolCall& call,
-    const AgentToolResult& result
-) {
-    if (!result.ok) {
-        return AgentResponse::failure(
-            "工具 " + call.name
-            + " 执行失败：" + result.error
-        );
-    }
-
-    if (call.name == "get_cabin_environment") {
-        if (
-            !result.data.contains("temperature_c")
-            || !result.data.contains("humidity_percent")
-        ) {
-            return AgentResponse::failure(
-                "environment observation is incomplete"
-            );
-        }
-
-        const float temperature =
-            result.data.at("temperature_c").get<float>();
-
-        const float humidity =
-            result.data.at("humidity_percent").get<float>();
-
-        return AgentResponse::completed(
-            "当前车内温度为"
-                + formatNumber(temperature)
-                + "摄氏度，湿度为"
-                + formatNumber(humidity)
-                + "%。",
-            call.name,
-            result.data
-        );
-    }
-
-    if (call.name == "get_air_conditioner_state") {
-        const bool enabled =
-            result.data.at("enabled").get<bool>();
-
-        return AgentResponse::completed(
-            enabled
-                ? "模拟空调当前处于开启状态，"
-                  "指示灯已点亮。"
-                : "模拟空调当前处于关闭状态，"
-                  "指示灯已熄灭。",
-            call.name,
-            result.data
-        );
-    }
-
-    if (call.name == "set_air_conditioner") {
-        const bool enabled =
-            result.data.at("enabled").get<bool>();
-
-        return AgentResponse::completed(
-            enabled
-                ? "模拟空调已开启，指示灯已点亮。"
-                : "模拟空调已关闭，指示灯已熄灭。",
-            call.name,
-            result.data
-        );
-    }
-
-    return AgentResponse::completed(
-        "工具执行成功。",
-        call.name,
-        result.data
+    return continueExecution(
+        session_id,
+        std::move(pending.context)
     );
+}
+
+nlohmann::json AgentExecutor::buildTrace(const AgentPlanningContext& context) {
+    nlohmann::json trace = nlohmann::json::array();
+
+    for (const AgentObservation& observation : context.observations) {
+        trace.push_back({
+            {
+                "tool_call",
+                {
+                    {"id", observation.tool_call.id},
+                    {"name", observation.tool_call.name},
+                    {"arguments", observation.tool_call.arguments}
+                }
+            },
+            {
+                "result",
+                {
+                    {"ok", observation.tool_result.ok},
+                    {"data", observation.tool_result.data},
+                    {"error", observation.tool_result.error}
+                }
+            }
+        });
+    }
+
+    return trace;
 }
 
 bool AgentExecutor::isConfirmation(const std::string& text) {
@@ -242,9 +246,9 @@ std::string AgentExecutor::buildConfirmationPrompt(const AgentToolCall& call) {
             call.arguments.value("enabled", false);
 
         return enabled
-            ? "即将开启模拟空调并点亮指示灯，"
+            ? "检测到需要开启模拟空调并点亮指示灯，"
               "请回答“确认”或“取消”。"
-            : "即将关闭模拟空调并熄灭指示灯，"
+            : "检测到需要关闭模拟空调并熄灭指示灯，"
               "请回答“确认”或“取消”。";
     }
 

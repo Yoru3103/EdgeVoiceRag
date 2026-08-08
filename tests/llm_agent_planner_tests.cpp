@@ -95,8 +95,10 @@ void testParsesEnvironmentToolCall() {
         fixture.registry
     );
 
-    const AgentAction action =
-        planner.plan("车里现在多少度");
+    AgentPlanningContext context;
+    context.user_input = "车里现在多少度";
+
+    const AgentAction action = planner.plan(context);
 
     expectTrue(
         action.type == AgentActionType::ToolCall,
@@ -136,8 +138,10 @@ void testParsesControlToolCall() {
         fixture.registry
     );
 
-    const AgentAction action =
-        planner.plan("打开空调");
+    AgentPlanningContext context;
+    context.user_input = "打开空调";
+
+    const AgentAction action = planner.plan(context);
 
     expectTrue(
         action.type == AgentActionType::ToolCall,
@@ -164,8 +168,11 @@ void testParsesFinalAnswer() {
         fixture.registry
     );
 
-    const AgentAction action =
-        planner.plan("导航到公司");
+
+    AgentPlanningContext context;
+    context.user_input = "导航到公司";
+
+    const AgentAction action = planner.plan(context);
 
     expectTrue(
         action.type == AgentActionType::FinalAnswer,
@@ -198,8 +205,11 @@ void testRejectsUnknownTool() {
         fixture.registry
     );
 
-    const AgentAction action =
-        planner.plan("执行命令");
+
+    AgentPlanningContext context;
+    context.user_input = "执行命令";
+
+    const AgentAction action = planner.plan(context);
 
     expectTrue(
         action.type == AgentActionType::Error,
@@ -230,8 +240,11 @@ void testRejectsMalformedArguments() {
         fixture.registry
     );
 
-    const AgentAction action =
-        planner.plan("打开空调");
+
+    AgentPlanningContext context;
+    context.user_input = "打开空调";
+
+    const AgentAction action = planner.plan(context);
 
     expectTrue(
         action.type == AgentActionType::Error,
@@ -255,7 +268,11 @@ void testAcceptsMarkdownWrappedJson() {
         fixture.registry
     );
 
-    const AgentAction action = planner.plan("测试");
+
+    AgentPlanningContext context;
+    context.user_input = "测试";
+
+    const AgentAction action = planner.plan(context);
 
     expectTrue(
         action.type == AgentActionType::FinalAnswer,
@@ -272,8 +289,11 @@ void testReportsLlmFailure() {
         fixture.registry
     );
 
-    const AgentAction action =
-        planner.plan("打开空调");
+
+    AgentPlanningContext context;
+    context.user_input = "打开空调";
+
+    const AgentAction action = planner.plan(context);
 
     expectTrue(
         action.type == AgentActionType::Error,
@@ -296,8 +316,11 @@ void testRejectsInvalidJson() {
         fixture.registry
     );
 
-    const AgentAction action =
-        planner.plan("打开空调");
+
+    AgentPlanningContext context;
+    context.user_input = "打开空调";
+
+    const AgentAction action = planner.plan(context);
 
     expectTrue(
         action.type == AgentActionType::Error,

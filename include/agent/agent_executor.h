@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -9,11 +10,15 @@
 
 namespace edge::agent {
 
+struct AgentExecutorConfig {
+    std::size_t maximum_steps = 4;
+};
 class AgentExecutor {
 public:
     AgentExecutor(
         AgentPlanner& planner,
-        ToolRegistry& registry
+        ToolRegistry& registry,
+        AgentExecutorConfig config = {}
     );
 
     AgentResponse run(
@@ -27,30 +32,33 @@ public:
 
 private:
     struct PendingAction {
+        AgentPlanningContext context;
         AgentToolCall tool_call;
     };
 
     AgentPlanner& planner_;
     ToolRegistry& registry_;
+    AgentExecutorConfig config_;
 
     mutable std::mutex pending_mutex_;
+
     std::unordered_map<std::string, PendingAction> pending_actions_;
+
+    AgentResponse continueExecution(
+        const std::string& session_id,
+        AgentPlanningContext context
+    );
 
     AgentResponse handlePendingAction(
         const std::string& session_id,
         const std::string& user_input
     );
 
+    static nlohmann::json buildTrace(const AgentPlanningContext& context);
+
     AgentResponse processAction(
         const std::string& session_id,
         const AgentAction& action
-    );
-
-    AgentResponse executeTool(const AgentToolCall& call);
-
-    static AgentResponse renderToolResult(
-        const AgentToolCall& call,
-        const AgentToolResult& result
     );
 
     static bool isConfirmation(const std::string& text);

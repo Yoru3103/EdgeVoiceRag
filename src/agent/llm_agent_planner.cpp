@@ -30,12 +30,12 @@ std::string LlmAgentPlanner::name() const {
     return "llm_agent_planner/" + llm_backend_.name();
 }
 
-AgentAction LlmAgentPlanner::plan(const std::string& user_input) {
-    if (user_input.empty()) {
+AgentAction LlmAgentPlanner::plan(const AgentPlanningContext& context) {
+    if (context.user_input.empty()) {
         return AgentAction::failure("user input must not be empty");
     }
 
-    const std::string prompt = buildPrompt(user_input);
+    const std::string prompt = buildPrompt(context);
 
     const LlmGenerationResult generation = llm_backend_.generate(prompt);
 
@@ -60,8 +60,34 @@ AgentAction LlmAgentPlanner::plan(const std::string& user_input) {
     return parseResponse(generation.answer);
 }
 
-std::string LlmAgentPlanner::buildPrompt(const std::string& user_input) const {
+std::string LlmAgentPlanner::buildPrompt(const AgentPlanningContext& context) const {
     const nlohmann::json tools = registry_.definition();
+
+    nlohmann::json history = nlohmann::json::array();
+
+    for (const AgentObservation& observation : context.observations) {
+        history.push_back({
+            {
+                "tool_call",
+                {
+                    {"id", observation.tool_call.id},
+                    {"name", observation.tool_call.name},
+                    {
+                        "arguments",
+                        observation.tool_call.arguments
+                    }
+                }
+            },
+            {
+                "observation",
+                {
+                    {"ok", observation.tool_result.ok},
+                    {"data", observation.tool_result.data},
+                    {"error", observation.tool_result.error}
+                }
+            }
+        });
+    }
 
     nlohmann::json tool_call_example = {
         {"type", "tool_call"},
@@ -77,39 +103,43 @@ std::string LlmAgentPlanner::buildPrompt(const std::string& user_input) const {
 
     nlohmann::json final_answer_example = {
         {"type", "final_answer"},
-        {
-            "answer",
-            "当前设备Agent无法处理这个任务。"
+        {"answer", "任务已经完成。"
         }
     };
 
     std::string prompt;
-    prompt.reserve(2048);
+    prompt.reserve(4096);
 
     prompt += config_.system_prompt;
+
     prompt += "\n\n可用工具：\n";
     prompt += tools.dump(2);
 
-    prompt += "\n\n合法输出格式一，调用工具：\n";
+    prompt += "\n\n用户原始任务：\n";
+    prompt += context.user_input;
+
+    prompt += "\n\n已经执行的步骤和观察结果：\n";
+    prompt += history.dump(2);
+
+    prompt += "\n\n调用工具时输出：\n";
     prompt += tool_call_example.dump();
 
-    prompt += "\n\n合法输出格式二，直接回答：\n";
+    prompt += "\n\n任务完成时输出：\n";
     prompt += final_answer_example.dump();
 
     prompt +=
         "\n\n规则："
-        "\n1. tool_call.name必须来自可用工具列表。"
-        "\n2. arguments必须满足工具参数定义。"
-        "\n3. 查询实时设备状态时必须调用工具。"
-        "\n4. 控制设备时必须调用工具。"
-        "\n5. 不要假设工具已经执行。"
-        "\n6. 不要输出思考过程。"
-        "\n7. 只能输出一个JSON对象。";
+        "\n1. 如果没有足够信息，选择一个工具。"
+        "\n2. 如果Observation已经足够，输出final_answer。"
+        "\n3. 可以根据Observation继续调用其他工具。"
+        "\n4. 不得重复调用已经获得有效结果的只读工具。"
+        "\n5. 工具执行失败时应根据错误生成简短回答，"
+        "不要假装成功。"
+        "\n6. 不得声称未执行的控制操作已经完成。"
+        "\n7. 只能输出一个JSON对象。"
+        "\n8. 不输出思考过程。";
 
-    prompt += "\n\n用户输入：\n";
-    prompt += user_input;
-
-    prompt += "\n\nJSON输出：";
+    prompt += "\n\n下一步JSON输出：";
 
     return prompt;
 }

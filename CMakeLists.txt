@@ -837,6 +837,16 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    agent_workflow_tests
+    tests/agent_workflow_tests.cpp
+)
+target_link_libraries(
+    agent_workflow_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 
 add_test(
@@ -996,6 +1006,10 @@ add_test(
 add_test(
     NAME llm_agent_planner_tests
     COMMAND llm_agent_planner_tests
+)
+add_test(
+    NAME agent_workflow_tests
+    COMMAND agent_workflow_tests
 )
 
 if(EDGE_ENABLE_SHERPA_ASR)

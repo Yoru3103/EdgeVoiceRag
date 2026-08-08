@@ -2,6 +2,7 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -76,6 +77,17 @@ struct AgentToolResult {
     }
 };
 
+struct AgentObservation {
+    AgentToolCall tool_call;
+    AgentToolResult tool_result;
+};
+
+// 保存原始任务以及每一步工具执行结果
+struct AgentPlanningContext {
+    std::string user_input;
+    std::vector<AgentObservation> observations;
+};
+
 enum class AgentResponseState {
     Completed,
     WaitingForConfirmation,
@@ -94,10 +106,13 @@ struct AgentResponse {
     std::string executed_tool;
     nlohmann::json observation = nlohmann::json::object();
 
+    nlohmann::json trace = nlohmann::json::array();
+
     static AgentResponse completed(
         std::string text,
         std::string tool = {},
-        nlohmann::json observation = nlohmann::json::object()
+        nlohmann::json observation = nlohmann::json::object(),
+        nlohmann::json execution_trace = nlohmann::json::array()
     ) {
         AgentResponse response;
         response.ok = true;
@@ -105,6 +120,7 @@ struct AgentResponse {
         response.answer = std::move(text);
         response.executed_tool = std::move(tool);
         response.observation = std::move(observation);
+        response.trace = std::move(execution_trace);
         return response;
     }
 
