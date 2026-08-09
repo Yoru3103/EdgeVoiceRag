@@ -20,7 +20,7 @@ public:
     AgentToolResult execute(const AgentToolCall& call);
 
     // 将来可以直接把这些定义交给 LLM Planner。
-    nlohmann::json definition() const;
+    nlohmann::json definitions() const;
 
 private:
     std::unordered_map<std::string, std::unique_ptr<AgentTool>> tools_;

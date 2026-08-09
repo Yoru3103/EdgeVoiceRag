@@ -1,6 +1,8 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -10,9 +12,18 @@
 
 namespace edge::agent {
 
+using AgentClock = std::chrono::steady_clock;
+
 struct AgentExecutorConfig {
     std::size_t maximum_steps = 4;
+
+    std::chrono::milliseconds confirmation_timeout{30000};
+
+    std::function<AgentClock::time_point()> now = [] {
+        return AgentClock::now();
+    };
 };
+
 class AgentExecutor {
 public:
     AgentExecutor(
@@ -36,6 +47,7 @@ private:
     struct PendingAction {
         AgentPlanningContext context;
         AgentToolCall tool_call;
+        AgentClock::time_point created_at;
     };
 
     AgentPlanner& planner_;

@@ -68,7 +68,7 @@ AgentToolResult ToolRegistry::execute(const AgentToolCall& call) {
     }
 }
 
-nlohmann::json ToolRegistry::definition() const {
+nlohmann::json ToolRegistry::definitions() const {
     nlohmann::json result = nlohmann::json::array();
 
     for (const auto& [name, tool] : tools_) {

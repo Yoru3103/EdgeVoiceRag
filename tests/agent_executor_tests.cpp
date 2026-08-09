@@ -299,6 +299,91 @@ void testDeviceFailureIsReported() {
     );
 }
 
+void testExpiredConfirmationDoesNotExecute() {
+    MockVehicleDevice device;
+    ToolRegistry registry;
+    RuleAgentPlanner planner;
+
+    registry.registerTool(
+        std::make_unique<
+            GetCabinEnvironmentTool
+        >(device)
+    );
+
+    registry.registerTool(
+        std::make_unique<
+            GetAirConditionerStateTool
+        >(device)
+    );
+
+    registry.registerTool(
+        std::make_unique<
+            SetAirConditionerTool
+        >(device)
+    );
+
+    AgentClock::time_point current_time{};
+
+    AgentExecutorConfig config;
+    config.maximum_steps = 4;
+    config.confirmation_timeout =
+        std::chrono::milliseconds(30000);
+
+    config.now = [&current_time]() {
+        return current_time;
+    };
+
+    AgentExecutor executor(
+        planner,
+        registry,
+        config
+    );
+
+    const AgentResponse first =
+        executor.run(
+            "timeout-session",
+            "打开空调"
+        );
+
+    expectTrue(
+        first.state
+            == AgentResponseState::
+                WaitingForConfirmation,
+        "control waits for confirmation"
+    );
+
+    current_time += std::chrono::seconds(31);
+
+    const AgentResponse confirmed =
+        executor.run(
+            "timeout-session",
+            "确认"
+        );
+
+    expectTrue(
+        confirmed.ok,
+        "expired confirmation returns safe response"
+    );
+
+    expectTrue(
+        confirmed.answer.find("超时")
+            != std::string::npos,
+        "expired confirmation reports timeout"
+    );
+
+    expectTrue(
+        !device.airConditionerEnabled(),
+        "expired confirmation does not execute control"
+    );
+
+    expectTrue(
+        !executor.hasPendingAction(
+            "timeout-session"
+        ),
+        "expired confirmation clears pending action"
+    );
+}
+
 }  // namespace
 
 int main() {
@@ -311,6 +396,7 @@ int main() {
     testUnknownToolIsRejected();
     testDuplicateToolIsRejected();
     testDeviceFailureIsReported();
+    testExpiredConfirmationDoesNotExecute();
 
     if (failed_count != 0) {
         std::cout

@@ -1,42 +1,84 @@
 # EdgeVoiceRAG
 
-A C++ + Python edge-side RAG assistant prototype for vehicle manual question answering.
+EdgeVoiceRAG 是一个面向智能座舱场景的端侧离线语音助手项目，主线运行平台为 RK3576。
 
-This project starts from a lightweight C++ mock RAG core and gradually evolves into a mixed C++ / Python / ZeroMQ architecture. The C++ side handles the main assistant workflow, query routing, configuration, logging, performance timing, ZeroMQ communication, and JSON answer parsing. The Python side provides document chunking, Chinese tokenization, TF-IDF retrieval, query expansion, and local LLM generation.
+项目使用 C++17 搭建板载主流程，覆盖离线语音识别、车辆手册 RAG、本地大模型、语音合成、播放打断以及受约束的单 Agent 工具工作流。当前 Agent 硬件层使用 Mock 设备模拟 DHT11 温湿度数据和空调指示灯状态，后续可以在不改变上层 Agent 架构的情况下替换为真实 Linux 设备实现。
 
-Current board version:
-
-```text
-RK3576 offline voice assistant with policy routing and barge-in
-```
-
----
-
-## Current RK3576 Board Route
-
-The primary board entry point is `src/board_voice_main.cpp`. It runs the
-audio, retrieval, RKLLM, TTS, playback, interruption, and response-policy
-components in one C++ process:
+当前板载入口：
 
 ```text
-ALSA capture
-    ↓
-Silero VAD → SenseVoice ASR
-    ↓
-QueryClassifier + ResponsePolicy
-    ├── safety         fixed guardrail + relevant manual evidence
-    ├── direct_rag     high-confidence factual answer without LLM
-    ├── rag_llm        relevant manual evidence synthesized by RKLLM
-    ├── llm_only       creative/general generation without retrieval
-    └── clarification  ambiguous query without reliable evidence
-    ↓
-streaming sentence buffer
-    ↓
-sherpa-onnx VITS TTS → ALSA playback
-    ↖ playback-time VAD can cancel audio and RKLLM generation
+src/board_voice_main.cpp
 ```
 
-Direct RAG uses stricter thresholds than the general relevance filter:
+## 一、项目目标
+
+本项目主要用于学习和实践以下方向：
+
+- 嵌入式 Linux 上的离线语音助手架构
+- C/C++ 应用层模块设计与资源管理
+- RKLLM 端侧大模型部署与调用
+- 车辆手册的本地 RAG 检索
+- AI Agent 工具调用和任务编排
+- 设备控制的权限校验、用户确认和安全兜底
+- ASR、RAG、LLM、TTS 和播放链路的性能分析
+- 模块化硬件抽象和可测试的 Mock 实现
+
+## 二、当前板载主路线
+
+```text
+ALSA 录音
+    ↓
+Silero VAD
+    ↓
+SenseVoice ASR
+    ↓
+AgentRoutingAnswerBackend
+    ├── 紧急安全问题
+    │      ↓
+    │   Safety Response + 车辆手册检索
+    │
+    ├── 实时设备查询或控制
+    │      ↓
+    │   Agent Planner
+    │      ↓
+    │   Tool Registry
+    │      ↓
+    │   参数校验 / 用户确认
+    │      ↓
+    │   Mock Vehicle Device
+    │
+    └── 手册或普通问答
+           ↓
+        ResponsePolicy
+        ├── safety
+        ├── direct_rag
+        ├── rag_llm
+        ├── llm_only
+        └── clarification
+    ↓
+流式分句
+    ↓
+sherpa-onnx VITS TTS
+    ↓
+ALSA 播放
+    ↖ 播放期间可通过 VAD 打断，并取消生成任务
+```
+
+主流程采用单 C++ 进程运行，减少板端跨进程通信开销。旧版 C++/Python/ZeroMQ 路线仍保留用于开发、对比测试和兼容性验证，但不再是 RK3576 的主要运行路线。
+
+## 三、分级响应策略
+
+普通问答由 `ResponsePolicy` 根据问题类型和检索置信度进行分级：
+
+| 模式 | 使用场景 | 处理方式 |
+|---|---|---|
+| `safety` | 制动、转向、起火等安全问题 | 固定安全提示，并附加相关手册内容 |
+| `direct_rag` | 高置信车辆事实问题 | 直接播报车辆手册结果，不调用 LLM |
+| `rag_llm` | 有相关资料但需要归纳 | 将检索结果交给 RKLLM 生成回答 |
+| `llm_only` | 创作或普通开放问题 | 不检索车辆手册，直接调用 LLM |
+| `clarification` | 意图不明确且没有可靠资料 | 请求用户补充信息 |
+
+相关阈值位于板端配置文件：
 
 ```ini
 relevance_minimum_sparse_score=6.0
@@ -46,1433 +88,514 @@ response_direct_minimum_sparse_score=8.0
 response_direct_minimum_dense_similarity=0.55
 ```
 
-Each completed turn prints a `[POLICY]` line and includes `response_mode`,
-`response_reason`, `query_category`, `classification_confidence`, and
-`retrieval_result_count` in its `PERF_JSON` report. The older command-line,
-Python, and ZeroMQ routes documented below remain available for development
-and compatibility, but they are not the primary RK3576 voice path.
+`direct_rag` 使用更严格的阈值，避免低相关手册片段绕过 LLM 后直接播报。
 
----
+## 四、Agent 工作流
 
-## 1. Project Goals
+### 4.1 Agent 的组成
 
-This project is designed as an edge AI deployment learning project.
-
-The main goals are:
+本项目中的 Agent 不是一个单独训练的模型，而是一套受约束的任务执行系统：
 
 ```text
-1. Build a C++ command-line assistant framework.
-2. Implement a simple vehicle manual RAG workflow.
-3. Use ZeroMQ for cross-process and cross-language communication.
-4. Add a Python retrieval backend.
-5. Add a local LLM generation layer.
-6. Support configurable backend switching.
-7. Prepare the project for later offline voice input and output.
-```
-
-Current system pipeline:
-
-```text
-User query
+用户目标
     ↓
-C++ edge_voice_rag
+Planner 规划下一步
     ↓
-QueryRouter
+结构化 ToolCall
     ↓
-Local C++ RAG / C++ ZMQ RAG / Python ZMQ RAG
+Executor 校验和编排
     ↓
-TF-IDF retrieval
+Tool Registry 白名单
     ↓
-Mock LLM / Ollama local LLM
+设备执行
     ↓
-generated_answer
+Observation
     ↓
-C++ RagResponseParser
-    ↓
-User-friendly answer
+继续规划或生成最终回答
 ```
 
----
-
-## 2. Features
-
-* C++17 command-line assistant framework
-* Query routing for vehicle manual questions
-* Local C++ mock RAG retrieval
-* ZeroMQ-based C++ RAG server
-* Python TF-IDF RAG backend
-* Chinese tokenization with `jieba`
-* Custom user dictionary for vehicle-domain terms
-* Synonym-based query expansion
-* Mock LLM generator interface
-* Ollama-based local LLM backend
-* Configurable LLM backend: `mock` / `ollama`
-* Ollama health check and model availability check
-* LLM request timeout configuration
-* Prompt debug mode with `--include-prompt`
-* Structured JSON response from Python RAG
-* C++ JSON parsing with `nlohmann_json`
-* C++ parser prioritizes `generated_answer`
-* Configurable backend selection:
-
-  * `local`
-  * `zmq`
-  * `python_zmq`
-* Shell-based integration tests
-* Simple performance logging
-* Git version tags for staged development
-
----
-
-## 3. Current Version
-
-```text
-V4: Local LLM Integration
-```
-
-V4 extends the Python TF-IDF RAG backend with a generation layer.
-
-The system now supports two LLM generation backends:
-
-```text
-mock
-    Stable test backend. Does not call a real model.
-
-ollama
-    Real local LLM backend. Calls local Ollama through HTTP.
-```
-
-V4 pipeline:
-
-```text
-C++ edge_voice_rag
-    ↓
-ZeroMQ
-Python RAG server
-    ↓
-TF-IDF retrieval
-    ↓
-Mock LLM / Ollama local LLM
-    ↓
-generated_answer
-    ↓
-C++ RagResponseParser
-    ↓
-final answer
-```
-
----
-
-## 4. Architecture
-
-### 4.1 Local C++ Backend
-
-```text
-edge_voice_rag
-    |
-    v
-QueryRouter
-    |
-    v
-C++ RagEngine
-    |
-    v
-docs/vehicle_manual.txt
-```
-
-This mode uses the local C++ mock RAG engine directly.
-
-Config:
-
-```ini
-rag_backend=local
-```
-
----
-
-### 4.2 C++ ZeroMQ Backend
-
-```text
-edge_voice_rag
-    |
-    | ZeroMQ REQ
-    v
-rag_server
-    |
-    v
-C++ RagEngine
-    |
-    v
-docs/vehicle_manual.txt
-```
-
-This mode sends queries from the C++ main program to a standalone C++ RAG server.
-
-Config:
-
-```ini
-rag_backend=zmq
-rag_endpoint=tcp://localhost:5555
-```
-
----
-
-### 4.3 Python ZeroMQ Backend
-
-```text
-edge_voice_rag
-    |
-    | ZeroMQ REQ
-    v
-python_rag_server.py
-    |
-    v
-TfidfRagSearcher
-    |
-    v
-vector_db/chunks.json
-    |
-    v
-JSON response
-    |
-    v
-C++ RagResponseParser
-```
-
-This mode sends queries from the C++ main program to the Python RAG server.
-
-Config:
-
-```ini
-rag_backend=python_zmq
-rag_endpoint=tcp://localhost:5556
-```
-
----
-
-### 4.4 Python ZeroMQ Backend with Local LLM
-
-```text
-edge_voice_rag
-    |
-    | ZeroMQ REQ
-    v
-python_rag_server.py
-    |
-    v
-TfidfRagSearcher
-    |
-    v
-retrieved contexts
-    |
-    v
-MockLLMGenerator / OllamaGenerator
-    |
-    v
-JSON response with generated_answer
-    |
-    v
-C++ RagResponseParser
-    |
-    v
-final answer
-```
-
-In V4, the Python RAG server no longer only concatenates retrieved chunks. It first retrieves relevant vehicle manual chunks, then passes them to an LLM generator interface. The generator can be either a mock backend for stable testing or an Ollama backend for real local LLM generation.
-
----
-
-## 5. Repository Structure
-
-```text
-EdgeVoiceRAG/
-├── CMakeLists.txt
-├── README.md
-├── config/
-│   ├── app.conf
-│   ├── dev.conf
-│   ├── zmq.conf
-│   └── python_zmq.conf
-├── docs/
-│   └── vehicle_manual.txt
-├── include/
-│   ├── app_config.h
-│   ├── command_line_options.h
-│   ├── logger.h
-│   ├── perf_timer.h
-│   ├── query_router.h
-│   ├── rag_client_zmq.h
-│   ├── rag_engine.h
-│   └── rag_response_parser.h
-├── src/
-│   ├── app_config.cpp
-│   ├── command_line_options.cpp
-│   ├── logger.cpp
-│   ├── main.cpp
-│   ├── perf_timer.cpp
-│   ├── query_router.cpp
-│   ├── rag_client.cpp
-│   ├── rag_client_zmq.cpp
-│   ├── rag_engine.cpp
-│   ├── rag_response_parser.cpp
-│   ├── rag_server.cpp
-│   ├── zmq_req_client.cpp
-│   └── zmq_rep_server.cpp
-├── python/
-│   ├── requirements.txt
-│   └── rag/
-│       ├── __init__.py
-│       ├── build_index.py
-│       ├── check_env.py
-│       ├── debug_tokenize.py
-│       ├── llm_generator.py
-│       ├── python_rag_server.py
-│       ├── search.py
-│       ├── test_llm_generator.py
-│       ├── tfidf_search.py
-│       └── user_dict.txt
-├── scripts/
-│   ├── build_python_index.sh
-│   ├── check_ollama.sh
-│   ├── check_python_env.sh
-│   ├── run_python_rag_server.sh
-│   ├── run_python_rag_server_debug.sh
-│   ├── run_python_rag_server_ollama.sh
-│   ├── search_python_json.sh
-│   ├── search_python_tfidf.sh
-│   ├── test_cpp_python_zmq_backend.sh
-│   ├── test_mock_llm.sh
-│   ├── test_ollama_generator_manual.sh
-│   ├── test_once_queries.sh
-│   ├── test_python_json_search.sh
-│   ├── test_python_rag_server.sh
-│   ├── test_python_rag_server_debug_prompt.sh
-│   ├── test_python_tfidf.sh
-│   └── test_zmq_backend.sh
-└── tests/
-    └── unit_tests.cpp
-```
-
-Generated files:
-
-```text
-build/
-vector_db/
-.venv/
-__pycache__/
-```
-
-These should be ignored by Git.
-
----
-
-## 6. Dependencies
-
-### 6.1 C++ Dependencies
-
-Required:
-
-```text
-CMake
-g++
-ZeroMQ
-cppzmq
-nlohmann_json
-```
-
-Install on Ubuntu / WSL:
-
-```bash
-sudo apt update
-sudo apt install -y build-essential cmake git pkg-config
-sudo apt install -y libzmq3-dev cppzmq-dev nlohmann-json3-dev
-```
-
-Verify ZeroMQ:
-
-```bash
-ls /usr/include/zmq.h
-ls /usr/include/zmq.hpp
-ldconfig -p | grep zmq
-```
-
-Verify `nlohmann_json`:
-
-```bash
-ls /usr/include/nlohmann/json.hpp
-```
-
----
-
-### 6.2 Python Dependencies
-
-This project uses a conda environment.
-
-Create and activate the environment:
-
-```bash
-conda create -n edge-rag python=3.10 -y
-conda activate edge-rag
-```
-
-Install Python dependencies:
-
-```bash
-pip install -r python/requirements.txt
-```
-
-Current Python dependencies:
-
-```text
-numpy
-scikit-learn
-jieba
-pyzmq
-requests
-```
-
-Check the environment:
-
-```bash
-./scripts/check_python_env.sh
-```
-
-Expected output:
-
-```text
-Python environment check
-Python: 3.10.x
-NumPy: ...
-scikit-learn: ...
-pyzmq: ...
-jieba tokens: ['空调', '怎么', '打开']
-Environment OK
-```
-
----
-
-### 6.3 Ollama Dependency
-
-Ollama is only required when using the real local LLM backend.
-
-Install and prepare a model:
-
-```bash
-ollama pull qwen2.5:1.5b
-```
-
-Check Ollama service and model:
-
-```bash
-./scripts/check_ollama.sh qwen2.5:1.5b
-```
-
-If Ollama is not running, try:
-
-```bash
-ollama run qwen2.5:1.5b
-```
-
-Ollama default local API:
-
-```text
-http://localhost:11434
-```
-
----
-
-## 7. Build
-
-Build the C++ project:
-
-```bash
-cmake -S . -B build
-cmake --build build
-```
-
-Generated binaries:
-
-```text
-build/edge_voice_rag
-build/unit_tests
-build/zmq_rep_server
-build/zmq_req_client
-build/rag_server
-build/rag_client
-```
-
----
-
-## 8. Configuration
-
-### 8.1 Local C++ Backend
-
-`config/app.conf`:
-
-```ini
-knowledge_path=docs/vehicle_manual.txt
-top_k=3
-rag_backend=local
-rag_endpoint=tcp://localhost:5555
-rag_timeout_ms=3000
-```
-
-Run:
-
-```bash
-./build/edge_voice_rag --config config/app.conf --once "空调怎么打开"
-```
-
----
-
-### 8.2 C++ ZeroMQ Backend
-
-`config/zmq.conf`:
-
-```ini
-knowledge_path=docs/vehicle_manual.txt
-top_k=3
-rag_backend=zmq
-rag_endpoint=tcp://localhost:5555
-rag_timeout_ms=3000
-```
-
-Start C++ RAG server:
-
-```bash
-./build/rag_server --config config/app.conf
-```
-
-Query through C++ main program:
-
-```bash
-./build/edge_voice_rag --config config/zmq.conf --once "空调怎么打开"
-```
-
-Stop server:
-
-```bash
-./build/edge_voice_rag --config config/zmq.conf --once "exit"
-```
-
----
-
-### 8.3 Python ZeroMQ Backend
-
-`config/python_zmq.conf`:
-
-```ini
-knowledge_path=docs/vehicle_manual.txt
-top_k=3
-rag_backend=python_zmq
-rag_endpoint=tcp://localhost:5556
-rag_timeout_ms=3000
-```
-
-Start Python RAG server with mock LLM:
-
-```bash
-conda activate edge-rag
-./scripts/run_python_rag_server.sh
-```
-
-Query through C++ main program:
-
-```bash
-./build/edge_voice_rag --config config/python_zmq.conf --once "空调怎么打开"
-```
-
-Stop Python RAG server:
-
-```bash
-./build/edge_voice_rag --config config/python_zmq.conf --once "exit"
-```
-
----
-
-## 9. Python RAG Backend
-
-### 9.1 Build Python Index
-
-The Python backend first converts the vehicle manual into structured chunks.
-
-Run:
-
-```bash
-conda activate edge-rag
-./scripts/build_python_index.sh
-```
-
-This generates:
-
-```text
-vector_db/chunks.json
-```
-
-The `vector_db/` directory is generated at runtime and ignored by Git.
-
----
-
-### 9.2 Search with TF-IDF
-
-Run:
-
-```bash
-./scripts/search_python_tfidf.sh "空调怎么打开"
-```
-
-Example output:
-
-```text
-1. [0.xxxx] 空调系统
-   空调系统：用户可以通过中控屏点击空调按钮，也可以使用语音指令“打开空调”。空调也可用于制冷，温度可以通过中控屏滑动条或方向盘语音键调节。
-```
-
----
-
-### 9.3 Search with JSON Output
-
-Run:
-
-```bash
-./scripts/search_python_json.sh "空调怎么打开"
-```
-
-Example output:
+各模块职责如下：
+
+| 模块 | 职责 |
+|---|---|
+| `AgentIntentClassifier` | 判断请求是否需要实时设备能力 |
+| `RuleAgentPlanner` | 为 Mock 测试提供确定性规划 |
+| `LlmAgentPlanner` | 使用本地 LLM 生成结构化工具调用 |
+| `AgentExecutor` | 控制最大步数、确认状态和执行循环 |
+| `ToolRegistry` | 管理允许调用的工具白名单 |
+| `AgentTool` | 将设备能力封装成结构化工具 |
+| `VehicleDevice` | 隔离 Agent 和具体硬件实现 |
+| `AgentAnswerBackend` | 将 Agent 适配到项目的流式回答接口 |
+| `AgentRoutingAnswerBackend` | 在 Agent 与原有问答策略之间路由 |
+
+### 4.2 当前工具
+
+| 工具 | 类型 | 参数 | 是否确认 |
+|---|---|---|---|
+| `get_cabin_environment` | 读取 | 无 | 否 |
+| `get_air_conditioner_state` | 读取 | 无 | 否 |
+| `set_air_conditioner` | 写入 | `enabled: bool` | 是 |
+
+示例工具调用：
 
 ```json
 {
-  "ok": true,
-  "query": "空调怎么打开",
-  "backend": "tfidf",
-  "answer": "根据车辆手册：\n1. 空调系统：用户可以通过中控屏点击空调按钮，也可以使用语音指令“打开空调”。空调也可用于制冷，温度可以通过中控屏滑动条或方向盘语音键调节。",
-  "result_count": 1,
-  "results": [
-    {
-      "rank": 1,
-      "chunk_id": 0,
-      "title": "空调系统",
-      "content": "用户可以通过中控屏点击空调按钮，也可以使用语音指令“打开空调”。空调也可用于制冷，温度可以通过中控屏滑动条或方向盘语音键调节。",
-      "text": "空调系统：用户可以通过中控屏点击空调按钮，也可以使用语音指令“打开空调”。空调也可用于制冷，温度可以通过中控屏滑动条或方向盘语音键调节。",
-      "score": 0.4082
+  "type": "tool_call",
+  "tool_call": {
+    "id": "call-1",
+    "name": "set_air_conditioner",
+    "arguments": {
+      "enabled": true
     }
-  ]
+  }
 }
 ```
 
----
-
-### 9.4 Run Python RAG Server
-
-Start server with mock LLM:
-
-```bash
-conda activate edge-rag
-./scripts/run_python_rag_server.sh
-```
-
-Default endpoint:
+### 4.3 多步任务示例
 
 ```text
-tcp://*:5556
+用户：如果车内温度超过26度，就打开空调
+
+Planner：调用 get_cabin_environment
+Observation：温度28.5℃，湿度60%
+
+Planner：调用 set_air_conditioner(enabled=true)
+Assistant：即将开启模拟空调，请确认是否执行
+
+用户：确认
+Tool：模拟空调状态设为开启，指示灯点亮
+Observation：enabled=true
+
+Planner：生成最终回答
+Assistant：车内温度超过26摄氏度，模拟空调已经开启
 ```
 
-Test with C++ client:
+### 4.4 Agent 安全边界
 
-```bash
-./build/rag_client --endpoint tcp://localhost:5556
-```
+LLM 只负责提出工具调用，不能直接访问 GPIO、设备文件或 Shell。
 
-Input:
+确定性 C++ 层负责以下安全措施：
+
+- 工具名称必须存在于 `ToolRegistry` 白名单
+- 工具参数必须通过类型和范围校验
+- 未注册工具不能执行
+- 写操作必须经过用户明确确认
+- 待确认操作超过配置时间后自动取消
+- 工具写入后重新读取状态进行验证
+- Agent 工作流具有最大执行步数
+- 紧急安全问题优先于普通设备操作
+- 紧急问题会清除之前遗留的待确认控制操作
+- 语音打断可以取消待确认任务和 LLM 生成
+- 工具调用、参数和 Observation 保存在执行轨迹中
+
+核心原则：
+
+> LLM 可以提出操作，但确定性代码决定该操作是否允许执行。
+
+## 五、Agent 路由规则
+
+当前路由示例：
+
+| 用户输入 | 路由结果 |
+|---|---|
+| 车内温度是多少 | Agent 环境查询 |
+| 空调现在开着吗 | Agent 状态查询 |
+| 打开空调 | Agent 设备控制，需要确认 |
+| 如果温度超过26度就打开空调 | Agent 多步工作流 |
+| 空调怎么打开 | 车辆手册 RAG，不执行控制 |
+| 空调为什么不制冷 | 车辆手册或故障知识 |
+| 制动系统故障，非常危险 | Safety 安全响应 |
+| 给我讲个故事 | LLM Only |
+
+区分“执行命令”和“询问方法”是当前路由层的重要职责：
 
 ```text
-空调怎么打开
+打开空调      → 请求执行设备操作
+空调怎么打开  → 询问车辆功能使用方法
 ```
 
-The server returns JSON.
+## 六、Mock 硬件层
 
----
-
-## 10. Chinese Tokenization and Query Expansion
-
-The Python backend uses `jieba` for Chinese tokenization.
-
-A custom user dictionary is stored in:
+当前使用 `MockVehicleDevice`：
 
 ```text
-python/rag/user_dict.txt
+温度：28.5℃
+湿度：60%
+空调状态：关闭
+指示灯状态：熄灭
 ```
 
-Example terms:
+上层只依赖 `VehicleDevice` 接口：
+
+```cpp
+class VehicleDevice {
+public:
+    virtual ~VehicleDevice() = default;
+
+    virtual CabinEnvironment readEnvironment() const = 0;
+    virtual bool setAirConditionerEnabled(bool enabled) = 0;
+    virtual bool airConditionerEnabled() const = 0;
+};
+```
+
+后续接入真实硬件时，可以增加 `LinuxVehicleDevice`：
 
 ```text
-雨刷
-雨刮
-空调
-冷气
-蓝牙
-胎压
-轮胎气压
-后备箱
-尾门
-充电桩
-充电站
-座椅加热
-中控屏
-方向盘
-雨量传感器
+readEnvironment()
+    → Linux IIO DHT11接口
+
+setAirConditionerEnabled()
+    → Linux LED Class或GPIO接口
 ```
 
-The TF-IDF backend also uses synonym query expansion.
+Planner、Executor、Tool、RAG、ASR和TTS层不需要改变。
 
-Examples:
+## 七、主要目录
 
 ```text
-雨刷 → 雨刮
-雨刮 → 雨刷
-冷气 → 空调, 制冷
-空调 → 冷气, 制冷
-后备箱 → 尾门
-尾门 → 后备箱
-充电桩 → 充电站
-充电站 → 充电桩
-胎压 → 轮胎气压
+include/agent/
+├── agent_types.h
+├── agent_tool.h
+├── tool_registry.h
+├── agent_planner.h
+├── rule_agent_planner.h
+├── llm_agent_planner.h
+├── agent_executor.h
+├── agent_answer_backend.h
+├── agent_intent_classifier.h
+├── agent_routing_answer_backend.h
+├── vehicle_device.h
+└── vehicle_tools.h
+
+src/agent/
+├── tool_registry.cpp
+├── rule_agent_planner.cpp
+├── llm_agent_planner.cpp
+├── agent_executor.cpp
+├── agent_answer_backend.cpp
+├── agent_intent_classifier.cpp
+├── agent_routing_answer_backend.cpp
+├── vehicle_device.cpp
+├── vehicle_tools.cpp
+└── agent_demo.cpp
+
+tests/
+├── agent_executor_tests.cpp
+├── llm_agent_planner_tests.cpp
+├── agent_workflow_tests.cpp
+├── agent_answer_backend_tests.cpp
+└── agent_routing_answer_backend_tests.cpp
 ```
 
-This improves recall for vehicle-domain expressions.
-
-Example:
-
-```bash
-python python/rag/tfidf_search.py --query "车里太热了怎么开冷气" --debug
-```
-
-Expected debug output:
-
-```text
-[DEBUG] query: 车里太热了怎么开冷气
-[DEBUG] expanded query: 车里太热了怎么开冷气 空调 制冷
-```
-
----
-
-## 11. Local LLM Backend
-
-The Python RAG server supports configurable LLM generation backends.
-
-### 11.1 Mock LLM Backend
-
-The mock backend is used for stable testing. It does not call any real model.
-
-Start server:
-
-```bash
-conda activate edge-rag
-./scripts/run_python_rag_server.sh
-```
-
-This uses:
-
-```text
---llm-backend mock
-```
-
-The mock backend simply formats retrieved contexts into an answer.
-
-Example output:
-
-```text
-[SYSTEM] 根据车辆手册：
-1. 空调系统：用户可以通过中控屏点击空调按钮，也可以使用语音指令“打开空调”...
-```
-
----
-
-### 11.2 Ollama Backend
-
-The Ollama backend calls a local Ollama service through HTTP.
-
-Prepare model:
-
-```bash
-ollama pull qwen2.5:1.5b
-```
-
-Check Ollama:
-
-```bash
-./scripts/check_ollama.sh qwen2.5:1.5b
-```
-
-Start Python RAG server with Ollama:
-
-```bash
-conda activate edge-rag
-./scripts/run_python_rag_server_ollama.sh qwen2.5:1.5b
-```
-
-Then query from the C++ main program:
-
-```bash
-./build/edge_voice_rag --config config/python_zmq.conf --once "空调怎么打开"
-```
-
-Example output:
-
-```text
-[SYSTEM] 您可以通过中控屏点击空调按钮，或者使用语音指令“打开空调”来开启空调。
-```
-
-Stop the server:
-
-```bash
-./build/edge_voice_rag --config config/python_zmq.conf --once "exit"
-```
-
----
-
-### 11.3 Ollama Runtime Options
-
-The Ollama server script supports environment variables:
-
-```bash
-OLLAMA_URL=http://localhost:11434
-LLM_TIMEOUT=60
-```
-
-Example:
-
-```bash
-OLLAMA_URL=http://localhost:11434 LLM_TIMEOUT=120 \
-./scripts/run_python_rag_server_ollama.sh qwen2.5:3b
-```
-
-The Python server also supports direct arguments:
-
-```bash
-python python/rag/python_rag_server.py \
-    --endpoint tcp://*:5556 \
-    --index vector_db/chunks.json \
-    --top-k 3 \
-    --llm-backend ollama \
-    --llm-model qwen2.5:1.5b \
-    --ollama-url http://localhost:11434 \
-    --llm-timeout 60
-```
-
-Disable LLM health check if needed:
-
-```bash
-python python/rag/python_rag_server.py \
-    --endpoint tcp://*:5556 \
-    --index vector_db/chunks.json \
-    --top-k 3 \
-    --llm-backend ollama \
-    --llm-model qwen2.5:1.5b \
-    --disable-llm-health-check
-```
-
----
-
-### 11.4 Ollama Health Check
-
-Run:
-
-```bash
-./scripts/check_ollama.sh qwen2.5:1.5b
-```
-
-This script checks:
-
-```text
-1. Whether Ollama service is reachable
-2. Whether the expected model exists
-3. Whether /api/generate works
-```
-
-If the model is missing:
-
-```bash
-ollama pull qwen2.5:1.5b
-```
-
-If the service is unavailable:
-
-```bash
-ollama run qwen2.5:1.5b
-```
-
----
-
-## 12. Prompt Debug Mode
-
-By default, the Python RAG server does not return the full prompt in the JSON response. This keeps the response smaller and avoids exposing internal prompt templates.
-
-Default response fields:
-
-```json
-{
-  "ok": true,
-  "query": "...",
-  "backend": "python_tfidf",
-  "llm_backend": "mock_llm",
-  "answer": "...",
-  "generated_answer": "...",
-  "result_count": 1,
-  "results": []
-}
-```
-
-To include the full prompt for debugging, start the debug server:
-
-```bash
-conda activate edge-rag
-./scripts/run_python_rag_server_debug.sh
-```
-
-Or start manually with:
-
-```bash
-python python/rag/python_rag_server.py \
-    --endpoint tcp://*:5556 \
-    --index vector_db/chunks.json \
-    --top-k 3 \
-    --llm-backend mock \
-    --include-prompt
-```
-
-Debug response includes:
-
-```json
-{
-  "prompt": "你是一个车载语音助手..."
-}
-```
-
-Ollama debug mode:
-
-```bash
-LLM_BACKEND=ollama LLM_MODEL=qwen2.5:1.5b \
-./scripts/run_python_rag_server_debug.sh
-```
-
----
-
-## 13. JSON Response Format
-
-Default Python RAG response:
-
-```json
-{
-  "ok": true,
-  "query": "空调怎么打开",
-  "backend": "python_tfidf",
-  "llm_backend": "mock_llm",
-  "answer": "根据车辆手册：\n1. 空调系统：...",
-  "generated_answer": "根据车辆手册：\n1. 空调系统：...",
-  "result_count": 1,
-  "results": [
-    {
-      "rank": 1,
-      "chunk_id": 0,
-      "title": "空调系统",
-      "content": "...",
-      "text": "空调系统：...",
-      "score": 0.4082
-    }
-  ]
-}
-```
-
-Debug response with prompt:
-
-```json
-{
-  "ok": true,
-  "query": "空调怎么打开",
-  "backend": "python_tfidf",
-  "llm_backend": "mock_llm",
-  "answer": "根据车辆手册：...",
-  "generated_answer": "根据车辆手册：...",
-  "prompt": "你是一个车载语音助手...",
-  "result_count": 1,
-  "results": []
-}
-```
-
-C++ answer extraction priority:
-
-```text
-generated_answer
-    ↓
-answer
-    ↓
-error
-    ↓
-raw response
-```
-
----
-
-## 14. Tests
-
-Build C++ first:
+其他重要模块：
+
+| 路径 | 作用 |
+|---|---|
+| `src/board_voice_main.cpp` | RK3576板载语音助手主入口 |
+| `src/response_policy.cpp` | 普通问答的分级策略 |
+| `src/policy_routing_answer_backend.cpp` | RAG、LLM和安全回答执行 |
+| `src/retriever_runtime.cpp` | BM25、Dense、Hybrid检索装配 |
+| `src/continuous_voice_session.cpp` | 连续语音会话和打断处理 |
+| `config/board_rk3576.conf` | RK3576运行配置 |
+
+## 八、构建与测试
+
+### 8.1 基础构建
 
 ```bash
 cmake -S . -B build
-cmake --build build
+cmake --build build -j2
 ```
 
-Activate Python environment:
+### 8.2 Agent Mock演示
 
 ```bash
-conda activate edge-rag
+cmake --build build --target agent_demo -j2
+./build/agent_demo
 ```
 
-Run C++ unit tests:
-
-```bash
-./build/unit_tests
-```
-
-Run local C++ RAG tests:
-
-```bash
-./scripts/test_once_queries.sh
-```
-
-Run C++ ZeroMQ backend tests:
-
-```bash
-./scripts/test_zmq_backend.sh
-```
-
-Run Python TF-IDF retrieval tests:
-
-```bash
-./scripts/test_python_tfidf.sh
-```
-
-Run Python JSON search tests:
-
-```bash
-./scripts/test_python_json_search.sh
-```
-
-Run mock LLM tests:
-
-```bash
-./scripts/test_mock_llm.sh
-```
-
-Run Python RAG server tests:
-
-```bash
-./scripts/test_python_rag_server.sh
-```
-
-Run prompt debug tests:
-
-```bash
-./scripts/test_python_rag_server_debug_prompt.sh
-```
-
-Run C++ to Python ZeroMQ backend tests:
-
-```bash
-./scripts/test_cpp_python_zmq_backend.sh
-```
-
-Run Ollama health check manually:
-
-```bash
-./scripts/check_ollama.sh qwen2.5:1.5b
-```
-
-Run Ollama generator manual test:
-
-```bash
-./scripts/test_ollama_generator_manual.sh qwen2.5:1.5b
-```
-
-Full default regression test:
-
-```bash
-cmake -S . -B build
-cmake --build build
-
-conda activate edge-rag
-
-./build/unit_tests
-./scripts/test_once_queries.sh
-./scripts/test_zmq_backend.sh
-./scripts/test_python_tfidf.sh
-./scripts/test_python_json_search.sh
-./scripts/test_mock_llm.sh
-./scripts/test_python_rag_server.sh
-./scripts/test_python_rag_server_debug_prompt.sh
-./scripts/test_cpp_python_zmq_backend.sh
-```
-
-Note: Ollama tests are manual and are not part of the default regression flow because they require a local Ollama service and a pulled model.
-
----
-
-## 15. Example Usage
-
-### 15.1 Local C++ Query
-
-```bash
-./build/edge_voice_rag --config config/app.conf --once "蓝牙怎么连接"
-```
-
-Example output:
+建议依次输入：
 
 ```text
-[SYSTEM] 根据车辆手册：
-1. 蓝牙连接：进入车辆设置页面，点击蓝牙选项，打开手机蓝牙后选择车辆名称，即可完成配对连接。 [score=2]
+车内温度是多少
+空调状态
+打开空调
+确认
+关闭空调
+取消
 ```
 
----
-
-### 15.2 Python RAG Query Through C++ Main with Mock LLM
-
-Start Python server:
+### 8.3 Agent测试
 
 ```bash
-conda activate edge-rag
-./scripts/run_python_rag_server.sh
+cmake --build build \
+    --target agent_executor_tests \
+             llm_agent_planner_tests \
+             agent_workflow_tests \
+             agent_answer_backend_tests \
+             agent_routing_answer_backend_tests \
+    -j2
+
+ctest --test-dir build \
+    -R "agent_.*tests" \
+    --output-on-failure
 ```
 
-Query:
-
-```bash
-./build/edge_voice_rag --config config/python_zmq.conf --once "尾门怎么打开"
-```
-
-Example output:
-
-```text
-[SYSTEM] 根据车辆手册：
-1. 后备箱开启：后备箱也称尾门，用户可以通过车钥匙、车内按键或尾门外部按钮开启后备箱。
-```
-
-Stop server:
-
-```bash
-./build/edge_voice_rag --config config/python_zmq.conf --once "exit"
-```
-
----
-
-### 15.3 Python RAG Query Through C++ Main with Ollama
-
-Start Ollama backend:
-
-```bash
-conda activate edge-rag
-./scripts/run_python_rag_server_ollama.sh qwen2.5:1.5b
-```
-
-Query:
-
-```bash
-./build/edge_voice_rag --config config/python_zmq.conf --once "空调怎么打开"
-```
-
-Example output:
-
-```text
-[SYSTEM] 您可以通过中控屏点击空调按钮，或者使用语音指令“打开空调”来开启空调。
-```
-
-Stop server:
-
-```bash
-./build/edge_voice_rag --config config/python_zmq.conf --once "exit"
-```
-
----
-
-## 16. Development Milestones
-
-### V1: C++ Mock RAG Core
-
-Tag:
-
-```text
-v1.0-cpp-mock-rag
-```
-
-Implemented:
-
-```text
-- C++17 project structure
-- QueryRouter
-- Logger
-- PerfTimer
-- RagEngine
-- vehicle_manual.txt
-- local mock retrieval
-- --once mode
-- unit tests
-- shell tests
-```
-
----
-
-### V2: ZeroMQ RAG Server
-
-Tag:
-
-```text
-v2.0-zmq-rag-server
-```
-
-Implemented:
-
-```text
-- ZeroMQ REQ/REP demo
-- C++ rag_server
-- C++ rag_client
-- RagClientZmq
-- configurable zmq backend
-- timeout handling
-- ZMQ backend integration tests
-```
-
----
-
-### V3: Python TF-IDF RAG Backend
-
-Tag:
-
-```text
-v3.0-python-rag-backend
-```
-
-Implemented:
-
-```text
-- Python conda environment
-- Python document chunk builder
-- chunks.json generation
-- jieba tokenization
-- custom user dictionary
-- synonym query expansion
-- TF-IDF top-k retrieval
-- JSON search entry
-- Python ZeroMQ RAG server
-- C++ main support for python_zmq backend
-- C++ parsing of Python JSON answer field
-- integration tests for C++ → Python ZeroMQ backend
-```
-
----
-
-### V4: Local LLM Integration
-
-Tag:
-
-```text
-v4.0-local-llm-integration
-```
-
-Implemented:
-
-```text
-- Mock LLM generator interface
-- retrieval → generation pipeline
-- generated_answer field in Python RAG response
-- configurable --llm-backend option
-- Ollama local LLM backend
-- Ollama health check
-- Ollama model availability check
-- LLM timeout configuration
-- prompt debug option with --include-prompt
-- C++ parser priority: generated_answer → answer → error → raw
-```
-
----
-
-## 17. Current Limitations
-
-This project is currently a prototype.
-
-Important limitations:
-
-```text
-1. The retrieval backend still uses TF-IDF, not dense embedding retrieval.
-2. Query understanding is based on token matching, custom dictionary, and synonym expansion.
-3. Ollama integration depends on an external local Ollama service.
-4. Local LLM output quality depends on the selected model.
-5. The knowledge base is still a small mock vehicle manual.
-6. ASR and TTS currently use mock backends; real audio models are not integrated yet.
-7. There is no streaming response support yet.
-8. The Python RAG server is still a simple single-process ZeroMQ REP server.
-9. There is no Docker deployment yet.
-10. There is no edge hardware-specific optimization yet.
-```
-
-This project should currently be described as:
-
-```text
-A C++ + Python + ZeroMQ edge-side RAG prototype with TF-IDF retrieval and local LLM generation.
-```
-
-It should not yet be described as:
-
-```text
-A production-ready vehicle voice assistant.
-```
-
----
-
-## 18. Planned Next Steps
-
-### V5: Offline Voice Pipeline
-
-Implemented baseline:
-
-```text
-- Add mock ASR interface
-- Add mock TTS interface
-- Add text-in/text-out voice pipeline abstraction
-- Connect voice input → text query → RAG → voice output
-- Return structured ok=false responses for server-side handling
-- Report ASR, RAG, TTS, and end-to-end timings
-- Add pytest unit tests and mock end-to-end integration tests
-```
-
-Run the mock voice pipeline after starting the Python RAG server:
-
-```bash
-./scripts/run_voice_pipeline_mock.sh "空调怎么打开"
-```
-
-Run automated tests:
+### 8.4 全量测试
 
 ```bash
 ctest --test-dir build --output-on-failure
-PYTHONPATH=python pytest -q python/tests
-./scripts/test_voice_pipeline_mock.sh
 ```
 
-Next tasks:
+### 8.5 板端目标
 
-```text
-- Integrate a real offline ASR backend
-- Integrate a real offline TTS backend
-- Keep mock backends for deterministic automated tests
-```
-
----
-
-### V6: Docker Deployment
-
-Possible tasks:
-
-```text
-- Add Dockerfile
-- Add docker-compose.yml
-- Package C++ binary and Python RAG service
-- Provide reproducible deployment commands
-```
-
----
-
-### V7: Edge Device Optimization
-
-Possible tasks:
-
-```text
-- Measure latency
-- Reduce Python service overhead
-- Add CPU-only inference baseline
-- Prepare for RK / Jetson / other edge devices
-```
-
----
-
-## 19. Resume Description
-
-A concise resume description:
-
-```text
-Built a C++ + Python edge-side RAG assistant prototype for vehicle manual question answering. The C++ side handles routing, configuration, ZeroMQ communication, and JSON answer parsing, while the Python side implements document chunking, jieba-based Chinese tokenization, synonym query expansion, TF-IDF retrieval, and local LLM generation. The system supports local C++ retrieval, C++ ZMQ retrieval, Python ZMQ retrieval, mock LLM generation, and Ollama-based local LLM generation.
-```
-
-A shorter version:
-
-```text
-Implemented a C++ + Python edge RAG prototype with ZeroMQ-based cross-process communication, TF-IDF retrieval, and local LLM generation via Ollama. C++ handles the main workflow and answer parsing, while Python handles retrieval and generation backends.
-```
-
-Chinese resume version:
-
-```text
-实现 C++ + Python 混合架构的端侧 RAG 原型系统。C++ 侧负责主流程控制、配置管理、ZeroMQ 通信和 JSON 回答解析，Python 侧负责车辆手册切块、jieba 中文分词、同义词 query expansion、TF-IDF 检索以及本地 LLM 生成；支持 local、C++ ZMQ、Python ZMQ 三种 RAG 后端，并接入 mock LLM 与 Ollama 本地 LLM 后端。
-```
-
----
-
-## 20. Git Tags
-
-Create V4 tag:
+在ALSA、sherpa-onnx、RKLLM和模型路径均已正确配置后构建：
 
 ```bash
-git tag -a v4.0-local-llm-integration -m "V4: Local LLM integration"
+cmake --build build --target board_voice_assistant -j2
 ```
 
-View tags:
+运行：
 
 ```bash
-git tag
+./build/board_voice_assistant config/board_rk3576.conf
 ```
 
-Expected:
+## 九、关键配置
+
+RK3576主配置位于：
 
 ```text
-v1.0-cpp-mock-rag
-v2.0-zmq-rag-server
-v3.0-python-rag-backend
-v4.0-local-llm-integration
+config/board_rk3576.conf
 ```
 
-Push tags:
+主要配置包括：
 
-```bash
-git push origin main
-git push origin --tags
+```ini
+retrieval_backend=hybrid
+
+relevance_filter_enabled=true
+relevance_minimum_sparse_score=6.0
+relevance_minimum_dense_similarity=0.40
+
+response_direct_minimum_sparse_score=8.0
+response_direct_minimum_dense_similarity=0.55
+
+llm_backend=rkllm
+llm_model_path=models/llm/qwen2.5-1.5b-rk3576.rkllm
+
+llm_max_new_tokens=256
+llm_max_context_len=2048
+
+agent_planner=auto
+agent_max_steps=4
+agent_confirmation_timeout_ms=30000
+agent_mock_temperature_c=28.5
+agent_mock_humidity_percent=60.0
 ```
 
-If the default branch is `master`:
+PC联调时使用Mock LLM和规则Planner；RK3576使用RKLLM和LLM Planner。普通 `MockLlmBackend` 不生成工具调用JSON，因此不能直接作为LLM Planner使用。
 
-```bash
-git push origin master
-git push origin --tags
-```
+## 十、性能与可观测性
 
----
-
-## 21. Notes
-
-The current Python RAG backend is intentionally simple. It is useful as a baseline retrieval and generation system before adding embedding models, FAISS, ONNX Runtime, streaming generation, Docker deployment, or offline voice modules.
-
-The current design separates system components clearly:
+每轮对话会输出响应策略信息：
 
 ```text
-C++:
-    Main workflow, routing, communication, configuration, logging, parsing.
-
-Python:
-    Retrieval algorithm, tokenization, query expansion, LLM generation, JSON response generation.
-
-ZeroMQ:
-    Cross-language process boundary.
-
-Ollama:
-    Local LLM generation backend.
+[POLICY] mode=... category=... confidence=... retrieved=... reason=...
 ```
 
-This separation makes the project easier to extend toward real edge AI deployment scenarios.
+并通过 `PERF_JSON` 记录主要耗时：
+
+- ASR耗时
+- 检索耗时
+- LLM首Token耗时
+- LLM完整生成耗时
+- TTS耗时
+- 播放耗时
+- 端到端耗时
+
+Agent执行结果还包含：
+
+- 执行的工具名称
+- 结构化工具参数
+- Observation
+- 多步工作流Trace
+- 等待确认、完成或失败状态
+
+## 十一、已知不足
+
+### 11.1 规则意图路由存在局限
+
+当前 `AgentIntentClassifier` 使用关键词和固定短语区分实时设备操作与车辆手册问题。这是为了建立一个行为明确、能够自动测试的MVP基线，也用于降低本地小模型误触发设备操作的风险。
+
+当前规则可以稳定区分：
+
+```text
+打开空调      → Agent控制
+车内温度      → Agent查询
+空调怎么打开  → 车辆手册RAG
+```
+
+但关键词方案存在以下不足：
+
+- 同义词和口语表达覆盖有限
+- 对否定句、反问句和隐含意图处理较弱
+- 容易受到ASR识别错误影响
+- 缺少完整的会话上下文理解
+- 设备能力增加后规则维护成本上升
+- 相似表达之间可能发生规则冲突
+
+例如下面的表达可能无法稳定处理：
+
+```text
+帮我凉快一点
+车里像蒸笼一样
+别让空调继续工作了
+把刚才那个操作停掉
+温度舒服一些就行
+```
+
+### 11.2 当前仍是Mock设备
+
+DHT11和空调指示灯尚未接入当前主路线。现阶段只验证Agent架构、工具调用、确认机制和任务编排。
+
+### 11.3 单板单会话
+
+当前板载应用使用固定Agent会话ID，适合单设备、单用户的本地语音交互。未来如果增加远程客户端或多用户，需要在请求协议中加入明确的会话ID。
+
+### 11.4 LLM结构化输出稳定性
+
+当前LLM Planner通过提示词要求模型输出JSON，再由C++解析和校验。小模型仍可能生成非法JSON、未知工具或错误参数。当前系统会拒绝这些输出，但任务会失败。
+
+### 11.5 尚未达到量产标准
+
+当前项目是嵌入式AI学习与验证项目，尚未覆盖完整的权限体系、持久化状态、故障恢复、车规安全认证和生产环境监控。
+
+## 十二、后续升级方向
+
+### 12.1 混合语义路由
+
+后续不应继续无限扩充关键词表，而应升级为：
+
+```text
+安全硬规则
+    ↓
+Pending确认/取消规则
+    ↓
+高置信设备命令规则
+    ↓
+BGE Embedding语义路由
+    ↓
+低置信度LLM Router或请求用户澄清
+```
+
+项目已经具备BGE Embedding能力，可以为以下类别准备意图示例：
+
+```text
+manual_query
+device_query
+device_control
+general_chat
+```
+
+通过查询向量与意图示例向量的相似度完成语义路由，增强同义表达和口语输入的覆盖能力。
+
+即使升级为语义路由，以下能力仍然保留在确定性C++层：
+
+- Safety安全响应
+- Tool Registry白名单
+- 参数校验
+- 写操作确认
+- 最大执行步数
+- 实际设备访问
+
+### 12.2 真实Linux硬件接入
+
+实现 `LinuxVehicleDevice`，通过Linux标准设备接口读取DHT11并控制LED；上层Agent不需要修改。
+
+### 12.3 约束解码与Schema校验
+
+为RKLLM增加JSON语法约束、JSON Schema统一校验、错误恢复和重试机制，提高工具调用可靠性。
+
+### 12.4 Agent评测集
+
+建立覆盖以下情况的离线评测集：
+
+- 明确设备命令
+- 手册问法与设备命令的边界
+- 否定句和取消操作
+- ASR近音错误
+- 多条件任务
+- 非法工具调用
+- 重复规划和最大步数
+- 紧急安全问题
+
+### 12.5 端侧推理优化
+
+继续测量并优化：
+
+- RKLLM首Token延迟
+- Agent多步任务总耗时
+- ASR和TTS线程数
+- 模型量化效果
+- 内存峰值
+- 冷启动时间
+
+## 十三、项目亮点
+
+- 在RK3576上构建离线语音交互主线
+- 将车辆手册RAG和实时设备Agent组合在同一响应系统中
+- 支持BM25、Dense和Hybrid检索
+- 使用策略分级降低不必要的LLM调用
+- 实现结构化ToolCall、Observation和多步任务编排
+- 使用确定性C++保护设备控制边界
+- 支持用户确认、取消、打断和最大执行步数
+- 通过Mock设备和Scripted LLM完成可重复的自动化测试
+- 记录ASR、检索、LLM、TTS和端到端性能
+- 通过硬件抽象为DHT11、LED和更多设备预留扩展能力
+
+## 十四、面试介绍参考
+
+可以将项目概括为：
+
+> 基于RK3576实现端侧离线车载语音助手。系统在C++主进程中集成SenseVoice ASR、混合检索RAG、RKLLM和sherpa-onnx TTS，并实现受约束的单Agent工作流。LLM负责生成结构化工具调用，C++ Executor负责工具白名单、参数校验、多步编排、写操作确认和取消机制；当前通过Mock温湿度传感器和空调指示灯验证设备交互，并通过抽象接口为后续Linux驱动接入预留扩展空间。
+
+面试时建议重点说明以下设计取舍：
+
+1. 为什么“空调怎么打开”不能直接执行设备操作。
+2. 为什么LLM只负责规划，不能直接访问GPIO或Shell。
+3. 为什么使用规则路由建立确定性基线。
+4. 如何通过Tool Registry、确认机制和最大步数控制风险。
+5. 如何将Mock设备替换为真实Linux硬件而不修改Agent上层。
+6. 如何使用BGE语义路由改进关键词分类的局限。
+
+## 十五、项目状态
+
+当前已完成：
+
+- 板端离线ASR、LLM、TTS和播放主线
+- 连续语音会话与播放期间打断
+- BM25、Dense、Hybrid检索
+- 检索相关性过滤和分级响应策略
+- Agent工具接口和工具注册中心
+- Rule Planner和LLM Planner
+- 多步Agent执行循环
+- 写操作确认与取消
+- 待确认操作自动超时
+- Agent流式回答适配
+- Agent与原有RAG策略的外层路由
+- Agent Planner、最大步数和Mock环境参数配置化
+- `AGENT_JSON`结构化执行审计日志
+- Mock车辆环境与空调状态工具
+- Agent单元测试和工作流测试
+
+当前待完成：
+
+- DHT11和LED真实硬件实现
+- BGE语义意图路由
+- 更严格的结构化输出约束
+- 板端完整场景性能数据采集
+
+本项目目前适合描述为：
+
+> 一个运行于RK3576的端侧离线语音助手与受约束设备Agent原型，具备车辆手册RAG、多级响应、实时设备工具调用、用户确认、语音打断和完整自动化测试。

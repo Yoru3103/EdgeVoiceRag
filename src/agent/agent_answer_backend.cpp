@@ -4,6 +4,9 @@
 #include <stdexcept>
 #include <utility>
 
+#include <nlohmann/json.hpp>
+
+#include "logger.h"
 #include "scope_exit.h"
 
 namespace edge::agent {
@@ -154,6 +157,35 @@ RagStreamQueryResult AgentAnswerBackend::query(
                 config_.session_id,
                 request.query
             );
+
+        const nlohmann::json audit = {
+            {"event", "agent_workflow"},
+            {"request_id", request.request_id},
+            {"session_id", config_.session_id},
+            {"ok", response.ok},
+            {
+                "state",
+                response.state
+                    == AgentResponseState::
+                        WaitingForConfirmation
+                    ? "waiting_confirmation"
+                    : (
+                        response.state
+                            == AgentResponseState::Completed
+                        ? "completed"
+                        : "failed"
+                    )
+            },
+            {"executed_tool", response.executed_tool},
+            {"observation", response.observation},
+            {"trace", response.trace},
+            {"error", response.error}
+        };
+
+        Logger::log(
+            response.ok ? LogLevel::Route : LogLevel::Error,
+            "AGENT_JSON " + audit.dump()
+        );
 
         const double elapsed_ms = elapsedMilliseconds(start);
 

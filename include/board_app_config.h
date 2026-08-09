@@ -43,6 +43,14 @@ struct BoardAppConfig {
     std::string llm_backend = "mock";
     std::string llm_model_path;
 
+    std::string agent_planner = "auto";
+    std::size_t agent_max_steps = 4;
+
+    int agent_confirmation_timeout_ms = 30000;
+
+    float agent_mock_temperature_c = 28.5F;
+    float agent_mock_humidity_percent = 60.0F;
+
     int asr_num_threads = 2;
     int vad_num_threads = 1;
     int tts_num_threads = 2;

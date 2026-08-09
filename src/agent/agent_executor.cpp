@@ -29,6 +29,18 @@ AgentExecutor::AgentExecutor(
             "agent maximum_steps must be greater than zero"
         );
     }
+
+    if (config_.confirmation_timeout.count() <= 0) {
+        throw std::invalid_argument(
+            "agent confirmation timeout must be positive"
+        );
+    }
+
+    if (!config_.now) {
+        throw std::invalid_argument(
+            "agent clock function must not be empty"
+        );
+    }
 }
 
 AgentResponse AgentExecutor::run(
@@ -109,7 +121,8 @@ AgentResponse AgentExecutor::continueExecution(
 
                 pending_actions_[session_id] = {
                     context,
-                    action.tool_call
+                    action.tool_call,
+                    config_.now()
                 };
             }
 
@@ -151,6 +164,35 @@ AgentResponse AgentExecutor::handlePendingAction(
     const std::string& session_id,
     const std::string& user_input
 ) {
+    bool expired = false;
+
+    {
+        std::lock_guard<std::mutex> lock(pending_mutex_);
+
+        const auto it = pending_actions_.find(session_id);
+
+        if (it == pending_actions_.end()) {
+            return AgentResponse::failure(
+                "pending action no longer exists"
+            );
+        }
+
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            config_.now() - it->second.created_at
+        );
+
+        if (elapsed >= config_.confirmation_timeout) {
+            pending_actions_.erase(it);
+            expired = true;
+        }
+    }
+
+    if (expired) {
+        return AgentResponse::completed(
+            "设备操作确认已超时，操作已自动取消。"
+        );
+    }
+
     if (isCancellation(user_input)) {
         clearSession(session_id);
 

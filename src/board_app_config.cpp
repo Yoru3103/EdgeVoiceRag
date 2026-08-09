@@ -355,6 +355,40 @@ BoardAppConfig BoardAppConfig::load(const std::string& path) {
             config.llm_max_context_len
         );
 
+    config.agent_planner = getString(
+        values,
+        "agent_planner",
+        config.agent_planner
+    );
+
+    config.agent_max_steps =
+        getNumber<std::size_t>(
+            values,
+            "agent_max_steps",
+            config.agent_max_steps
+        );
+
+    config.agent_confirmation_timeout_ms =
+        getNumber<int>(
+            values,
+            "agent_confirmation_timeout_ms",
+            config.agent_confirmation_timeout_ms
+        );
+
+    config.agent_mock_temperature_c =
+        getNumber<float>(
+            values,
+            "agent_mock_temperature_c",
+            config.agent_mock_temperature_c
+        );
+
+    config.agent_mock_humidity_percent =
+        getNumber<float>(
+            values,
+            "agent_mock_humidity_percent",
+            config.agent_mock_humidity_percent
+        );
+
     config.normal_vad_threshold =
         getNumber<float>(
             values,
@@ -574,6 +608,65 @@ void BoardAppConfig::validate() const {
     ) {
         throw std::invalid_argument(
             "RKLLM model path must not be empty"
+        );
+    }
+
+    if (
+        agent_planner != "auto"
+        && agent_planner != "rule"
+        && agent_planner != "llm"
+    ) {
+        throw std::invalid_argument(
+            "agent_planner must be auto, rule or llm"
+        );
+    }
+
+    if (
+        agent_planner == "llm"
+        && llm_backend == "mock"
+    ) {
+        throw std::invalid_argument(
+            "LLM agent planner cannot use MockLlmBackend "
+            "because it does not generate tool-call JSON"
+        );
+    }
+
+    if (
+        agent_max_steps == 0
+        || agent_max_steps > 16
+    ) {
+        throw std::invalid_argument(
+            "agent_max_steps must be between 1 and 16"
+        );
+    }
+
+    if (
+        agent_confirmation_timeout_ms < 1000
+        || agent_confirmation_timeout_ms > 300000
+    ) {
+        throw std::invalid_argument(
+            "agent_confirmation_timeout_ms must be "
+            "between 1000 and 300000"
+        );
+    }
+
+    if (
+        !std::isfinite(agent_mock_temperature_c)
+        || agent_mock_temperature_c < -50.0F
+        || agent_mock_temperature_c > 100.0F
+    ) {
+        throw std::invalid_argument(
+            "agent mock temperature is out of range"
+        );
+    }
+
+    if (
+        !std::isfinite(agent_mock_humidity_percent)
+        || agent_mock_humidity_percent < 0.0F
+        || agent_mock_humidity_percent > 100.0F
+    ) {
+        throw std::invalid_argument(
+            "agent mock humidity must be between 0 and 100"
         );
     }
 

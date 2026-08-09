@@ -61,7 +61,7 @@ AgentAction LlmAgentPlanner::plan(const AgentPlanningContext& context) {
 }
 
 std::string LlmAgentPlanner::buildPrompt(const AgentPlanningContext& context) const {
-    const nlohmann::json tools = registry_.definition();
+    const nlohmann::json tools = registry_.definitions();
 
     nlohmann::json history = nlohmann::json::array();
 

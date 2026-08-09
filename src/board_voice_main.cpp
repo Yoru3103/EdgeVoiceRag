@@ -1,3 +1,4 @@
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <memory>
@@ -17,9 +18,20 @@
 #include "voice_assistant.h"
 #include "voice_performance_report.h"
 
+#include "agent/agent_answer_backend.h"
+#include "agent/agent_executor.h"
+#include "agent/agent_planner.h"
+#include "agent/agent_routing_answer_backend.h"
+#include "agent/llm_agent_planner.h"
+#include "agent/rule_agent_planner.h"
+#include "agent/tool_registry.h"
+#include "agent/vehicle_device.h"
+#include "agent/vehicle_tools.h"
+
 namespace {
 
 namespace fs = std::filesystem;
+using namespace edge::agent;
 
 void printEvent(const VoiceSessionEvent& event) {
     switch (event.type) {
@@ -117,6 +129,53 @@ int main(int argc, char* argv[]) {
 
         std::unique_ptr<LlmBackend> llm_backend = createLlmBackend(llm_options);
 
+        MockVehicleDevice vehicle_device;
+        vehicle_device.setEnvironment(
+            config.agent_mock_temperature_c,
+            config.agent_mock_humidity_percent
+        );
+
+        ToolRegistry agent_tools;
+        agent_tools.registerTool(
+            std::make_unique<GetCabinEnvironmentTool>(vehicle_device)
+        );
+        agent_tools.registerTool(
+            std::make_unique<GetAirConditionerStateTool>(vehicle_device)
+        );
+        agent_tools.registerTool(
+            std::make_unique<SetAirConditionerTool>(vehicle_device)
+        );
+
+        std::string resolved_agent_planner = config.agent_planner;
+
+        if (resolved_agent_planner == "auto") {
+            resolved_agent_planner = config.llm_backend == "mock" ? "rule" : "llm";
+        }
+
+        std::unique_ptr<AgentPlanner> agent_planner;
+        if (resolved_agent_planner == "rule") {
+            agent_planner = std::make_unique<RuleAgentPlanner>();
+        } else {
+            agent_planner = std::make_unique<LlmAgentPlanner>(
+                *llm_backend,
+                agent_tools
+            );
+        }
+
+        AgentExecutorConfig agent_executor_config;
+        agent_executor_config.maximum_steps = config.agent_max_steps;
+        agent_executor_config.confirmation_timeout = std::chrono::milliseconds(
+            config.agent_confirmation_timeout_ms
+        );
+
+        AgentExecutor agent_executor(
+            *agent_planner,
+            agent_tools,
+            agent_executor_config
+        );
+
+        AgentAnswerBackend agent_answer_backend(agent_executor);
+
         PolicyRoutingAnswerBackendConfig answer_config;
         answer_config.top_k = config.top_k;
         answer_config.policy.direct_rag_minimum_sparse_score =
@@ -124,10 +183,16 @@ int main(int argc, char* argv[]) {
         answer_config.policy.direct_rag_minimum_dense_similarity =
             config.response_direct_minimum_dense_similarity;
 
-        PolicyRoutingAnswerBackend answer_backend(
+        PolicyRoutingAnswerBackend policy_answer_backend(
             retriever_runtime.retriever(),
             *llm_backend,
             answer_config
+        );
+
+        AgentRoutingAnswerBackend answer_backend(
+            agent_answer_backend,
+            policy_answer_backend,
+            policy_answer_backend
         );
 
         // 语音转文字
@@ -238,6 +303,15 @@ int main(int argc, char* argv[]) {
             << pcm_source.name()
             << "\nPlayback: "
             << audio_player.name()
+            << "\nAgent planner: "
+            << agent_planner->name()
+            << "\nAgent maximum steps: "
+            << config.agent_max_steps
+            << "\nAgent confirmation timeout: "
+            << config.agent_confirmation_timeout_ms
+            << " ms"
+            << "\nAgent tools: "
+            << agent_tools.definitions().dump()
             << "\n";
 
         const ContinuousVoiceSessionResult result = session.run(printEvent);
