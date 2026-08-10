@@ -1,6 +1,7 @@
 #include "agent/vehicle_tools.h"
 
 #include <cmath>
+#include <exception>
 
 namespace edge::agent {
 
@@ -38,12 +39,18 @@ AgentToolResult GetCabinEnvironmentTool::execute(const nlohmann::json& arguments
         );
     }
 
-    const CabinEnvironment environment = device_.readEnvironment();
+    CabinEnvironment environment;
 
-    if (
-        !std::isfinite(environment.temperature_c) ||
-        !std::isfinite(environment.humidity_percent)
-    ) {
+    try {
+        environment = device_.readEnvironment();
+    } catch (const std::exception& error) {
+        return AgentToolResult::failure(
+            std::string("environment sensor read failed: ")
+            + error.what()
+        );
+    }
+
+    if (!std::isfinite(environment.temperature_c) || !std::isfinite(environment.humidity_percent)) {
         return AgentToolResult::failure(
             "environment sensor returned invalid data"
         );

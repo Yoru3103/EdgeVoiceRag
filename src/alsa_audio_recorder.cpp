@@ -299,6 +299,7 @@ private:
 
         snd_pcm_hw_params_alloca(&params);
 
+        // 初始化为设备支持的所有可能配置
         requireAlsaSuccess(
             snd_pcm_hw_params_any(
                 handle_,
@@ -307,6 +308,7 @@ private:
             "failed to initialize capture parameters"
         );
 
+        // 配置访问缓冲区方式（交错排列）
         requireAlsaSuccess(
             snd_pcm_hw_params_set_access(
                 handle_,
@@ -316,6 +318,7 @@ private:
             "failed to set interleaved capture"
         );
 
+        // 有符号16位整数小端序
         requireAlsaSuccess(
             snd_pcm_hw_params_set_format(
                 handle_,
@@ -325,6 +328,7 @@ private:
             "failed to set S16_LE capture format"
         );
 
+        // 配置通道数
         requireAlsaSuccess(
             snd_pcm_hw_params_set_channels(
                 handle_,
@@ -334,12 +338,13 @@ private:
             "failed to set S16_LE capture format"
         );
 
+        // 采样率
         requireAlsaSuccess(
             snd_pcm_hw_params_set_rate(
                 handle_,
                 params,
                 static_cast<unsigned int>(config_.sample_rate),
-                0
+                0       // 要求等于给定采样率，-1可以选择不高于目标的值，1可以选择不低于目标的值
             ),
             "failed to set capture sample rate"
         );
@@ -347,6 +352,8 @@ private:
         snd_pcm_uframes_t period_frames = 
             static_cast<snd_pcm_uframes_t>(config_.period_frames);
 
+        // 设置一个period包含多少帧
+        // near是因为声卡可能不支持精确的512帧，ALS会根据最接近的可用值，并将实际值写回
         requireAlsaSuccess(
             snd_pcm_hw_params_set_period_size_near(
                 handle_,
@@ -357,6 +364,7 @@ private:
             "failed to set capture period size"
         );
 
+        // 提交参数给设备handle
         requireAlsaSuccess(
             snd_pcm_hw_params(
                 handle_,

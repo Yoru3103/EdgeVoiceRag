@@ -77,6 +77,7 @@ add_library(edge_voice_rag_core
     src/file_fingerprint.cpp
     src/agent/tool_registry.cpp
     src/agent/vehicle_device.cpp
+    src/agent/linux_vehicle_device.cpp
     src/agent/vehicle_tools.cpp
     src/agent/rule_agent_planner.cpp
     src/agent/agent_executor.cpp
@@ -870,6 +871,16 @@ target_link_libraries(
     edge_voice_rag_core
 )
 
+add_executable(
+    linux_vehicle_device_tests
+    tests/linux_vehicle_device_tests.cpp
+)
+target_link_libraries(
+    linux_vehicle_device_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
 enable_testing()
 
 add_test(
@@ -1041,6 +1052,10 @@ add_test(
 add_test(
     NAME agent_routing_answer_backend_tests
     COMMAND agent_routing_answer_backend_tests
+)
+add_test(
+    NAME linux_vehicle_device_tests
+    COMMAND linux_vehicle_device_tests
 )
 
 if(EDGE_ENABLE_SHERPA_ASR)

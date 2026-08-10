@@ -18,6 +18,7 @@
 #include "voice_assistant.h"
 #include "voice_performance_report.h"
 
+#include "agent/linux_vehicle_device.h"
 #include "agent/agent_answer_backend.h"
 #include "agent/agent_executor.h"
 #include "agent/agent_planner.h"
@@ -129,21 +130,42 @@ int main(int argc, char* argv[]) {
 
         std::unique_ptr<LlmBackend> llm_backend = createLlmBackend(llm_options);
 
-        MockVehicleDevice vehicle_device;
-        vehicle_device.setEnvironment(
-            config.agent_mock_temperature_c,
-            config.agent_mock_humidity_percent
-        );
+        std::unique_ptr<VehicleDevice> vehicle_device;
+
+        if (config.agent_device_backend == "iio") {
+            vehicle_device = std::make_unique<LinuxVehicleDevice>(
+                config.agent_iio_root,
+                config.agent_iio_device_name
+            );
+
+            std::cout
+                << "[DEVICE] 使用Linux IIO设备："
+                << config.agent_iio_device_name
+                << '\n';
+        } else {
+            auto mock_device = std::make_unique<MockVehicleDevice>();
+
+            mock_device->setEnvironment(
+                config.agent_mock_temperature_c,
+                config.agent_mock_humidity_percent
+            );
+
+            vehicle_device = std::move(mock_device);
+
+            std::cout
+                << "[DEVICE] 使用Mock车辆设备\n";
+        }
 
         ToolRegistry agent_tools;
+
         agent_tools.registerTool(
-            std::make_unique<GetCabinEnvironmentTool>(vehicle_device)
+            std::make_unique<GetCabinEnvironmentTool>(*vehicle_device)
         );
         agent_tools.registerTool(
-            std::make_unique<GetAirConditionerStateTool>(vehicle_device)
+            std::make_unique<GetAirConditionerStateTool>(*vehicle_device)
         );
         agent_tools.registerTool(
-            std::make_unique<SetAirConditionerTool>(vehicle_device)
+            std::make_unique<SetAirConditionerTool>(*vehicle_device)
         );
 
         std::string resolved_agent_planner = config.agent_planner;

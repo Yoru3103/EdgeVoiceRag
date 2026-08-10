@@ -27,6 +27,7 @@ public:
 
     ~AlsaPcmStreamSource() override;
 
+    // RAII，同一资源只能有一个明确的所有者
     AlsaPcmStreamSource(const AlsaPcmStreamSource&) = delete;
     AlsaPcmStreamSource& operator=(const AlsaPcmStreamSource&) = delete;
 

@@ -43,6 +43,7 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
         return session_result;
     }
 
+    // 管理的是函数每次调用的生命周期
     // 当函数退出或意外结束时会调用析构函数结束，RAII
     auto assistant_guard = makeScopeExit(
         [this]() {

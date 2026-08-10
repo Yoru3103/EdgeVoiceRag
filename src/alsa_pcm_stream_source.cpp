@@ -89,8 +89,8 @@ public:
         const int open_result = snd_pcm_open(
             &handle_,
             config_.device.c_str(),
-            SND_PCM_STREAM_CAPTURE,
-            0
+            SND_PCM_STREAM_CAPTURE, // 捕获音频
+            0                       // 阻塞模式
         );
 
         if (open_result < 0) {
@@ -110,7 +110,7 @@ public:
             snd_pcm_set_params(
                 handle_,
                 SND_PCM_FORMAT_S16_LE,
-                SND_PCM_ACCESS_RW_INTERLEAVED,
+                SND_PCM_ACCESS_RW_INTERLEAVED,  // 通道交错排布
                 static_cast<unsigned int>(config_.channels),
                 static_cast<unsigned int>(config_.sample_rate),
                 1,  // 允许ALSA插件进行采样率转换
@@ -147,12 +147,14 @@ public:
             return PcmStreamResult::failure("PCM chunk handler must not be empty");
         } 
 
+        // 加锁前快速检查
         if (stopped.load()) {
             return PcmStreamResult::failure("ALSA PCM stream source is stopped");
         }
 
         std::lock_guard<std::mutex> lock(capture_mutex_);
 
+        // 加锁后二次确认
         if (stopped.load()) {
             return PcmStreamResult::failure("ALSA PCM stream source is stopped");
         }
@@ -201,7 +203,8 @@ public:
 
                 if (read_result < 0) {
                     if (stopped.load() || capture_cancelled_.load()) {
-                        // 关闭设备
+                        // 丢弃尚未读取的数据，停止采集
+                        // drop后必须再调用一次prepare才能通过readi再次调用
                         snd_pcm_drop(handle_);
                         
                         // 外接终止，正常结束，不报错

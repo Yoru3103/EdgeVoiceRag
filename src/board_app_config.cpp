@@ -341,19 +341,17 @@ BoardAppConfig BoardAppConfig::load(const std::string& path) {
         config.tts_num_threads
     );
 
-    config.llm_max_new_tokens =
-        getNumber<int>(
-            values,
-            "llm_max_new_tokens",
-            config.llm_max_new_tokens
-        );
+    config.llm_max_new_tokens = getNumber<int>(
+        values,
+        "llm_max_new_tokens",
+        config.llm_max_new_tokens
+    );
 
-    config.llm_max_context_len =
-        getNumber<int>(
-            values,
-            "llm_max_context_len",
-            config.llm_max_context_len
-        );
+    config.llm_max_context_len = getNumber<int>(
+        values,
+        "llm_max_context_len",
+        config.llm_max_context_len
+    );
 
     config.agent_planner = getString(
         values,
@@ -361,26 +359,41 @@ BoardAppConfig BoardAppConfig::load(const std::string& path) {
         config.agent_planner
     );
 
-    config.agent_max_steps =
-        getNumber<std::size_t>(
-            values,
-            "agent_max_steps",
-            config.agent_max_steps
-        );
+    config.agent_max_steps = getNumber<std::size_t>(
+        values,
+        "agent_max_steps",
+        config.agent_max_steps
+    );
 
-    config.agent_confirmation_timeout_ms =
-        getNumber<int>(
-            values,
-            "agent_confirmation_timeout_ms",
-            config.agent_confirmation_timeout_ms
-        );
+    config.agent_confirmation_timeout_ms = getNumber<int>(
+        values,
+        "agent_confirmation_timeout_ms",
+        config.agent_confirmation_timeout_ms
+    );
 
-    config.agent_mock_temperature_c =
-        getNumber<float>(
-            values,
-            "agent_mock_temperature_c",
-            config.agent_mock_temperature_c
-        );
+    config.agent_mock_temperature_c = getNumber<float>(
+        values,
+        "agent_mock_temperature_c",
+        config.agent_mock_temperature_c
+    );
+
+    config.agent_device_backend = getString(
+        values,
+        "agent_device_backend",
+        config.agent_device_backend
+    );
+
+    config.agent_iio_root = getString(
+        values,
+        "agent_iio_root",
+        config.agent_iio_root
+    );
+
+    config.agent_iio_device_name = getString(
+        values,
+        "agent_iio_device_name",
+        config.agent_iio_device_name
+    );
 
     config.agent_mock_humidity_percent =
         getNumber<float>(
@@ -417,12 +430,11 @@ BoardAppConfig BoardAppConfig::load(const std::string& path) {
             config.barge_silence_seconds
         );
 
-    config.max_turns =
-        getNumber<std::size_t>(
-            values,
-            "max_turns",
-            config.max_turns
-        );
+    config.max_turns = getNumber<std::size_t>(
+        values,
+        "max_turns",
+        config.max_turns
+    );
 
     config.validate();
 
@@ -647,6 +659,35 @@ void BoardAppConfig::validate() const {
         throw std::invalid_argument(
             "agent_confirmation_timeout_ms must be "
             "between 1000 and 300000"
+        );
+    }
+
+    if (
+        agent_device_backend != "mock"
+        && agent_device_backend != "iio"
+    ) {
+        throw std::invalid_argument(
+            "agent_device_backend must be mock or iio"
+        );
+    }
+
+    if (
+        agent_device_backend == "iio"
+        && agent_iio_root.empty()
+    ) {
+        throw std::invalid_argument(
+            "agent_iio_root must not be empty "
+            "when using the iio device backend"
+        );
+    }
+
+    if (
+        agent_device_backend == "iio"
+        && agent_iio_device_name.empty()
+    ) {
+        throw std::invalid_argument(
+            "agent_iio_device_name must not be empty "
+            "when using the iio device backend"
         );
     }
 

@@ -49,8 +49,7 @@ private:
     mutable std::mutex state_mutex_;
     mutable bool active_ = false;
     mutable std::string active_request_id_;
-    mutable ActiveBackend active_backend_ =
-        ActiveBackend::None;
+    mutable ActiveBackend active_backend_ = ActiveBackend::None;
 
     void setActive(
         const std::string& request_id,

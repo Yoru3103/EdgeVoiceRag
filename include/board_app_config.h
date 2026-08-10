@@ -48,6 +48,12 @@ struct BoardAppConfig {
 
     int agent_confirmation_timeout_ms = 30000;
 
+    std::string agent_device_backend = "mock";
+
+    std::string agent_iio_root = "/sys/bus/iio/devices";
+
+    std::string agent_iio_device_name = "edge_dht11";
+
     float agent_mock_temperature_c = 28.5F;
     float agent_mock_humidity_percent = 60.0F;
 
