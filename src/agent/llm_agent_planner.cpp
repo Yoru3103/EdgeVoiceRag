@@ -3,6 +3,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include "logger.h"
+
 namespace edge::agent {
 
 LlmAgentPlanner::LlmAgentPlanner(
@@ -37,7 +39,26 @@ AgentAction LlmAgentPlanner::plan(const AgentPlanningContext& context) {
 
     const std::string prompt = buildPrompt(context);
 
+    Logger::log(
+        LogLevel::Info,
+        "AGENT_PLANNER_BEGIN "
+        + nlohmann::json{
+            {"user_input", context.user_input},
+            {"observation_count", context.observations.size()}
+        }.dump()
+    );
+
     const LlmGenerationResult generation = llm_backend_.generate(prompt);
+
+    Logger::log(
+        generation.ok ? LogLevel::Info : LogLevel::Error,
+        "AGENT_PLANNER_RESPONSE "
+        + nlohmann::json{
+            {"ok", generation.ok},
+            {"answer", generation.answer},
+            {"error", generation.error}
+        }.dump()
+    );
 
     if (!generation.ok) {
         return AgentAction::failure(

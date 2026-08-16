@@ -1,3 +1,8 @@
+/*
+ * 用户问题与每个chunk的retrieval_text计算余弦相似度
+ * BGE是针对Query-Document检索进行对比学习的双塔Embedding模型，训练目标就是让能够回答某个问题的文档向量靠近该问题向量
+*/
+
 #include "bge_embedder.h"
 
 #include <algorithm>
@@ -274,23 +279,28 @@ BgeEmbeddingResult BgeEmbedder::encodeQuery(const std::string& query) const {
             return failureResult("tokenizer returned no token IDs");
         }
 
-        if (token_ids.front() != impl_->cls_token_id) {
-            token_ids.insert(
-                token_ids.begin(),
-                impl_->cls_token_id
+        const auto max_length = static_cast<std::size_t>(config_.max_length);
+
+        if (max_length < 2) {
+            return failureResult(
+                "BGE max_length must be at least 2"
             );
         }
 
-        if (token_ids.back() != impl_->sep_token_id) {
-            token_ids.push_back(impl_->cls_token_id);
+        if (token_ids.front() != impl_->cls_token_id) {
+            token_ids.insert(token_ids.begin(), impl_->cls_token_id);
         }
-
-        const auto max_length = static_cast<std::size_t>(config_.max_length);
 
         if (token_ids.size() > max_length) {
             token_ids.resize(max_length);
+        }
 
-            token_ids.push_back(impl_->cls_token_id);
+        if (token_ids.back() != impl_->sep_token_id) {
+            if (token_ids.size() == max_length) {
+                token_ids.back() = impl_->sep_token_id;
+            } else {
+                token_ids.push_back(impl_->sep_token_id);
+            }
         }
 
         std::vector<std::int64_t> input_ids;
@@ -303,6 +313,7 @@ BgeEmbeddingResult BgeEmbedder::encodeQuery(const std::string& query) const {
         std::vector<std::int64_t> attention_mask(input_ids.size(), 1);
         std::vector<std::int64_t> token_type_ids(input_ids.size(), 0);
 
+        // 构造tensor形状，第一个参数表示一次处理多少个句子，第二个参数表示这句话有多少个token
         const std::array<std::int64_t, 2> input_shape{
             1,
             static_cast<std::int64_t>(input_ids.size())

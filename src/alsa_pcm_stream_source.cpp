@@ -190,6 +190,7 @@ public:
         try {
             while (!stopped.load() && !capture_cancelled_.load()) {
                 // 从麦克风读取
+                // 阻塞读取，等待数据返回
                 const snd_pcm_sframes_t read_result = 
                     snd_pcm_readi(
                         handle_,

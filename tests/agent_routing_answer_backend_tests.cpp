@@ -159,6 +159,31 @@ void testEnvironmentUsesAgent() {
     );
 }
 
+void testNaturalEnvironmentQuestionUsesAgent() {
+    Fixture fixture;
+
+    const RagStreamQueryResult result =
+        fixture.router.query({
+            "route-natural-environment",
+            "车里的温度是多少？"
+        });
+
+    expectTrue(
+        result.ok,
+        "natural environment route succeeds"
+    );
+
+    expectTrue(
+        result.response_mode == "agent_tool",
+        "natural environment question uses agent"
+    );
+
+    expectTrue(
+        fixture.fallback.query_count == 0,
+        "natural environment question skips fallback"
+    );
+}
+
 void testControlUsesAgent() {
     Fixture fixture;
 
@@ -284,6 +309,7 @@ void testEmergencyOverridesPendingAction() {
 
 int main() {
     testEnvironmentUsesAgent();
+    testNaturalEnvironmentQuestionUsesAgent();
     testControlUsesAgent();
     testConfirmationContinuesAgent();
     testManualQuestionUsesFallback();

@@ -4,6 +4,8 @@
 #include <sstream>
 #include <utility>
 
+#include "logger.h"
+
 namespace edge::agent {
 
 namespace {
@@ -59,6 +61,7 @@ AgentResponse AgentExecutor::run(
         );
     }
 
+    // 判断是否有待确认任务
     if (hasPendingAction(session_id)) {
         return handlePendingAction(
             session_id,
@@ -77,9 +80,21 @@ AgentResponse AgentExecutor::continueExecution(
     AgentPlanningContext context
 ) {
     while (context.observations.size() < config_.maximum_steps) {
+        const std::size_t step = context.observations.size() + 1;
         const AgentAction action = planner_.plan(context);
 
         if (action.type == AgentActionType::Error) {
+            Logger::log(
+                LogLevel::Error,
+                "AGENT_STEP "
+                + nlohmann::json{
+                    {"session_id", session_id},
+                    {"step", step},
+                    {"action", "error"},
+                    {"error", action.error}
+                }.dump()
+            );
+
             return AgentResponse::failure(
                 action.error.empty()
                     ? "agent planning failed"
@@ -88,6 +103,17 @@ AgentResponse AgentExecutor::continueExecution(
         }
 
         if (action.type == AgentActionType::FinalAnswer) {
+            Logger::log(
+                LogLevel::Info,
+                "AGENT_STEP "
+                + nlohmann::json{
+                    {"session_id", session_id},
+                    {"step", step},
+                    {"action", "final_answer"},
+                    {"answer", action.answer}
+                }.dump()
+            );
+
             std::string last_tool;
             nlohmann::json last_observation = nlohmann::json::object();
 
@@ -107,6 +133,21 @@ AgentResponse AgentExecutor::continueExecution(
         }
 
         AgentTool* tool = registry_.find(action.tool_call.name);
+
+        Logger::log(
+            LogLevel::Info,
+            "AGENT_STEP "
+            + nlohmann::json{
+                {"session_id", session_id},
+                {"step", step},
+                {"action", "tool_call"},
+                {"tool_call", {
+                    {"id", action.tool_call.id},
+                    {"name", action.tool_call.name},
+                    {"arguments", action.tool_call.arguments}
+                }}
+            }.dump()
+        );
 
         if (tool == nullptr) {
             return AgentResponse::failure(
@@ -135,6 +176,19 @@ AgentResponse AgentExecutor::continueExecution(
         }
 
         const AgentToolResult result = registry_.execute(action.tool_call);
+
+        Logger::log(
+            result.ok ? LogLevel::Info : LogLevel::Error,
+            "AGENT_TOOL_RESULT "
+            + nlohmann::json{
+                {"session_id", session_id},
+                {"step", step},
+                {"tool", action.tool_call.name},
+                {"ok", result.ok},
+                {"data", result.data},
+                {"error", result.error}
+            }.dump()
+        );
 
         context.observations.push_back({
             action.tool_call,

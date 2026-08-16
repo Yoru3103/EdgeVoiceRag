@@ -37,6 +37,7 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
 
     stop_requested_.store(false);
 
+    // 启动语音助手
     if (!assistant_.start()) {
         session_result.error = "failed to start voice assistant";
 
@@ -112,8 +113,7 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
         }
 
         user_audio = std::move(capture.audio);
-        const AsrTranscriptionResult transcription =
-            asr_backend_.transcribe(user_audio);
+        const AsrTranscriptionResult transcription = asr_backend_.transcribe(user_audio);
 
         if (!transcription.ok) {
             session_result.error = "ASR failed: " + transcription.error;
@@ -149,6 +149,7 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
             std::move(recognized_event)
         );
 
+        // 会话线程同时启动两个异步任务，一个负责路由，一个负责监听打断
         /*
          * processText 会一直等待：
          * LLM → TTS → 播放全部完成。
@@ -169,6 +170,7 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
             }
         );
 
+        // 确保回调和保护分支同时到达，打断逻辑也只执行一次
         std::atomic_bool barge_in_started{false};
 
         /*
@@ -191,6 +193,8 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
                         &handler,
                         request_id
                     ]() {
+                        // 把原子变量切换为设定值，并返回原来的值
+                        // 这里说明如果之前已为真，说明已经打断开始了
                         if (barge_in_started.exchange(true)) {
                             return;
                         }
@@ -217,6 +221,7 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
             !iteration_finished
             && !stop_requested_.load()
         ) {
+            // 允许主线程非阻塞检查回答是否完成
             if (answer_future.wait_for(std::chrono::microseconds(0)) == std::future_status::ready) {
                 const VoiceAssistantResult answer = answer_future.get();
 
@@ -289,6 +294,7 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
                 continue;
             }
 
+            // 避免纯忙轮询
             std::this_thread::sleep_for(std::chrono::milliseconds(config_.future_poll_interval_ms));
         }
 

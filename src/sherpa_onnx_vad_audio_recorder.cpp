@@ -246,6 +246,8 @@ public:
         utterance.sample_rate = config_.sample_rate;
         utterance.channels = 1;
 
+        // 从VAD中取出第一段完整语音段
+        // true表示成功取到一段语音
         const auto consumeFrontSegment = 
             [this, &utterance]() -> bool {
                 // 检测VAD已经完成的语音端队列是否为空
@@ -253,7 +255,17 @@ public:
                     return false;
                 }
 
-                // 取得队首完整语音段
+                // 取得队首完整语音段、
+                // Silero VAD 会对连续音频窗口计算“当前是语音”的概率，并维护类似这样的状态机
+                /*
+                 * 等待语音
+                 * │ 语音概率持续达到阈值
+                 * ▼
+                 * 正在说话
+                 * │ 静音持续达到 min_silence_duration
+                 * ▼
+                 * 语音段完成 → 放进已完成队列
+                 */
                 SpeechSegmentPtr segment(
                     SherpaOnnxVoiceActivityDetectorFront(vad_.get())
                 );
@@ -296,7 +308,7 @@ public:
                     &handler,
                     &speech_handler_called,
                     &cancel_requested
-                ](const AudioBuffer& chunk) {
+                ](const AudioBuffer& chunk) {   // 此处判断一句话是否结束
                     if (stopped_.load() || cancel_requested.load()) {
                         return false;
                     }
@@ -329,7 +341,7 @@ public:
                         }
                     }
 
-                    // 表示已经获得一个完整语音段返回true令ALS停止读取
+                    // 表示已经获得一个完整语音段返回false令ALS停止读取
                     if (consumeFrontSegment()) {
                         return false;
                     }

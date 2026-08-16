@@ -1,0 +1,8 @@
+transformers==4.51.3
+datasets==3.5.0
+accelerate==1.6.0
+peft==0.15.2
+bitsandbytes==0.45.5
+safetensors==0.5.3
+sentencepiece==0.2.0
+pytest==8.3.5

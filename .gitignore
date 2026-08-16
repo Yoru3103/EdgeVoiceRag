@@ -12,6 +12,12 @@ tests/Testing/
 *.a
 *.wav
 *.mp3
+*.cmd
+*.ko
+*.mod
+*.mod.c
+*.order
+*.symvers
 models/
 vector_db/
 .env
@@ -24,3 +30,9 @@ perf_logs/
 build-bge/
 third_party/onnxruntime-linux-*/
 voice_session.log
+build-rk3588-bge/
+*.log
+toolchain-shims/
+toolchain-wrappers/
+data/
+Testing/

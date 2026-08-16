@@ -145,6 +145,7 @@ RagStreamQueryResult AgentAnswerBackend::query(
         active_request_id_ = request.request_id;
     }
 
+    // RAII，无论正常返回还是异常，都会清理active_
     auto active_guard = makeScopeExit(
         [this, request_id = request.request_id]() {
             clearActiveRequest(request_id);
@@ -152,6 +153,7 @@ RagStreamQueryResult AgentAnswerBackend::query(
     );
 
     try {
+        // 标识session_id
         const AgentResponse response = 
             executor_.run(
                 config_.session_id,

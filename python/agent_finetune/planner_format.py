@@ -15,23 +15,25 @@ SYSTEM_PROMPT = (
 
 TOOLS = [
     {
-        "description": "打开或关闭空调，并同步改变指示灯状态",
-        "name": "set_air_conditioner",
+        "description": (
+            "仅用于读取当前车内实时温度和湿度。"
+            "当用户询问温度、湿度、多少度、热不热时调用。"
+            "不能用于查询空调是否开启，也不能用于打开或关闭空调。"
+        ),
+        "name": "get_cabin_environment",
         "parameters": {
             "additionalProperties": False,
-            "properties": {
-                "enabled": {
-                    "description": "true 表示开启，false 表示关闭",
-                    "type": "boolean",
-                }
-            },
-            "required": ["enabled"],
+            "properties": {},
             "type": "object",
         },
-        "requires_confirmation": True,
+        "requires_confirmation": False,
     },
     {
-        "description": "查询空调和指示灯的当前状态",
+        "description": (
+            "仅用于查询空调当前是否开启以及指示灯状态。"
+            "当用户询问空调开了吗、关了吗、当前状态时调用。"
+            "不能用于读取温湿度，也不能改变空调状态。"
+        ),
         "name": "get_air_conditioner_state",
         "parameters": {
             "additionalProperties": False,
@@ -41,14 +43,28 @@ TOOLS = [
         "requires_confirmation": False,
     },
     {
-        "description": "读取当前车内温度和湿度",
-        "name": "get_cabin_environment",
+        "description": (
+            "仅用于执行打开或关闭空调的控制操作。"
+            "用户要求打开、开启空调时，enabled必须为true；"
+            "用户要求关闭、关掉空调时，enabled必须为false。"
+            "不能用于查询温湿度或空调状态。"
+        ),
+        "name": "set_air_conditioner",
         "parameters": {
             "additionalProperties": False,
-            "properties": {},
+            "properties": {
+                "enabled": {
+                    "description": (
+                        "true表示打开空调，"
+                        "false表示关闭空调"
+                    ),
+                    "type": "boolean",
+                }
+            },
+            "required": ["enabled"],
             "type": "object",
         },
-        "requires_confirmation": False,
+        "requires_confirmation": True,
     },
 ]
 
@@ -131,32 +147,111 @@ def parse_strict_action(text: str) -> ValidationResult:
 
 
 def build_runtime_prompt(user_input: str, observations: list[dict[str, Any]]) -> str:
-    tool_example = tool_call("call-1", "get_cabin_environment", {})
-    answer_example = final_answer("任务已经完成。")
+    examples = [
+        {
+            "用户任务": "车内的温度是多少？",
+            "输出": tool_call(
+                "call-1",
+                "get_cabin_environment",
+                {},
+            ),
+        },
+        {
+            "用户任务": "空调现在开着吗？",
+            "输出": tool_call(
+                "call-1",
+                "get_air_conditioner_state",
+                {},
+            ),
+        },
+        {
+            "用户任务": "请打开空调。",
+            "输出": tool_call(
+                "call-1",
+                "set_air_conditioner",
+                {"enabled": True},
+            ),
+        },
+        {
+            "用户任务": "请关闭空调。",
+            "输出": tool_call(
+                "call-1",
+                "set_air_conditioner",
+                {"enabled": False},
+            ),
+        },
+    ]
+
+    selection_rules = [
+        "询问温度或湿度：调用get_cabin_environment。",
+        "询问空调是否开启或当前状态：调用get_air_conditioner_state。",
+        "要求打开空调：调用set_air_conditioner，enabled为true。",
+        "要求关闭空调：调用set_air_conditioner，enabled为false。",
+        "不得因为示例中出现某个工具，就忽略用户当前任务。",
+        "已经获得成功的只读工具结果后，不得重复调用该工具。",
+        "工具执行失败后输出final_answer说明错误，不得反复调用。",
+        "没有执行控制工具时，不得声称空调已经打开或关闭。",
+    ]
+
+    output_rules = [
+        "只能输出一个JSON对象。",
+        "不能输出Markdown代码块。",
+        "不能输出分析、解释、思考过程或额外文字。",
+        "tool_call必须包含type和tool_call。",
+        "final_answer必须包含type和answer。",
+    ]
 
     parts = [
         SYSTEM_PROMPT,
-        "\n\n可用工具：\n" + json.dumps(TOOLS, ensure_ascii=False, indent=2),
-        "\n\n用户原始任务：\n" + user_input,
-        "\n\n已经执行的步骤和观察结果：\n"
-        + json.dumps(observations, ensure_ascii=False, indent=2),
-        "\n\n调用工具时输出：\n" + canonical_json(tool_example),
-        "\n\n任务完成时输出：\n" + canonical_json(answer_example),
-        (
-            "\n\n规则："
-            "\n1. 如果没有足够信息，选择一个工具。"
-            "\n2. 如果Observation已经足够，输出final_answer。"
-            "\n3. 可以根据Observation继续调用其他工具。"
-            "\n4. 不得重复调用已经获得有效结果的只读工具。"
-            "\n5. 工具执行失败时应根据错误生成简短回答，不要假装成功。"
-            "\n6. 不得声称未执行的控制操作已经完成。"
-            "\n7. 只能输出一个JSON对象。"
-            "\n8. 不输出思考过程。"
-        ),
-        "\n\n下一步JSON输出：",
-    ]
-    return "".join(parts)
 
+        "\n\n可用工具：\n",
+        json.dumps(
+            TOOLS,
+            ensure_ascii=False,
+            indent=2,
+        ),
+
+        "\n\n工具选择规则：\n",
+        "\n".join(
+            f"{index}. {rule}"
+            for index, rule in enumerate(
+                selection_rules,
+                start=1,
+            )
+        ),
+
+        "\n\n平衡示例：\n",
+        json.dumps(
+            examples,
+            ensure_ascii=False,
+            indent=2,
+        ),
+
+        "\n\n输出规则：\n",
+        "\n".join(
+            f"{index}. {rule}"
+            for index, rule in enumerate(
+                output_rules,
+                start=1,
+            )
+        ),
+
+        # 把真正任务放在提示词末尾，避免被前面的示例覆盖。
+        "\n\n用户原始任务：\n",
+        user_input,
+
+        "\n\n已经执行的步骤和观察结果：\n",
+        json.dumps(
+            observations,
+            ensure_ascii=False,
+            indent=2,
+        ),
+
+        "\n\n请根据用户原始任务和Observation选择下一步。",
+        "\n下一步JSON输出：",
+    ]
+
+    return "".join(parts)
 
 def make_record(
     record_id: str,

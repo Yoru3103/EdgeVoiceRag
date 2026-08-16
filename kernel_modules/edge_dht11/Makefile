@@ -21,7 +21,7 @@ MODULE_DIR := $(shell pwd)
 
 # Makeflile中第一个普通目标通常是默认目标，执行make等价于make all
 all:
-	$(MAKE) -C $(KERNEL_DIR) \		
+	$(MAKE) -C $(KERNEL_DIR) \
 		ARCH=$(ARCH) \
 		CROSS_COMPILE=$(CROSS_COMPILE) \
 		M=$(MODULE_DIR) \

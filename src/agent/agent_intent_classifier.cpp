@@ -13,9 +13,15 @@ AgentIntentClassification AgentIntentClassifier::classify(const std::string& que
         query,
         {
             "车内温度",
+            "车内的温度",
             "车里温度",
+            "车里的温度",
             "车内湿度",
+            "车内的湿度",
             "车里湿度",
+            "车里的湿度",
+            "温度是多少",
+            "湿度是多少",
             "多少度",
             "热不热",
             "温度超过",
@@ -59,7 +65,7 @@ AgentIntentClassification AgentIntentClassifier::classify(const std::string& que
     if (
         contains_environment
         && contains_condition
-        && contains_condition
+        && contains_control
     ) {
         return {
             AgentIntent::ConditionalWorkflow,

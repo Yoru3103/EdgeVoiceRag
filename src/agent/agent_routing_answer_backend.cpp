@@ -3,6 +3,7 @@
 #include <exception>
 #include <stdexcept>
 
+#include "logger.h"
 #include "scope_exit.h"
 
 namespace edge::agent {
@@ -42,10 +43,26 @@ RagStreamQueryResult AgentRoutingAnswerBackend::query(
     const QueryClassification safety = safety_classifier_.classify(request.query);
 
     const bool emergency = safety.category == QueryCategory::Emergency;
+    // 用于判断上一轮是否还在等待
     const bool pending = agent_backend_.hasPendingAction();
     const AgentIntentClassification intent = intent_classifier_.classify(request.query);
 
     const bool use_agent = !emergency && (pending || intent.matched());
+
+    Logger::log(
+        LogLevel::Route,
+        "AGENT_ROUTE_JSON "
+        + nlohmann::json{
+            {"request_id", request.request_id},
+            {"query", request.query},
+            {"emergency", emergency},
+            {"pending_action", pending},
+            {"intent", AgentIntentClassifier::intentToString(intent.intent)},
+            {"intent_matched", intent.matched()},
+            {"intent_confidence", intent.confidence},
+            {"use_agent", use_agent}
+        }.dump()
+    );
 
     const ActiveBackend selected_backend = use_agent ? ActiveBackend::Agent : ActiveBackend::Fallback;
 

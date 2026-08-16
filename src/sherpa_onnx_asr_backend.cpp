@@ -240,7 +240,7 @@ public:
             // 解码上锁
             std::lock_guard<std::mutex> lock(decode_mutex_);
 
-            // stream表示一次具体的识别任务
+            // stream表示一次具体的识别任务，通过uniqueptr和自定的删除函数管理生命周期
             OfflineStreamPtr stream(
                 SherpaOnnxCreateOfflineStream(
                     recognizer_.get()
@@ -251,6 +251,7 @@ public:
                 return AsrTranscriptionResult::failure("failed to create sherpa offline stream");
             }
 
+            // 送入音频
             SherpaOnnxAcceptWaveformOffline(
                 stream.get(),                               // 当前识别任务
                 audio.sample_rate,                          // 采样率
@@ -260,6 +261,7 @@ public:
 
             // 执行模型推理
             // offline表示非流式识别
+            // recognizer和stream的区分能够保证recognizer只需要一次模型加载，模型可复用，其他任务可以每次传入
             SherpaOnnxDecodeOfflineStream(
                 recognizer_.get(),
                 stream.get()

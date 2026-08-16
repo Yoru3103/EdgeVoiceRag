@@ -92,11 +92,12 @@ int main(int argc, char* argv[]) {
     // 调试日志使用，正常情况下可注释
     std::cout << std::unitbuf;
     std::cout << std::unitbuf;
-    const std::string config_path = argc >= 2 ? argv[1] : "config/board_rk3576.conf";
+    const std::string config_path = argc >= 2 ? argv[1] : "config/board_rk3588.conf";
 
     try {
         const BoardAppConfig config = BoardAppConfig::load(config_path);
 
+        // 装配Retriever
         RetrieverRuntimeConfig retriever_config;
         retriever_config.backend = config.retrieval_backend;
         retriever_config.knowledge_path = config.knowledge_path;
@@ -122,6 +123,7 @@ int main(int argc, char* argv[]) {
             );
         }
 
+        // 当前配置rkllm
         LlmBackendOptions llm_options;
         llm_options.backend = config.llm_backend;
         llm_options.model_path = config.llm_model_path;
@@ -130,6 +132,7 @@ int main(int argc, char* argv[]) {
 
         std::unique_ptr<LlmBackend> llm_backend = createLlmBackend(llm_options);
 
+        // 创建车辆设备和工具
         std::unique_ptr<VehicleDevice> vehicle_device;
 
         if (config.agent_device_backend == "iio") {
@@ -184,6 +187,7 @@ int main(int argc, char* argv[]) {
             );
         }
 
+        // 创建agent
         AgentExecutorConfig agent_executor_config;
         agent_executor_config.maximum_steps = config.agent_max_steps;
         agent_executor_config.confirmation_timeout = std::chrono::milliseconds(
@@ -211,10 +215,11 @@ int main(int argc, char* argv[]) {
             answer_config
         );
 
+        // 最外层路由，后续由分类器决定之后调度
         AgentRoutingAnswerBackend answer_backend(
             agent_answer_backend,
             policy_answer_backend,
-            policy_answer_backend
+            policy_answer_backend       // fallback_backend_
         );
 
         // 语音转文字
@@ -282,6 +287,7 @@ int main(int argc, char* argv[]) {
         barge_vad.min_speech_duration = 0.15F;
         barge_vad.max_wait_seconds = 60.0F;
 
+        // 语音采集由两个VAD同时使用
         SherpaOnnxVadAudioRecorder normal_recorder(pcm_source, normal_vad);
         SherpaOnnxVadAudioRecorder barge_recorder(pcm_source, barge_vad);
 
@@ -336,6 +342,7 @@ int main(int argc, char* argv[]) {
             << agent_tools.definitions().dump()
             << "\n";
 
+            // 启动连续会话和工作线程
         const ContinuousVoiceSessionResult result = session.run(printEvent);
 
         if (!result.ok) {

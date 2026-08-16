@@ -90,6 +90,13 @@ bool VoiceAssistant::start() {
         return false;
     }
 
+    /*
+     * 创建两个常驻线程
+     * 此时线程结构：
+     * 主会话线程
+     * TTS工作线程
+     * 播放工作线程
+     */
     try {
         // this表示让当前对象执行这个成员函数。类似异步执行
         tts_thread_ = std::thread(
@@ -198,11 +205,14 @@ VoiceAssistantResult VoiceAssistant::processText(
 
     sentence_buffer_.clear();
 
+    // 创建跨线程state
+    // 同时被processText、TTS线程、播放线程和打断线程访问，因此使用sharedptr管理，只要任意任务仍然引用，就不会被释放
     const auto state = std::make_shared<RequestState>();
 
     // 由于停止时可能在任意线程中，因此需要添加request_id
     state->request_id = request_id;
     
+    // 打断线程通过active_state_找到当前请求ID，取消正确的请求
     setActiveState(state);
 
     VoiceAssistantResult result;
@@ -215,6 +225,7 @@ VoiceAssistantResult VoiceAssistant::processText(
     result.audio_backend = audio_player_.name();
 
     try {
+        // 最外层Agent/RAG路由
         const RagStreamQueryResult answer_result = answer_backend_.query(
             RagStreamRequest{
                 request_id,
@@ -363,6 +374,7 @@ bool VoiceAssistant::enqueueEndOfRequest(const std::shared_ptr<RequestState>& st
 
 void VoiceAssistant::ttsWorker() {
     while (true) {
+        // pop通过notempty阻塞等待数据
         auto task = sentence_queue_.pop();
 
         if (!task.has_value()) {

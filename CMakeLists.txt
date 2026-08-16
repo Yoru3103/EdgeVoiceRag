@@ -308,7 +308,7 @@ if(EDGE_ENABLE_ALSA)
         src/alsa_pcm_stream_source.cpp
     )
 
-    target_link_directories(
+    target_include_directories(
         edge_voice_rag_core
         PRIVATE
         "${ALSA_INCLUDE_DIRS}"

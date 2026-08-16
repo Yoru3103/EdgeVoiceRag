@@ -102,12 +102,9 @@ RkllmBackend::RkllmBackend(const RkllmBackendConfig& config)
     param.extend_param.base_domain_id = 0;              // RKLLM/RKNPU 内存映射相关的基础 IOMMU domain 配置
     param.extend_param.embed_flash = 1;                 // 控制是否使用Flash存储或访问Embedding权重
 
-    // 回调配置结构体，结构体根据模型生成内容或状态变化不同选择调用不同的函数通知应用程序
-    RKLLMCallback callback{};
-    callback.result_callback = resultCallback;
-
-    // 保存配置、注册回调、创建完整的RKLLM推理实例
-    const int result = rkllm_init(&impl_->handle, &param, &callback);
+    // 保存配置、注册回调、创建完整的RKLLM推理实例。
+    // 当前RKLLM SDK直接接收LLMResultCallback函数指针。
+    const int result = rkllm_init(&impl_->handle, &param, resultCallback);
 
     if (result != 0 || impl_->handle == nullptr) {
         delete impl_;
