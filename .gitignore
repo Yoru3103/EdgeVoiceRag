@@ -34,5 +34,4 @@ build-rk3588-bge/
 *.log
 toolchain-shims/
 toolchain-wrappers/
-data/
 Testing/

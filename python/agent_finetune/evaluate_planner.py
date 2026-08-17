@@ -1,3 +1,5 @@
+# 在 PC 的 NVIDIA GPU 上，以 4-bit 方式加载一个 Hugging Face 格式的因果语言模型，
+# 然后用 held-out 测试集检查它能不能稳定输出符合 Agent 协议的 JSON。
 from __future__ import annotations
 
 import argparse
@@ -35,36 +37,40 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
 
     return records
 
-
+# 4bit量化
 def load_model(model_name: str):
     quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype=torch.float16,
+        load_in_4bit=True,                      # 把模型的大部分权重以4-bit加载配置
+        bnb_4bit_quant_type="nf4",              # 指定量化格式为NF4，NormalFloat 4-bit。
+        bnb_4bit_use_double_quant=True,         # 启用双重量化
+        bnb_4bit_compute_dtype=torch.float16,   # 用 FP16 参与计算
     )
 
+    # 默认情况会加载对应模型配套的词表、特殊token、编码解码规则、Chat Template、Tokenizer 配置
     tokenizer = AutoTokenizer.from_pretrained(
         model_name,
-        use_fast=True,
-        trust_remote_code=False,
+        use_fast=True,                  # 优先使用 Hugging Face Fast Tokenizer，rust构造
+        trust_remote_code=False,        # 表示不执行模型仓库提供的自定义 Python 代码。
     )
 
+    # 有些因果预言模型没有单独定义padding，因此此处将令pad=eos
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    # 加载因果预言模型（根据已有token预测下一个token，新token加入序列再预测下一个token）
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         quantization_config=quantization_config,
-        torch_dtype=torch.float16,
-        device_map={"": 0},
-        low_cpu_mem_usage=True,
-        trust_remote_code=False,
+        torch_dtype=torch.float16,                  # 指定非量化参数和相关计算优先使用 FP16。
+        device_map={"": 0},                         # 把整个模型放到 CUDA 设备 0：
+        low_cpu_mem_usage=True,                     # 尽量降低加载模型时的 CPU 内存峰值。
+        trust_remote_code=False,                    # 模型和 Tokenizer 分别设置一次，表示模型加载时同样不允许执行仓库自定义 Python 实现。
     )
 
+    # 将模型切换为推理模式
     model.eval()
 
-    # 清除模型自带采样参数，避免do_sample=False警告。
+    # 清除模型自带采样参数，避免do_sample=False警告。保证确定性生成
     model.generation_config.do_sample = False
     model.generation_config.temperature = None
     model.generation_config.top_p = None
@@ -86,6 +92,11 @@ def generate(
         }
     ]
 
+    # 生成类似如下格式
+    # <|im_start|>user
+    # 这里是完整的 Agent Planner Prompt
+    # <|im_end|>
+    # <|im_start|>assistant
     formatted = tokenizer.apply_chat_template(
         messages,
         tokenize=False,
@@ -108,6 +119,7 @@ def generate(
     torch.cuda.synchronize()
     start = time.perf_counter()
 
+    # 禁止梯度计算，不保存反向传播中间状态，减少模型占用，提高推理速度
     with torch.inference_mode():
         output_ids = model.generate(
             **inputs,
