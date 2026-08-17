@@ -285,7 +285,7 @@ def build_records() -> list[dict[str, Any]]:
         final_answer(
             "当前温度为24.0摄氏度，未超过27度，不需要开启空调。"
         ),
-        ["24", "不需要"],
+        ["24", "状态不变"],
     )
 
     # 控制执行完成后必须结束，不能再次调用工具。
@@ -309,7 +309,7 @@ def build_records() -> list[dict[str, Any]]:
         final_answer(
             "当前温度超过27度，空调已经开启。"
         ),
-        ["超过", "开启"],
+        ["29.5", "已经开启"],
     )
 
     return records
