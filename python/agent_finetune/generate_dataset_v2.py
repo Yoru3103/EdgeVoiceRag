@@ -17,11 +17,22 @@ from agent_finetune.planner_format import (
 
 def belongs_to_validation(group_id: str) -> bool:
     """
-    根据语义组划分数据。
+    普通样本按稳定哈希进行 8:2 划分。
 
-    同一个用户表达的初始调用、成功Observation和失败Observation
-    必须全部进入同一个集合，防止训练/验证泄漏。
+    条件工作流按模板分层划分：
+    - template 1：高温时开启空调
+    - template 5：低温时关闭空调
+
+    同一模板的所有执行阶段必须位于同一集合，
+    防止 initial / observation / completed 泄漏。
     """
+    if group_id.startswith("condition-template-"):
+        validation_condition_groups = {
+            "condition-template-1",
+            "condition-template-5",
+        }
+        return group_id in validation_condition_groups
+
     digest = hashlib.sha256(
         group_id.encode("utf-8")
     ).digest()
