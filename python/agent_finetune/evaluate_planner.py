@@ -56,7 +56,7 @@ def load_model(
     )
     
     if tokenizer.pad_token_id is None:
-        tokenizer.pad_token_id = tokenizer.eos_token
+        tokenizer.pad_token = tokenizer.eos_token
         
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
