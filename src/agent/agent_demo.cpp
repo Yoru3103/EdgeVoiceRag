@@ -20,6 +20,9 @@ int main() {
         std::make_unique<GetCabinEnvironmentTool>(device)
     );
     registry.registerTool(
+            std::make_unique<CheckCabinTemperatureConditionTool>(device)
+        );
+    registry.registerTool(
         std::make_unique<GetAirConditionerStateTool>(device)
     );
     registry.registerTool(

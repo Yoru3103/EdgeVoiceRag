@@ -872,6 +872,16 @@ target_link_libraries(
 )
 
 add_executable(
+    vehicle_tools_tests
+    tests/vehicle_tools_tests.cpp
+)
+target_link_libraries(
+    vehicle_tools_tests
+    PRIVATE
+    edge_voice_rag_core
+)
+
+add_executable(
     linux_vehicle_device_tests
     tests/linux_vehicle_device_tests.cpp
 )
@@ -1056,6 +1066,10 @@ add_test(
 add_test(
     NAME linux_vehicle_device_tests
     COMMAND linux_vehicle_device_tests
+)
+add_test(
+    NAME vehicle_tools_tests
+    COMMAND vehicle_tools_tests
 )
 
 if(EDGE_ENABLE_SHERPA_ASR)

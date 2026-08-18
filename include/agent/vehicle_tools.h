@@ -21,7 +21,20 @@ private:
     VehicleDevice& device_;
 };
 
-// 为什么获取和设置要分成两个？
+class CheckCabinTemperatureConditionTool final : public AgentTool {
+public:
+    explicit CheckCabinTemperatureConditionTool(VehicleDevice& device);
+
+    std::string name() const override;
+    std::string description() const override;
+    nlohmann::json parametersSchema() const override;
+
+    AgentToolResult execute(const nlohmann::json& arguments) override;
+
+private:
+    VehicleDevice& device_;
+};
+
 class GetAirConditionerStateTool final : public AgentTool {
 public:
     explicit GetAirConditionerStateTool(
