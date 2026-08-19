@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,24 +17,41 @@ SYSTEM_PROMPT = (
 TOOLS = [
     {
         "description": (
-            "仅用于读取当前车内实时温度和湿度。"
-            "当用户询问温度、湿度、多少度、热不热时调用。"
-            "不能用于查询空调是否开启，也不能用于打开或关闭空调。"
+            "读取当前车内温度，并由C++确定性判断温度条件。"
+            "仅用于用户提出“温度满足某个条件时执行操作”的任务。"
+            "operator只能是gt、ge、lt、le，分别表示大于、"
+            "大于等于、小于、小于等于。"
+            "普通温湿度查询应使用get_cabin_environment。"
         ),
-        "name": "get_cabin_environment",
+        "name": "check_cabin_temperature_condition",
         "parameters": {
             "additionalProperties": False,
-            "properties": {},
+            "properties": {
+                "operator": {
+                    "description": (
+                        "gt大于，ge大于等于，"
+                        "lt小于，le小于等于"
+                    ),
+                    "enum": ["gt", "ge", "lt", "le"],
+                    "type": "string",
+                },
+                "threshold_c": {
+                    "description": "摄氏温度阈值",
+                    "maximum": 100.0,
+                    "minimum": -50.0,
+                    "type": "number",
+                },
+            },
+            "required": [
+                "operator",
+                "threshold_c",
+            ],
             "type": "object",
         },
         "requires_confirmation": False,
     },
     {
-        "description": (
-            "仅用于查询空调当前是否开启以及指示灯状态。"
-            "当用户询问空调开了吗、关了吗、当前状态时调用。"
-            "不能用于读取温湿度，也不能改变空调状态。"
-        ),
+        "description": "查询模拟空调和指示灯的当前状态",
         "name": "get_air_conditioner_state",
         "parameters": {
             "additionalProperties": False,
@@ -43,20 +61,24 @@ TOOLS = [
         "requires_confirmation": False,
     },
     {
-        "description": (
-            "仅用于执行打开或关闭空调的控制操作。"
-            "用户要求打开、开启空调时，enabled必须为true；"
-            "用户要求关闭、关掉空调时，enabled必须为false。"
-            "不能用于查询温湿度或空调状态。"
-        ),
+        "description": "读取当前车内温度和湿度",
+        "name": "get_cabin_environment",
+        "parameters": {
+            "additionalProperties": False,
+            "properties": {},
+            "type": "object",
+        },
+        "requires_confirmation": False,
+    },
+    {
+        "description": "打开或关闭模拟空调，并同步改变指示灯状态",
         "name": "set_air_conditioner",
         "parameters": {
             "additionalProperties": False,
             "properties": {
                 "enabled": {
                     "description": (
-                        "true表示打开空调，"
-                        "false表示关闭空调"
+                        "true 表示开启，false 表示关闭"
                     ),
                     "type": "boolean",
                 }
@@ -126,13 +148,81 @@ def validate_action(value: Any) -> ValidationResult:
     if not isinstance(call.get("arguments"), dict):
         return ValidationResult(False, error="tool_call.arguments must be an object")
 
-    if call["name"] == "set_air_conditioner":
-        if set(call["arguments"]) != {"enabled"}:
-            return ValidationResult(False, error="set_air_conditioner requires enabled only")
-        if not isinstance(call["arguments"]["enabled"], bool):
+    tool_name = call["name"]
+    arguments = call["arguments"]
+
+    if tool_name == "set_air_conditioner":
+        if set(arguments) != {"enabled"}:
+            return ValidationResult(
+                False,
+                error="set_air_conditioner requires enabled only",
+            )
+
+        if not isinstance(arguments["enabled"], bool):
             return ValidationResult(False, error="enabled must be boolean")
-    elif call["arguments"]:
-        return ValidationResult(False, error="read-only tools require empty arguments")
+
+    elif tool_name == "check_cabin_temperature_condition":
+        if set(arguments) != {
+            "operator",
+            "threshold_c",
+        }:
+            return ValidationResult(
+                False,
+                error=(
+                    "temperature condition tool requires "
+                    "operator and threshold_c only"
+                ),
+            )
+
+        comparison_operator = arguments["operator"]
+
+        if comparison_operator not in {
+            "gt",
+            "ge",
+            "lt",
+            "le",
+        }:
+            return ValidationResult(
+                False,
+                error=(
+                    "operator must be one of "
+                    "gt, ge, lt, le"
+                ),
+            )
+
+        threshold_c = arguments["threshold_c"]
+
+        if (
+            isinstance(threshold_c, bool)
+            or not isinstance(threshold_c, (int, float))
+        ):
+            return ValidationResult(
+                False,
+                error="threshold_c must be a number",
+            )
+
+        threshold_c = float(threshold_c)
+
+        if not math.isfinite(threshold_c):
+            return ValidationResult(
+                False,
+                error="threshold_c must be finite",
+            )
+
+        if not -50.0 <= threshold_c <= 100.0:
+            return ValidationResult(
+                False,
+                error=(
+                    "threshold_c is outside "
+                    "the allowed range"
+                ),
+            )
+
+    elif arguments:
+        return ValidationResult(
+            False,
+            error="read-only query tools require empty arguments",
+        )
 
     return ValidationResult(True, value=value)
 
@@ -180,17 +270,71 @@ def build_runtime_prompt(user_input: str, observations: list[dict[str, Any]]) ->
                 {"enabled": False},
             ),
         },
+        {
+            "用户任务": (
+                "座舱超过二十七度时开启制冷。"
+            ),
+            "输出": tool_call(
+                "call-1",
+                "check_cabin_temperature_condition",
+                {
+                    "operator": "gt",
+                    "threshold_c": 27.0,
+                },
+            ),
+        },
     ]
 
     selection_rules = [
-        "询问温度或湿度：调用get_cabin_environment。",
-        "询问空调是否开启或当前状态：调用get_air_conditioner_state。",
-        "要求打开空调：调用set_air_conditioner，enabled为true。",
-        "要求关闭空调：调用set_air_conditioner，enabled为false。",
-        "不得因为示例中出现某个工具，就忽略用户当前任务。",
-        "已经获得成功的只读工具结果后，不得重复调用该工具。",
-        "工具执行失败后输出final_answer说明错误，不得反复调用。",
-        "没有执行控制工具时，不得声称空调已经打开或关闭。",
+        (
+            "仅询问当前温度或湿度时，"
+            "调用get_cabin_environment。"
+        ),
+        (
+            "询问空调当前状态时，"
+            "调用get_air_conditioner_state。"
+        ),
+        (
+            "用户直接要求打开空调时，"
+            "调用set_air_conditioner，enabled为true。"
+        ),
+        (
+            "用户直接要求关闭空调时，"
+            "调用set_air_conditioner，enabled为false。"
+        ),
+        (
+            "用户提出温度条件控制任务时，"
+            "必须先调用check_cabin_temperature_condition，"
+            "不得使用get_cabin_environment代替条件判断。"
+        ),
+        (
+            "超过或高于映射为gt；"
+            "至少、达到或不低于映射为ge；"
+            "低于或小于映射为lt；"
+            "至多或不高于映射为le。"
+        ),
+        (
+            "check_cabin_temperature_condition成功后，"
+            "只根据Observation中的matched字段决定下一步，"
+            "不得自行重新比较temperature_c和threshold_c。"
+        ),
+        (
+            "matched为true时，执行用户要求的控制工具；"
+            "matched为false时，输出final_answer说明条件未满足，"
+            "不得改变设备状态。"
+        ),
+        (
+            "工具执行失败后输出final_answer说明错误，"
+            "不得反复调用工具。"
+        ),
+        (
+            "已经获得成功的只读工具结果后，"
+            "不得重复调用相同工具。"
+        ),
+        (
+            "没有成功执行控制工具时，"
+            "不得声称空调已经打开或关闭。"
+        ),
     ]
 
     output_rules = [
@@ -209,6 +353,7 @@ def build_runtime_prompt(user_input: str, observations: list[dict[str, Any]]) ->
             TOOLS,
             ensure_ascii=False,
             indent=2,
+            sort_keys=True,
         ),
 
         "\n\n工具选择规则：\n",
@@ -225,6 +370,7 @@ def build_runtime_prompt(user_input: str, observations: list[dict[str, Any]]) ->
             examples,
             ensure_ascii=False,
             indent=2,
+            sort_keys=True,
         ),
 
         "\n\n输出规则：\n",
@@ -236,7 +382,6 @@ def build_runtime_prompt(user_input: str, observations: list[dict[str, Any]]) ->
             )
         ),
 
-        # 把真正任务放在提示词末尾，避免被前面的示例覆盖。
         "\n\n用户原始任务：\n",
         user_input,
 
@@ -245,9 +390,13 @@ def build_runtime_prompt(user_input: str, observations: list[dict[str, Any]]) ->
             observations,
             ensure_ascii=False,
             indent=2,
+            sort_keys=True,
         ),
 
-        "\n\n请根据用户原始任务和Observation选择下一步。",
+        (
+            "\n\n请根据用户原始任务和Observation"
+            "选择下一步。"
+        ),
         "\n下一步JSON输出：",
     ]
 

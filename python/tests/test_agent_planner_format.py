@@ -30,7 +30,7 @@ def test_invalid_tool_arguments_are_rejected() -> None:
 def test_runtime_prompt_requires_json_only() -> None:
     prompt = build_runtime_prompt("车内温度是多少？", [])
     assert "只能输出一个JSON对象" in prompt
-    assert "不输出思考过程" in prompt
+    assert "不能输出分析、解释、思考过程" in prompt
     assert "get_cabin_environment" in prompt
 
 
@@ -39,3 +39,89 @@ def test_final_answer_is_valid() -> None:
         json.dumps(final_answer("当前车内温度为25.0摄氏度。"), ensure_ascii=False)
     )
     assert result.ok
+
+def test_temperature_condition_tool_is_valid() -> None:
+    action = tool_call(
+        "condition-check",
+        "check_cabin_temperature_condition",
+        {
+            "operator": "gt",
+            "threshold_c": 27.0,
+        },
+    )
+
+    result = parse_strict_action(
+        json.dumps(
+            action,
+            ensure_ascii=False,
+        )
+    )
+
+    assert result.ok
+
+
+def test_invalid_temperature_operator_is_rejected() -> None:
+    action = tool_call(
+        "condition-check",
+        "check_cabin_temperature_condition",
+        {
+            "operator": "equal",
+            "threshold_c": 27.0,
+        },
+    )
+
+    result = parse_strict_action(
+        json.dumps(
+            action,
+            ensure_ascii=False,
+        )
+    )
+
+    assert not result.ok
+
+
+def test_invalid_temperature_threshold_is_rejected() -> None:
+    action = tool_call(
+        "condition-check",
+        "check_cabin_temperature_condition",
+        {
+            "operator": "gt",
+            "threshold_c": "二十七",
+        },
+    )
+
+    result = parse_strict_action(
+        json.dumps(
+            action,
+            ensure_ascii=False,
+        )
+    )
+
+    assert not result.ok
+
+
+def test_runtime_prompt_uses_deterministic_condition() -> None:
+    prompt = build_runtime_prompt(
+        "座舱超过二十七度时开启制冷。",
+        [],
+    )
+
+    assert (
+        "check_cabin_temperature_condition"
+        in prompt
+    )
+
+    assert (
+        "只根据Observation中的matched字段"
+        in prompt
+    )
+
+    assert (
+        '"operator": "gt"'
+        in prompt
+    )
+
+    assert (
+        '"threshold_c": 27.0'
+        in prompt
+    )
