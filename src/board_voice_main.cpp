@@ -168,6 +168,9 @@ int main(int argc, char* argv[]) {
             std::make_unique<CheckCabinTemperatureConditionTool>(*vehicle_device)
         );
         agent_tools.registerTool(
+            std::make_unique<SetAirConditionerIfTemperatureTool>(*vehicle_device)
+        );
+        agent_tools.registerTool(
             std::make_unique<GetAirConditionerStateTool>(*vehicle_device)
         );
         agent_tools.registerTool(

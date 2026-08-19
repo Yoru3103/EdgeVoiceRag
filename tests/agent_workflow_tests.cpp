@@ -87,6 +87,12 @@ struct WorkflowFixture {
                 CheckCabinTemperatureConditionTool
             >(device)
         );
+
+        registry.registerTool(
+            std::make_unique<
+                SetAirConditionerIfTemperatureTool
+            >(device)
+        );
     }
 };
 
@@ -307,6 +313,135 @@ void testConditionDoesNotRequireControl() {
     );
 }
 
+void testAtomicConditionalControlWorkflow() {
+    WorkflowFixture fixture;
+    fixture.device.setEnvironment(29.5F, 55.0F);
+
+    fixture.llm.responses = {
+        R"({
+            "type": "tool_call",
+            "tool_call": {
+                "id": "atomic-condition-control",
+                "name": "set_air_conditioner_if_temperature",
+                "arguments": {
+                    "operator": "gt",
+                    "threshold_c": 27.0,
+                    "enabled": true
+                }
+            }
+        })",
+
+        R"({
+            "type": "final_answer",
+            "answer": "当前车内温度为29.5摄氏度，条件成立，空调已经开启。"
+        })"
+    };
+
+    LlmAgentPlanner planner(
+        fixture.llm,
+        fixture.registry
+    );
+
+    AgentExecutor executor(
+        planner,
+        fixture.registry
+    );
+
+    const AgentResponse pending =
+        executor.run(
+            "atomic-workflow",
+            "座舱超过二十七度时开启制冷"
+        );
+
+    expectTrue(
+        pending.ok,
+        "atomic workflow is accepted"
+    );
+
+    expectTrue(
+        pending.state
+            == AgentResponseState::WaitingForConfirmation,
+        "atomic workflow waits for confirmation"
+    );
+
+    expectTrue(
+        pending.answer.find("确认")
+            != std::string::npos,
+        "atomic workflow asks for confirmation"
+    );
+
+    expectTrue(
+        pending.trace.empty(),
+        "atomic tool is not executed before confirmation"
+    );
+
+    expectTrue(
+        !fixture.device.airConditionerEnabled(),
+        "device remains off before confirmation"
+    );
+
+    const AgentResponse completed =
+        executor.run(
+            "atomic-workflow",
+            "确认"
+        );
+
+    expectTrue(
+        completed.ok,
+        "confirmed atomic workflow succeeds"
+    );
+
+    expectTrue(
+        completed.state == AgentResponseState::Completed,
+        "confirmed atomic workflow completes"
+    );
+
+    expectTrue(
+        fixture.device.airConditionerEnabled(),
+        "confirmed atomic workflow enables device"
+    );
+
+    expectTrue(
+        completed.trace.size() == 1,
+        "atomic workflow executes one tool"
+    );
+
+    expectTrue(
+        completed.trace.at(0)
+            .at("tool_call")
+            .at("name")
+            .get<std::string>()
+            == "set_air_conditioner_if_temperature",
+        "trace records atomic condition tool"
+    );
+
+    const nlohmann::json& result =
+        completed.trace.at(0)
+            .at("result")
+            .at("data");
+
+    expectTrue(
+        result.at("matched").get<bool>(),
+        "atomic workflow condition matched"
+    );
+
+    expectTrue(
+        result.at("control_executed").get<bool>(),
+        "atomic workflow executed control"
+    );
+
+    expectTrue(
+        result.at("enabled").get<bool>(),
+        "atomic workflow verified enabled state"
+    );
+
+    expectTrue(
+        completed.answer.find("已经开启")
+            != std::string::npos,
+        "atomic workflow reports verified result"
+    );
+}
+
 void testMaximumStepsStopsLoop() {
     WorkflowFixture fixture;
 
@@ -365,6 +500,7 @@ void testMaximumStepsStopsLoop() {
 int main() {
     testConditionalControlWorkflow();
     testConditionDoesNotRequireControl();
+    testAtomicConditionalControlWorkflow();
     testMaximumStepsStopsLoop();
 
     if (failed_count != 0) {

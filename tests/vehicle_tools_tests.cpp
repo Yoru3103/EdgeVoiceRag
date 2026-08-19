@@ -35,6 +35,19 @@ AgentToolResult check(
     });
 }
 
+AgentToolResult conditionalSet(
+    SetAirConditionerIfTemperatureTool& tool,
+    const std::string& comparison_operator,
+    double threshold_c,
+    bool enabled
+) {
+    return tool.execute({
+        {"operator", comparison_operator},
+        {"threshold_c", threshold_c},
+        {"enabled", enabled}
+    });
+}
+
 void testDefinition() {
     MockVehicleDevice device;
     CheckCabinTemperatureConditionTool tool(device);
@@ -290,6 +303,239 @@ void testDoesNotChangeDeviceState() {
     );
 }
 
+void testAtomicConditionDefinition() {
+    MockVehicleDevice device;
+    SetAirConditionerIfTemperatureTool tool(device);
+
+    expectTrue(
+        tool.name()
+            == "set_air_conditioner_if_temperature",
+        "atomic condition tool has expected name"
+    );
+
+    expectTrue(
+        tool.requiresConfirmation(),
+        "atomic condition tool requires confirmation"
+    );
+
+    const nlohmann::json schema = tool.parametersSchema();
+
+    expectTrue(
+        schema.at("required").size() == 3,
+        "atomic condition schema requires three arguments"
+    );
+
+    expectTrue(
+        !schema.at("additionalProperties").get<bool>(),
+        "atomic condition schema rejects additional properties"
+    );
+}
+
+void testAtomicConditionEnablesDevice() {
+    MockVehicleDevice device;
+    device.setEnvironment(29.5F, 55.0F);
+
+    SetAirConditionerIfTemperatureTool tool(device);
+
+    const AgentToolResult result =
+        conditionalSet(tool, "gt", 27.0, true);
+
+    expectTrue(
+        result.ok,
+        "matched atomic enable succeeds"
+    );
+
+    expectTrue(
+        result.data.at("matched").get<bool>(),
+        "atomic enable condition matches"
+    );
+
+    expectTrue(
+        result.data.at("control_executed").get<bool>(),
+        "atomic enable executes control"
+    );
+
+    expectTrue(
+        result.data.at("state_changed").get<bool>(),
+        "atomic enable changes state"
+    );
+
+    expectTrue(
+        !result.data.at("state_before").get<bool>(),
+        "atomic enable reports previous off state"
+    );
+
+    expectTrue(
+        result.data.at("state_after").get<bool>(),
+        "atomic enable reports final on state"
+    );
+
+    expectTrue(
+        device.airConditionerEnabled(),
+        "atomic enable updates device"
+    );
+}
+
+void testAtomicConditionClosesAtBoundary() {
+    MockVehicleDevice device;
+    device.setEnvironment(22.0F, 50.0F);
+    device.setAirConditionerEnabled(true);
+
+    SetAirConditionerIfTemperatureTool tool(device);
+
+    const AgentToolResult result =
+        conditionalSet(tool, "le", 22.0, false);
+
+    expectTrue(
+        result.ok,
+        "boundary atomic close succeeds"
+    );
+
+    expectTrue(
+        result.data.at("matched").get<bool>(),
+        "le matches equal boundary"
+    );
+
+    expectTrue(
+        result.data.at("control_executed").get<bool>(),
+        "boundary close executes control"
+    );
+
+    expectTrue(
+        !result.data.at("enabled").get<bool>(),
+        "boundary close reports disabled"
+    );
+
+    expectTrue(
+        !device.airConditionerEnabled(),
+        "boundary close updates device"
+    );
+}
+
+void testAtomicConditionDoesNotControlWhenUnmatched() {
+    MockVehicleDevice device;
+    device.setEnvironment(24.0F, 50.0F);
+
+    SetAirConditionerIfTemperatureTool tool(device);
+
+    const AgentToolResult result =
+        conditionalSet(tool, "gt", 27.0, true);
+
+    expectTrue(
+        result.ok,
+        "unmatched atomic condition succeeds"
+    );
+
+    expectTrue(
+        !result.data.at("matched").get<bool>(),
+        "atomic condition is unmatched"
+    );
+
+    expectTrue(
+        !result.data.at("control_executed").get<bool>(),
+        "unmatched condition skips control"
+    );
+
+    expectTrue(
+        !result.data.at("state_changed").get<bool>(),
+        "unmatched condition does not change state"
+    );
+
+    expectTrue(
+        !device.airConditionerEnabled(),
+        "unmatched condition keeps device off"
+    );
+}
+
+void testAtomicConditionReportsControlFailure() {
+    MockVehicleDevice device;
+    device.setEnvironment(30.0F, 50.0F);
+    device.setControlFailure(true);
+
+    SetAirConditionerIfTemperatureTool tool(device);
+
+    const AgentToolResult result =
+        conditionalSet(tool, "gt", 27.0, true);
+
+    expectTrue(
+        !result.ok,
+        "matched control failure is reported"
+    );
+
+    expectTrue(
+        result.error.find("control failed")
+            != std::string::npos,
+        "control failure keeps clear reason"
+    );
+
+    expectTrue(
+        !device.airConditionerEnabled(),
+        "failed control leaves device unchanged"
+    );
+}
+
+void testUnmatchedConditionSkipsFailingControl() {
+    MockVehicleDevice device;
+    device.setEnvironment(24.0F, 50.0F);
+    device.setControlFailure(true);
+
+    SetAirConditionerIfTemperatureTool tool(device);
+
+    const AgentToolResult result =
+        conditionalSet(tool, "gt", 27.0, true);
+
+    expectTrue(
+        result.ok,
+        "unmatched condition ignores control failure"
+    );
+
+    expectTrue(
+        !result.data.at("control_executed").get<bool>(),
+        "unmatched condition never calls control"
+    );
+}
+
+void testAtomicConditionRejectsInvalidArguments() {
+    MockVehicleDevice device;
+    SetAirConditionerIfTemperatureTool tool(device);
+
+    expectTrue(
+        !tool.execute({
+            {"operator", "gt"},
+            {"threshold_c", 27.0}
+        }).ok,
+        "atomic condition requires enabled"
+    );
+
+    expectTrue(
+        !tool.execute({
+            {"operator", "gt"},
+            {"threshold_c", 27.0},
+            {"enabled", "true"}
+        }).ok,
+        "atomic condition rejects string enabled"
+    );
+
+    expectTrue(
+        !tool.execute({
+            {"operator", "equal"},
+            {"threshold_c", 27.0},
+            {"enabled", true}
+        }).ok,
+        "atomic condition rejects invalid operator"
+    );
+
+    expectTrue(
+        !tool.execute({
+            {"operator", "gt"},
+            {"threshold_c", 27.0},
+            {"enabled", true},
+            {"unexpected", true}
+        }).ok,
+        "atomic condition rejects unknown argument"
+    );
+}
+
 }  // namespace
 
 int main() {
@@ -300,6 +546,13 @@ int main() {
     testInvalidArguments();
     testInvalidSensorValue();
     testDoesNotChangeDeviceState();
+    testAtomicConditionDefinition();
+    testAtomicConditionEnablesDevice();
+    testAtomicConditionClosesAtBoundary();
+    testAtomicConditionDoesNotControlWhenUnmatched();
+    testAtomicConditionReportsControlFailure();
+    testUnmatchedConditionSkipsFailingControl();
+    testAtomicConditionRejectsInvalidArguments();
 
     if (failed_count != 0) {
         std::cout

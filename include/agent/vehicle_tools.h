@@ -53,6 +53,26 @@ private:
     VehicleDevice& device_;
 };
 
+class SetAirConditionerIfTemperatureTool final : public AgentTool {
+public:
+    explicit SetAirConditionerIfTemperatureTool(
+        VehicleDevice& device
+    );
+
+    std::string name() const override;
+    std::string description() const override;
+    nlohmann::json parametersSchema() const override;
+
+    bool requiresConfirmation() const override;
+
+    AgentToolResult execute(
+        const nlohmann::json& arguments
+    ) override;
+
+private:
+    VehicleDevice& device_;
+};
+
 class SetAirConditionerTool final : public AgentTool {
 public:
     explicit SetAirConditionerTool(VehicleDevice& device);
