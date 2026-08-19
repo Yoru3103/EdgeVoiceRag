@@ -213,7 +213,7 @@ def build_state_records() -> list[dict[str, Any]]:
                 ok=True,
                 data={
                     "enabled": enabled,
-                    "indicator_on": enabled,
+                    "indicator_led_on": enabled,
                 },
             )
         ]
@@ -346,7 +346,7 @@ def build_control_records(
                 ok=True,
                 data={
                     "enabled": enabled,
-                    "indicator_on": enabled,
+                    "indicator_led_on": enabled,
                 },
             )
         ]
@@ -563,7 +563,7 @@ def build_conditional_records() -> list[dict[str, Any]]:
                         ok=True,
                         data={
                             "enabled": target_enabled,
-                            "indicator_on": target_enabled,
+                            "indicator_led_on": target_enabled,
                         },
                     )
                 ]
