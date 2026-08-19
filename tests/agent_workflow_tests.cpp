@@ -81,6 +81,12 @@ struct WorkflowFixture {
                 SetAirConditionerTool
             >(device)
         );
+
+        registry.registerTool(
+            std::make_unique<
+                CheckCabinTemperatureConditionTool
+            >(device)
+        );
     }
 };
 
@@ -91,16 +97,19 @@ void testConditionalControlWorkflow() {
         R"({
             "type": "tool_call",
             "tool_call": {
-                "id": "call-temperature",
-                "name": "get_cabin_environment",
-                "arguments": {}
+                "id": "condition-check",
+                "name": "check_cabin_temperature_condition",
+                "arguments": {
+                    "operator": "gt",
+                    "threshold_c": 26.0
+                }
             }
         })",
 
         R"({
             "type": "tool_call",
             "tool_call": {
-                "id": "call-air-conditioner",
+                "id": "condition-control",
                 "name": "set_air_conditioner",
                 "arguments": {
                     "enabled": true
@@ -110,7 +119,7 @@ void testConditionalControlWorkflow() {
 
         R"({
             "type": "final_answer",
-            "answer": "车内温度为28.5摄氏度，超过26度，模拟空调已经开启。"
+            "answer": "当前车内温度为28.5摄氏度，条件已经满足，空调已经开启。"
         })"
     };
 
@@ -138,8 +147,9 @@ void testConditionalControlWorkflow() {
 
     expectTrue(
         first.state
-            == AgentResponseState::WaitingForConfirmation,
-        "workflow waits before write operation"
+            == AgentResponseState::
+                WaitingForConfirmation,
+        "matched workflow waits before control"
     );
 
     expectTrue(
@@ -149,13 +159,32 @@ void testConditionalControlWorkflow() {
 
     expectTrue(
         first.trace.size() == 1,
-        "temperature observation is recorded"
+        "condition observation is recorded"
     );
 
     expectTrue(
-        fixture.llm.prompts.at(1).find("28.5")
-            != std::string::npos,
-        "second planning prompt contains observation"
+        first.trace.at(0)
+            .at("tool_call")
+            .at("name")
+            .get<std::string>()
+            == "check_cabin_temperature_condition",
+        "condition workflow uses deterministic tool"
+    );
+
+    expectTrue(
+        first.trace.at(0)
+            .at("result")
+            .at("data")
+            .at("matched")
+            .get<bool>(),
+        "C++ condition result is true"
+    );
+
+    expectTrue(
+        fixture.llm.prompts.at(1).find(
+            "\"matched\": true"
+        ) != std::string::npos,
+        "second prompt contains matched true"
     );
 
     const AgentResponse confirmed =
@@ -182,13 +211,13 @@ void testConditionalControlWorkflow() {
 
     expectTrue(
         confirmed.trace.size() == 2,
-        "complete workflow records two tool calls"
+        "complete workflow records two tools"
     );
 
     expectTrue(
         confirmed.answer.find("已经开启")
             != std::string::npos,
-        "final answer reports execution result"
+        "final answer reports confirmed control"
     );
 }
 
@@ -200,15 +229,18 @@ void testConditionDoesNotRequireControl() {
         R"({
             "type": "tool_call",
             "tool_call": {
-                "id": "call-temperature",
-                "name": "get_cabin_environment",
-                "arguments": {}
+                "id": "condition-check",
+                "name": "check_cabin_temperature_condition",
+                "arguments": {
+                    "operator": "gt",
+                    "threshold_c": 26.0
+                }
             }
         })",
 
         R"({
             "type": "final_answer",
-            "answer": "车内温度为23度，没有超过26度，因此不需要开启空调。"
+            "answer": "当前车内温度为23.0摄氏度，条件未满足，空调状态不变。"
         })"
     };
 
@@ -230,23 +262,48 @@ void testConditionDoesNotRequireControl() {
 
     expectTrue(
         response.ok,
-        "low-temperature workflow succeeds"
+        "unmatched workflow succeeds"
     );
 
     expectTrue(
         response.state
             == AgentResponseState::Completed,
-        "low-temperature workflow completes directly"
+        "unmatched workflow completes directly"
     );
 
     expectTrue(
         !fixture.device.airConditionerEnabled(),
-        "condition prevents control operation"
+        "unmatched condition does not control device"
     );
 
     expectTrue(
         response.trace.size() == 1,
-        "only sensor tool is executed"
+        "only condition tool is executed"
+    );
+
+    expectTrue(
+        response.trace.at(0)
+            .at("tool_call")
+            .at("name")
+            .get<std::string>()
+            == "check_cabin_temperature_condition",
+        "unmatched workflow uses condition tool"
+    );
+
+    expectTrue(
+        !response.trace.at(0)
+            .at("result")
+            .at("data")
+            .at("matched")
+            .get<bool>(),
+        "C++ condition result is false"
+    );
+
+    expectTrue(
+        fixture.llm.prompts.at(1).find(
+            "\"matched\": false"
+        ) != std::string::npos,
+        "second prompt contains matched false"
     );
 }
 

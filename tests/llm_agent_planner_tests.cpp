@@ -75,6 +75,12 @@ struct PlannerFixture {
                 SetAirConditionerTool
             >(device)
         );
+
+        registry.registerTool(
+            std::make_unique<
+                CheckCabinTemperatureConditionTool
+            >(device)
+        );
     }
 };
 
@@ -328,6 +334,95 @@ void testRejectsInvalidJson() {
     );
 }
 
+void testParsesTemperatureConditionToolCall() {
+    PlannerFixture fixture;
+
+    fixture.llm.response = R"({
+        "type": "tool_call",
+        "tool_call": {
+            "id": "condition-check",
+            "name": "check_cabin_temperature_condition",
+            "arguments": {
+                "operator": "gt",
+                "threshold_c": 27.0
+            }
+        }
+    })";
+
+    LlmAgentPlanner planner(
+        fixture.llm,
+        fixture.registry
+    );
+
+    AgentPlanningContext context;
+    context.user_input =
+        "座舱超过二十七度时开启制冷";
+
+    const AgentAction action =
+        planner.plan(context);
+
+    expectTrue(
+        action.type == AgentActionType::ToolCall,
+        "parse temperature condition tool call"
+    );
+
+    expectTrue(
+        action.tool_call.name
+            == "check_cabin_temperature_condition",
+        "select deterministic condition tool"
+    );
+
+    expectTrue(
+        action.tool_call.arguments
+                .at("operator")
+                .get<std::string>()
+            == "gt",
+        "parse condition operator"
+    );
+
+    expectTrue(
+        action.tool_call.arguments
+                .at("threshold_c")
+                .get<double>()
+            == 27.0,
+        "parse condition threshold"
+    );
+
+    expectTrue(
+        fixture.llm.last_prompt.find(
+            "只根据Observation中的matched字段"
+        ) != std::string::npos,
+        "prompt requires matched-only decision"
+    );
+
+    const std::size_t check_position =
+        fixture.llm.last_prompt.find(
+            "\"check_cabin_temperature_condition\""
+        );
+
+    const std::size_t state_position =
+        fixture.llm.last_prompt.find(
+            "\"get_air_conditioner_state\""
+        );
+
+    const std::size_t environment_position =
+        fixture.llm.last_prompt.find(
+            "\"get_cabin_environment\""
+        );
+
+    const std::size_t control_position =
+        fixture.llm.last_prompt.find(
+            "\"set_air_conditioner\""
+        );
+
+    expectTrue(
+        check_position < state_position
+            && state_position < environment_position
+            && environment_position < control_position,
+        "tool definitions use deterministic order"
+    );
+}
+
 }   // namespace
 
 int main() {
@@ -339,6 +434,7 @@ int main() {
     testAcceptsMarkdownWrappedJson();
     testReportsLlmFailure();
     testRejectsInvalidJson();
+    testParsesTemperatureConditionToolCall();
 
         if (failed_count != 0) {
         std::cout

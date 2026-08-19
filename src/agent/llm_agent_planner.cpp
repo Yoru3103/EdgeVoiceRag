@@ -93,10 +93,7 @@ std::string LlmAgentPlanner::buildPrompt(const AgentPlanningContext& context) co
                 {
                     {"id", observation.tool_call.id},
                     {"name", observation.tool_call.name},
-                    {
-                        "arguments",
-                        observation.tool_call.arguments
-                    }
+                    {"arguments", observation.tool_call.arguments}
                 }
             },
             {
@@ -110,57 +107,199 @@ std::string LlmAgentPlanner::buildPrompt(const AgentPlanningContext& context) co
         });
     }
 
-    nlohmann::json tool_call_example = {
-        {"type", "tool_call"},
+    nlohmann::json examples = nlohmann::json::array();
+
+    examples.push_back({
+        {"用户任务", "车内的温度是多少？"},
         {
-            "tool_call",
+            "输出",
             {
-                {"id", "call-1"},
-                {"name", "get_cabin_environment"},
-                {"arguments", nlohmann::json::object()}
+                {"type", "tool_call"},
+                {
+                    "tool_call",
+                    {
+                        {"id", "call-1"},
+                        {
+                            "name",
+                            "get_cabin_environment"
+                        },
+                        {
+                            "arguments",
+                            nlohmann::json::object()
+                        }
+                    }
+                }
             }
         }
-    };
+    });
 
-    nlohmann::json final_answer_example = {
-        {"type", "final_answer"},
-        {"answer", "任务已经完成。"
+    examples.push_back({
+        {"用户任务", "空调现在开着吗？"},
+        {
+            "输出",
+            {
+                {"type", "tool_call"},
+                {
+                    "tool_call",
+                    {
+                        {"id", "call-1"},
+                        {
+                            "name",
+                            "get_air_conditioner_state"
+                        },
+                        {
+                            "arguments",
+                            nlohmann::json::object()
+                        }
+                    }
+                }
+            }
         }
-    };
+    });
+
+    examples.push_back({
+        {"用户任务", "请打开空调。"},
+        {
+            "输出",
+            {
+                {"type", "tool_call"},
+                {
+                    "tool_call",
+                    {
+                        {"id", "call-1"},
+                        {
+                            "name",
+                            "set_air_conditioner"
+                        },
+                        {
+                            "arguments",
+                            {
+                                {"enabled", true}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    examples.push_back({
+        {"用户任务", "请关闭空调。"},
+        {
+            "输出",
+            {
+                {"type", "tool_call"},
+                {
+                    "tool_call",
+                    {
+                        {"id", "call-1"},
+                        {
+                            "name",
+                            "set_air_conditioner"
+                        },
+                        {
+                            "arguments",
+                            {
+                                {"enabled", false}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    examples.push_back({
+        {
+            "用户任务",
+            "座舱超过二十七度时开启制冷。"
+        },
+        {
+            "输出",
+            {
+                {"type", "tool_call"},
+                {
+                    "tool_call",
+                    {
+                        {"id", "call-1"},
+                        {
+                            "name",
+                            "check_cabin_temperature_condition"
+                        },
+                        {
+                            "arguments",
+                            {
+                                {"operator", "gt"},
+                                {"threshold_c", 27.0}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
 
     std::string prompt;
-    prompt.reserve(4096);
+    prompt.reserve(8192);
 
     prompt += config_.system_prompt;
 
     prompt += "\n\n可用工具：\n";
     prompt += tools.dump(2);
 
+    prompt += "\n\n工具选择规则：\n";
+    prompt +=
+        "1. 仅询问当前温度或湿度时，"
+        "调用get_cabin_environment。\n"
+        "2. 询问空调当前状态时，"
+        "调用get_air_conditioner_state。\n"
+        "3. 用户直接要求打开空调时，"
+        "调用set_air_conditioner，enabled为true。\n"
+        "4. 用户直接要求关闭空调时，"
+        "调用set_air_conditioner，enabled为false。\n"
+        "5. 用户提出温度条件控制任务时，"
+        "必须先调用check_cabin_temperature_condition，"
+        "不得使用get_cabin_environment代替条件判断。\n"
+        "6. 超过或高于映射为gt；"
+        "至少、达到或不低于映射为ge；"
+        "低于或小于映射为lt；"
+        "至多或不高于映射为le。\n"
+        "7. check_cabin_temperature_condition成功后，"
+        "只根据Observation中的matched字段决定下一步，"
+        "不得自行重新比较temperature_c和threshold_c。\n"
+        "8. matched为true时，执行用户要求的控制工具；"
+        "matched为false时，输出final_answer说明条件未满足，"
+        "不得改变设备状态。\n"
+        "9. 工具执行失败后输出final_answer说明错误，"
+        "不得反复调用工具。\n"
+        "10. 已经获得成功的只读工具结果后，"
+        "不得重复调用相同工具。\n"
+        "11. 没有成功执行控制工具时，"
+        "不得声称空调已经打开或关闭。";
+
+    prompt += "\n\n平衡示例：\n";
+    prompt += examples.dump(2);
+
+    prompt += "\n\n输出规则：\n";
+    prompt +=
+        "1. 只能输出一个JSON对象。\n"
+        "2. 不能输出Markdown代码块。\n"
+        "3. 不能输出分析、解释、思考过程或额外文字。\n"
+        "4. tool_call必须包含type和tool_call。\n"
+        "5. final_answer必须包含type和answer。";
+
     prompt += "\n\n用户原始任务：\n";
     prompt += context.user_input;
 
-    prompt += "\n\n已经执行的步骤和观察结果：\n";
+    prompt +=
+        "\n\n已经执行的步骤和观察结果：\n";
     prompt += history.dump(2);
 
-    prompt += "\n\n调用工具时输出：\n";
-    prompt += tool_call_example.dump();
-
-    prompt += "\n\n任务完成时输出：\n";
-    prompt += final_answer_example.dump();
-
     prompt +=
-        "\n\n规则："
-        "\n1. 如果没有足够信息，选择一个工具。"
-        "\n2. 如果Observation已经足够，输出final_answer。"
-        "\n3. 可以根据Observation继续调用其他工具。"
-        "\n4. 不得重复调用已经获得有效结果的只读工具。"
-        "\n5. 工具执行失败时应根据错误生成简短回答，"
-        "不要假装成功。"
-        "\n6. 不得声称未执行的控制操作已经完成。"
-        "\n7. 只能输出一个JSON对象。"
-        "\n8. 不输出思考过程。";
+        "\n\n请根据用户原始任务和Observation"
+        "选择下一步。";
 
-    prompt += "\n\n下一步JSON输出：";
+    prompt += "\n下一步JSON输出：";
 
     return prompt;
 }
