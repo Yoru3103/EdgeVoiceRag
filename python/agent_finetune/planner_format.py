@@ -88,6 +88,47 @@ TOOLS = [
         },
         "requires_confirmation": True,
     },
+    {
+        "description": (
+            "原子执行温度条件空调控制。"
+            "C++读取当前车内温度并确定性比较，"
+            "条件成立时设置空调状态并进行写后验证。"
+            "operator只能是gt、ge、lt、le；"
+            "enabled为条件成立时希望设置的空调状态。"
+            "该工具可能改变设备状态，因此需要用户确认。"
+        ),
+        "name": "set_air_conditioner_if_temperature",
+        "parameters": {
+            "additionalProperties": False,
+            "properties": {
+                "enabled": {
+                    "description": "条件成立时设置的空调状态",
+                    "type": "boolean",
+                },
+                "operator": {
+                    "description": (
+                        "gt大于，ge大于等于，"
+                        "lt小于，le小于等于"
+                    ),
+                    "enum": ["gt", "ge", "lt", "le"],
+                    "type": "string",
+                },
+                "threshold_c": {
+                    "description": "摄氏温度阈值",
+                    "maximum": 100.0,
+                    "minimum": -50.0,
+                    "type": "number",
+                },
+            },
+            "required": [
+                "operator",
+                "threshold_c",
+                "enabled",
+            ],
+            "type": "object",
+        },
+        "requires_confirmation": True,
+    },
 ]
 
 TOOL_NAMES = {tool["name"] for tool in TOOLS}
@@ -161,16 +202,24 @@ def validate_action(value: Any) -> ValidationResult:
         if not isinstance(arguments["enabled"], bool):
             return ValidationResult(False, error="enabled must be boolean")
 
-    elif tool_name == "check_cabin_temperature_condition":
-        if set(arguments) != {
+    elif tool_name in {
+        "check_cabin_temperature_condition",
+        "set_air_conditioner_if_temperature",
+    }:
+        expected_arguments = {
             "operator",
             "threshold_c",
-        }:
+        }
+
+        if tool_name == "set_air_conditioner_if_temperature":
+            expected_arguments.add("enabled")
+
+        if set(arguments) != expected_arguments:
             return ValidationResult(
                 False,
                 error=(
-                    "temperature condition tool requires "
-                    "operator and threshold_c only"
+                    "temperature condition tool has "
+                    "invalid arguments"
                 ),
             )
 
@@ -216,6 +265,16 @@ def validate_action(value: Any) -> ValidationResult:
                     "threshold_c is outside "
                     "the allowed range"
                 ),
+            )
+
+        if (
+            tool_name
+            == "set_air_conditioner_if_temperature"
+            and not isinstance(arguments["enabled"], bool)
+        ):
+            return ValidationResult(
+                False,
+                error="enabled must be boolean",
             )
 
     elif arguments:
@@ -276,8 +335,9 @@ def build_runtime_prompt(user_input: str, observations: list[dict[str, Any]]) ->
             ),
             "输出": tool_call(
                 "call-1",
-                "check_cabin_temperature_condition",
+                "set_air_conditioner_if_temperature",
                 {
+                    "enabled": True,
                     "operator": "gt",
                     "threshold_c": 27.0,
                 },
@@ -304,8 +364,9 @@ def build_runtime_prompt(user_input: str, observations: list[dict[str, Any]]) ->
         ),
         (
             "用户提出温度条件控制任务时，"
-            "必须先调用check_cabin_temperature_condition，"
-            "不得使用get_cabin_environment代替条件判断。"
+            "必须直接调用set_air_conditioner_if_temperature。"
+            "operator和threshold_c表示条件，enabled表示条件成立时的目标状态。"
+            "不得拆分为先查询温度再调用控制工具。"
         ),
         (
             "超过或高于映射为gt；"
@@ -314,14 +375,13 @@ def build_runtime_prompt(user_input: str, observations: list[dict[str, Any]]) ->
             "至多或不高于映射为le。"
         ),
         (
-            "check_cabin_temperature_condition成功后，"
-            "只根据Observation中的matched字段决定下一步，"
-            "不得自行重新比较temperature_c和threshold_c。"
+            "set_air_conditioner_if_temperature成功后，"
+            "根据Observation中的matched、control_executed和enabled输出final_answer，"
+            "不得再次调用set_air_conditioner。"
         ),
         (
-            "matched为true时，执行用户要求的控制工具；"
-            "matched为false时，输出final_answer说明条件未满足，"
-            "不得改变设备状态。"
+            "用户只要求判断温度条件但不要求控制设备时，"
+            "才使用check_cabin_temperature_condition。"
         ),
         (
             "工具执行失败后输出final_answer说明错误，"
@@ -434,4 +494,3 @@ def observation(
         "tool_call": {"id": call_id, "name": name, "arguments": arguments},
         "observation": {"ok": ok, "data": data or {}, "error": error},
     }
-

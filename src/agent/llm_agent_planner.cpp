@@ -224,11 +224,12 @@ std::string LlmAgentPlanner::buildPrompt(const AgentPlanningContext& context) co
                         {"id", "call-1"},
                         {
                             "name",
-                            "check_cabin_temperature_condition"
+                            "set_air_conditioner_if_temperature"
                         },
                         {
                             "arguments",
                             {
+                                {"enabled", true},
                                 {"operator", "gt"},
                                 {"threshold_c", 27.0}
                             }
@@ -258,18 +259,18 @@ std::string LlmAgentPlanner::buildPrompt(const AgentPlanningContext& context) co
         "4. 用户直接要求关闭空调时，"
         "调用set_air_conditioner，enabled为false。\n"
         "5. 用户提出温度条件控制任务时，"
-        "必须先调用check_cabin_temperature_condition，"
-        "不得使用get_cabin_environment代替条件判断。\n"
+        "必须直接调用set_air_conditioner_if_temperature。"
+        "operator和threshold_c表示条件，enabled表示条件成立时的目标状态。"
+        "不得拆分为先查询温度再调用控制工具。\n"
         "6. 超过或高于映射为gt；"
         "至少、达到或不低于映射为ge；"
         "低于或小于映射为lt；"
         "至多或不高于映射为le。\n"
-        "7. check_cabin_temperature_condition成功后，"
-        "只根据Observation中的matched字段决定下一步，"
-        "不得自行重新比较temperature_c和threshold_c。\n"
-        "8. matched为true时，执行用户要求的控制工具；"
-        "matched为false时，输出final_answer说明条件未满足，"
-        "不得改变设备状态。\n"
+        "7. set_air_conditioner_if_temperature成功后，"
+        "根据Observation中的matched、control_executed和enabled输出final_answer，"
+        "不得再次调用set_air_conditioner。\n"
+        "8. 用户只要求判断温度条件但不要求控制设备时，"
+        "才使用check_cabin_temperature_condition。\n"
         "9. 工具执行失败后输出final_answer说明错误，"
         "不得反复调用工具。\n"
         "10. 已经获得成功的只读工具结果后，"

@@ -81,6 +81,12 @@ struct PlannerFixture {
                 CheckCabinTemperatureConditionTool
             >(device)
         );
+
+        registry.registerTool(
+            std::make_unique<
+                SetAirConditionerIfTemperatureTool
+            >(device)
+        );
     }
 };
 
@@ -334,17 +340,18 @@ void testRejectsInvalidJson() {
     );
 }
 
-void testParsesTemperatureConditionToolCall() {
+void testParsesAtomicTemperatureConditionToolCall() {
     PlannerFixture fixture;
 
     fixture.llm.response = R"({
         "type": "tool_call",
         "tool_call": {
-            "id": "condition-check",
-            "name": "check_cabin_temperature_condition",
+            "id": "condition-control",
+            "name": "set_air_conditioner_if_temperature",
             "arguments": {
                 "operator": "gt",
-                "threshold_c": 27.0
+                "threshold_c": 27.0,
+                "enabled": true
             }
         }
     })";
@@ -363,13 +370,13 @@ void testParsesTemperatureConditionToolCall() {
 
     expectTrue(
         action.type == AgentActionType::ToolCall,
-        "parse temperature condition tool call"
+        "parse atomic temperature condition tool call"
     );
 
     expectTrue(
         action.tool_call.name
-            == "check_cabin_temperature_condition",
-        "select deterministic condition tool"
+            == "set_air_conditioner_if_temperature",
+        "select atomic condition control tool"
     );
 
     expectTrue(
@@ -389,10 +396,10 @@ void testParsesTemperatureConditionToolCall() {
     );
 
     expectTrue(
-        fixture.llm.last_prompt.find(
-            "只根据Observation中的matched字段"
-        ) != std::string::npos,
-        "prompt requires matched-only decision"
+        action.tool_call.arguments
+                .at("enabled")
+                .get<bool>(),
+        "parse condition target state"
     );
 
     const std::size_t check_position =
@@ -415,11 +422,24 @@ void testParsesTemperatureConditionToolCall() {
             "\"set_air_conditioner\""
         );
 
+    const std::size_t atomic_position =
+        fixture.llm.last_prompt.find(
+            "\"set_air_conditioner_if_temperature\""
+        );
+
     expectTrue(
         check_position < state_position
             && state_position < environment_position
-            && environment_position < control_position,
+            && environment_position < control_position
+            && control_position < atomic_position,
         "tool definitions use deterministic order"
+    );
+
+    expectTrue(
+        fixture.llm.last_prompt.find(
+            "不得拆分为先查询温度再调用控制工具"
+        ) != std::string::npos,
+        "prompt requires atomic condition control"
     );
 }
 
@@ -434,7 +454,7 @@ int main() {
     testAcceptsMarkdownWrappedJson();
     testReportsLlmFailure();
     testRejectsInvalidJson();
-    testParsesTemperatureConditionToolCall();
+    testParsesAtomicTemperatureConditionToolCall();
 
         if (failed_count != 0) {
         std::cout

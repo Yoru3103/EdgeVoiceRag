@@ -100,19 +100,55 @@ def test_invalid_temperature_threshold_is_rejected() -> None:
     assert not result.ok
 
 
-def test_runtime_prompt_uses_deterministic_condition() -> None:
+def test_atomic_temperature_condition_tool_is_valid() -> None:
+    action = tool_call(
+        "condition-control",
+        "set_air_conditioner_if_temperature",
+        {
+            "enabled": True,
+            "operator": "gt",
+            "threshold_c": 27.0,
+        },
+    )
+
+    result = parse_strict_action(
+        json.dumps(action, ensure_ascii=False)
+    )
+
+    assert result.ok
+
+
+def test_atomic_temperature_condition_requires_boolean_enabled() -> None:
+    action = tool_call(
+        "condition-control",
+        "set_air_conditioner_if_temperature",
+        {
+            "enabled": "true",
+            "operator": "gt",
+            "threshold_c": 27.0,
+        },
+    )
+
+    result = parse_strict_action(
+        json.dumps(action, ensure_ascii=False)
+    )
+
+    assert not result.ok
+
+
+def test_runtime_prompt_uses_atomic_condition_control() -> None:
     prompt = build_runtime_prompt(
         "座舱超过二十七度时开启制冷。",
         [],
     )
 
     assert (
-        "check_cabin_temperature_condition"
+        "set_air_conditioner_if_temperature"
         in prompt
     )
 
     assert (
-        "只根据Observation中的matched字段"
+        "不得拆分为先查询温度再调用控制工具"
         in prompt
     )
 
@@ -125,3 +161,5 @@ def test_runtime_prompt_uses_deterministic_condition() -> None:
         '"threshold_c": 27.0'
         in prompt
     )
+
+    assert '"enabled": true' in prompt
