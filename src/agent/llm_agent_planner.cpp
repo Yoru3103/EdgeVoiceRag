@@ -246,7 +246,10 @@ std::string LlmAgentPlanner::buildPrompt(const AgentPlanningContext& context) co
     prompt += config_.system_prompt;
 
     prompt += "\n\n可用工具：\n";
-    prompt += tools.dump(2);
+    // Static schemas are repeated in every planner request. Compact JSON keeps
+    // the protocol identical while substantially reducing context tokens and
+    // QLoRA activation memory.
+    prompt += tools.dump();
 
     prompt += "\n\n工具选择规则：\n";
     prompt +=
@@ -279,7 +282,7 @@ std::string LlmAgentPlanner::buildPrompt(const AgentPlanningContext& context) co
         "不得声称空调已经打开或关闭。";
 
     prompt += "\n\n平衡示例：\n";
-    prompt += examples.dump(2);
+    prompt += examples.dump();
 
     prompt += "\n\n输出规则：\n";
     prompt +=
@@ -294,7 +297,7 @@ std::string LlmAgentPlanner::buildPrompt(const AgentPlanningContext& context) co
 
     prompt +=
         "\n\n已经执行的步骤和观察结果：\n";
-    prompt += history.dump(2);
+    prompt += history.dump();
 
     prompt +=
         "\n\n请根据用户原始任务和Observation"

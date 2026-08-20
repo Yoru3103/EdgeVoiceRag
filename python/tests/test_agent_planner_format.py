@@ -152,14 +152,8 @@ def test_runtime_prompt_uses_atomic_condition_control() -> None:
         in prompt
     )
 
-    assert (
-        '"operator": "gt"'
-        in prompt
-    )
+    assert '"operator":"gt"' in prompt
 
-    assert (
-        '"threshold_c": 27.0'
-        in prompt
-    )
+    assert '"threshold_c":27.0' in prompt
 
-    assert '"enabled": true' in prompt
+    assert '"enabled":true' in prompt

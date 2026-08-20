@@ -412,7 +412,7 @@ def build_runtime_prompt(user_input: str, observations: list[dict[str, Any]]) ->
         json.dumps(
             TOOLS,
             ensure_ascii=False,
-            indent=2,
+            separators=(",", ":"),
             sort_keys=True,
         ),
 
@@ -429,7 +429,7 @@ def build_runtime_prompt(user_input: str, observations: list[dict[str, Any]]) ->
         json.dumps(
             examples,
             ensure_ascii=False,
-            indent=2,
+            separators=(",", ":"),
             sort_keys=True,
         ),
 
@@ -449,7 +449,7 @@ def build_runtime_prompt(user_input: str, observations: list[dict[str, Any]]) ->
         json.dumps(
             observations,
             ensure_ascii=False,
-            indent=2,
+            separators=(",", ":"),
             sort_keys=True,
         ),
 
