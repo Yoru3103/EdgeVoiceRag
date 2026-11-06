@@ -29,6 +29,36 @@ void expectTrue(
     failed_count++;
 }
 
+// Validate the observation delivered to the planner independently of JSON whitespace.
+bool promptHasMatchedObservation(const std::string& prompt, bool expected) {
+    const std::string marker = "已经执行的步骤和观察结果：\n";
+    const auto marker_pos = prompt.find(marker);
+    if (marker_pos == std::string::npos) {
+        return false;
+    }
+
+    const auto begin = marker_pos + marker.size();
+    const auto end = prompt.find("\n\n", begin);
+    const auto history = nlohmann::json::parse(
+        prompt.substr(begin, end - begin), nullptr, false
+    );
+    if (!history.is_array() || history.size() != 1) {
+        return false;
+    }
+
+    const auto& step = history.at(0);
+    if (!step.contains("observation") || !step["observation"].is_object()) {
+        return false;
+    }
+    const auto& observation = step["observation"];
+    if (!observation.contains("data") || !observation["data"].is_object()) {
+        return false;
+    }
+    const auto& data = observation["data"];
+    return data.contains("matched") && data["matched"].is_boolean()
+        && data["matched"].get<bool>() == expected;
+}
+
 class SequenceLlmBackend final : public LlmBackend {
 public:
     std::vector<std::string> responses;
@@ -187,9 +217,7 @@ void testConditionalControlWorkflow() {
     );
 
     expectTrue(
-        fixture.llm.prompts.at(1).find(
-            "\"matched\": true"
-        ) != std::string::npos,
+        promptHasMatchedObservation(fixture.llm.prompts.at(1), true),
         "second prompt contains matched true"
     );
 
@@ -306,9 +334,7 @@ void testConditionDoesNotRequireControl() {
     );
 
     expectTrue(
-        fixture.llm.prompts.at(1).find(
-            "\"matched\": false"
-        ) != std::string::npos,
+        promptHasMatchedObservation(fixture.llm.prompts.at(1), false),
         "second prompt contains matched false"
     );
 }

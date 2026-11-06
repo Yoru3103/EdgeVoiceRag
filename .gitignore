@@ -35,3 +35,6 @@ build-rk3588-bge/
 toolchain-shims/
 toolchain-wrappers/
 Testing/
+
+# Local verification builds
+build-docs-check/
