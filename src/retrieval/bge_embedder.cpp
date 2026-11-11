@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -260,6 +261,17 @@ bool BgeEmbedder::load() {
 }
 
 BgeEmbeddingResult BgeEmbedder::encodeQuery(const std::string& query) const {
+    return encodeQueryImpl(query, false);
+}
+
+BgeEmbeddingResult BgeEmbedder::encodeQueryProfiled(const std::string& query) const {
+    return encodeQueryImpl(query, true);
+}
+
+BgeEmbeddingResult BgeEmbedder::encodeQueryImpl(const std::string& query, bool profile) const {
+    using Clock = std::chrono::steady_clock;
+    const auto start = profile ? Clock::now() : Clock::time_point{};
+
     if (!loaded_ || !impl_->session) {
         return failureResult("BGE embedder is not loaded");
     }
@@ -268,7 +280,9 @@ BgeEmbeddingResult BgeEmbedder::encodeQuery(const std::string& query) const {
         return failureResult("BGE query must not be empty");
     }
 
+    const auto lock_start = profile ? Clock::now() : Clock::time_point{};
     std::lock_guard<std::mutex> lock(impl_->inference_mutex);
+    const auto prepared_start = profile ? Clock::now() : Clock::time_point{};
 
     try {
         const std::string input_text = config_.query_instruction + query;
@@ -367,6 +381,7 @@ BgeEmbeddingResult BgeEmbedder::encodeQuery(const std::string& query) const {
             "embeddings"
         };
 
+        const auto inference_start = profile ? Clock::now() : Clock::time_point{};
         std::vector<Ort::Value> outputs = 
             impl_->session->Run(
                 Ort::RunOptions{nullptr},
@@ -377,6 +392,7 @@ BgeEmbeddingResult BgeEmbedder::encodeQuery(const std::string& query) const {
                 output_names.size()
             );
 
+        const auto postprocess_start = profile ? Clock::now() : Clock::time_point{};
         if (
             outputs.size() != 1 || !outputs[0].IsTensor()
         ) {
@@ -448,6 +464,19 @@ BgeEmbeddingResult BgeEmbedder::encodeQuery(const std::string& query) const {
 
         BgeEmbeddingResult result;
         result.ok = true;
+        if (profile) {
+            const auto end = Clock::now();
+            const auto ms = [](auto duration) {
+                return std::chrono::duration<double, std::milli>(duration).count();
+            };
+            result.timing.observed = true;
+            result.timing.token_count = input_ids.size();
+            result.timing.lock_wait_ms = ms(prepared_start - lock_start);
+            result.timing.prepare_ms = ms(inference_start - prepared_start);
+            result.timing.inference_ms = ms(postprocess_start - inference_start);
+            result.timing.postprocess_ms = ms(end - postprocess_start);
+            result.timing.total_ms = ms(end - start);
+        }
         result.embedding = std::move(embedding);
 
         return result;

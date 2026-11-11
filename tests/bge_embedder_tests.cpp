@@ -163,6 +163,20 @@ int main(
         "BgeEmbedder: output is normalized"
     );
 
+    const auto profiled = embedder.encodeQueryProfiled("空调怎么打开");
+    expectTrue(profiled.ok && profiled.timing.observed
+               && profiled.timing.token_count >= 2
+               && cosineSimilarity(first.embedding, profiled.embedding) > 0.99999F,
+               "BGE profiling preserves the query embedding");
+    expectTrue(std::isfinite(profiled.timing.inference_ms)
+               && profiled.timing.inference_ms >= 0.0
+               && profiled.timing.total_ms >= profiled.timing.inference_ms,
+               "BGE timings are finite and correctly scoped");
+    expectTrue(!first.timing.observed, "normal encoding does not claim profiled timings");
+    const auto invalid_profile = embedder.encodeQueryProfiled("");
+    expectTrue(!invalid_profile.ok && !invalid_profile.timing.observed,
+               "invalid encoding is unobserved");
+
     const BgeEmbeddingResult second =
         embedder.encodeQuery(
             "空调怎么打开"

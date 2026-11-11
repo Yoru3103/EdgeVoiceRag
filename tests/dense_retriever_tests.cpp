@@ -204,6 +204,23 @@ int main(
         "DenseRetriever: reject non-positive Top-K"
     );
 
+    DenseRetrievalTiming profile;
+    const auto plain = retriever.searchTopK("空调怎么打开", 3);
+    const auto measured = retriever.searchTopKProfiled("空调怎么打开", 3, profile);
+    bool equal = plain.size() == measured.size();
+    for (std::size_t i = 0; equal && i < plain.size(); ++i) {
+        equal = plain[i].chunk.chunk_id == measured[i].chunk.chunk_id
+            && std::abs(plain[i].dense_score - measured[i].dense_score) < 0.00001F;
+    }
+    expectTrue(equal && profile.observed && profile.embedding.observed,
+               "profiled dense search preserves results");
+    expectTrue(profile.index_search_ms >= 0.0 && profile.mapping_ms >= 0.0
+               && profile.total_ms >= profile.embedding.total_ms,
+               "dense profile includes embedding, index and mapping");
+    retriever.searchTopKProfiled("", 3, profile);
+    expectTrue(!profile.observed && !profile.embedding.observed,
+               "invalid dense query clears stale profile");
+
     if (g_failed_count == 0) {
         std::cout
             << "All DenseRetriever tests passed."

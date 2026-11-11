@@ -16,6 +16,7 @@
 #include <nlohmann/json.hpp>
 
 #include "retriever_runtime.h"
+#include "bge_embedder.h"
 
 using Json = nlohmann::json;
 
@@ -33,6 +34,7 @@ struct BenchmarkOptions {
     std::string index_dir;
 
     bool enable_relevance_filter = false;
+    bool emit_samples = false;
 };
 
 int parsePositiveInt(
@@ -98,30 +100,18 @@ BenchmarkOptions parseOptions(
     const int base_argument_count =
         requires_dense_files ? 8 : 6;
 
-    if (
-        argc != base_argument_count
-        && argc != base_argument_count + 1
-    ) {
-        throw std::invalid_argument(
-            requires_dense_files
-                ? "dense/hybrid requires "
-                "model_dir and index_dir"
-                : "invalid BM25 benchmark arguments"
-        );
+    if (argc < base_argument_count) {
+        throw std::invalid_argument("missing benchmark arguments");
     }
-
-    if (argc == base_argument_count + 1) {
-        const std::string final_argument =
-            argv[argc - 1];
-
-        if (final_argument != "--filter") {
-            throw std::invalid_argument(
-                "the only supported optional "
-                "argument is --filter"
-            );
+    for (int index = base_argument_count; index < argc; ++index) {
+        const std::string flag = argv[index];
+        if (flag == "--filter" && !options.enable_relevance_filter) {
+            options.enable_relevance_filter = true;
+        } else if (flag == "--samples" && !options.emit_samples) {
+            options.emit_samples = true;
+        } else {
+            throw std::invalid_argument("unknown or duplicate benchmark option: " + flag);
         }
-
-        options.enable_relevance_filter = true;
     }
 
     options.chunks_path = argv[2];
@@ -478,8 +468,12 @@ std::vector<double> measureLatencyMicroseconds(
     const Retriever& retriever,
     const std::vector<EvaluationCase>& cases,
     int top_k,
-    int runs
+    int runs,
+    bool emit_samples
 ) {
+    struct RawSample { int run; std::size_t case_index; double elapsed_us; std::size_t result_count; };
+    std::vector<RawSample> raw_samples;
+    if (emit_samples) { raw_samples.reserve(static_cast<std::size_t>(runs) * cases.size()); }
     /*
      * 预热：
      * 减少首次运行的内存分配和缓存影响。
@@ -500,7 +494,8 @@ std::vector<double> measureLatencyMicroseconds(
     std::size_t checksum = 0;
 
     for (int run = 0; run < runs; run++) {
-        for (const EvaluationCase& evaluation_case : cases) {
+        for (std::size_t case_index = 0; case_index < cases.size(); ++case_index) {
+            const auto& evaluation_case = cases[case_index];
             const auto start = std::chrono::steady_clock::now();
 
             const auto results = retriever.searchTopK(evaluation_case.query, top_k);
@@ -512,9 +507,17 @@ std::vector<double> measureLatencyMicroseconds(
             ).count();
 
             latency_samples.push_back(elapsed_microseconds);
+            if (emit_samples) { raw_samples.push_back({run, case_index, elapsed_microseconds, results.size()}); }
 
             checksum += results.size();
         }
+    }
+
+    for (const auto& sample : raw_samples) {
+        std::cout << "LATENCY_SAMPLE " << Json{
+            {"version",1},{"run",sample.run},{"case_id",cases[sample.case_index].id},
+            {"elapsed_us",sample.elapsed_us},{"result_count",sample.result_count}
+        }.dump() << '\n';
     }
 
     std::cout
@@ -785,6 +788,14 @@ void printSummary(
         };
     }
 
+    metrics_json["warmup_passes"] = 1;
+    metrics_json["pre_measurement_quality_passes"] = 1;
+    metrics_json["percentile_method"] = "nearest_rank";
+    if (backend != "bm25") {
+        metrics_json["intra_op_threads"] = BgeEmbedderConfig{}.intra_op_threads;
+        metrics_json["inter_op_threads"] = BgeEmbedderConfig{}.inter_op_threads;
+    }
+
     metrics_json["categories"] =
         std::move(category_json);
 
@@ -865,7 +876,8 @@ int main(int argc, char* argv[]) {
                 retriever,
                 cases,
                 options.top_k,
-                options.runs
+                options.runs,
+                options.emit_samples
             );
 
         printSummary(
@@ -889,7 +901,7 @@ int main(int argc, char* argv[]) {
             << " <retrieval_cases.json>"
             << " <top_k>"
             << " <runs>"
-            << " [--filter]\n"
+            << " [--filter] [--samples]\n"
             << "  "
             << argv[0]
             << " dense|hybrid"
@@ -899,7 +911,7 @@ int main(int argc, char* argv[]) {
             << " <runs>"
             << " <model_dir>"
             << " <index_dir>"
-            << " [--filter]\n\n"
+            << " [--filter] [--samples]\n\n"
             << "retrieval benchmark failed: "
             << error.what()
             << '\n';

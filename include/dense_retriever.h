@@ -24,6 +24,14 @@ struct DenseRetrieverConfig {
     float minimum_similarity = -1.0F;
 };
 
+struct DenseRetrievalTiming {
+    bool observed = false;
+    BgeEmbeddingTiming embedding;
+    double index_search_ms = 0.0;
+    double mapping_ms = 0.0;
+    double total_ms = 0.0;
+};
+
 class DenseRetriever final : public Retriever {
 public:
     explicit DenseRetriever(DenseRetrieverConfig config);
@@ -35,11 +43,19 @@ public:
         int top_k
     ) const override;
 
+    std::vector<RetrievalResult> searchTopKProfiled(
+        const std::string& query, int top_k, DenseRetrievalTiming& timing
+    ) const;
+
     bool isLoaded() const noexcept;
 
     const std::string& lastError() const noexcept;
 
 private:
+    std::vector<RetrievalResult> searchTopKImpl(
+        const std::string& query, int top_k, DenseRetrievalTiming* timing
+    ) const;
+
     DenseRetrieverConfig config_;
 
     BgeEmbedder embedder_;

@@ -1,5 +1,6 @@
 #include "dense_retriever.h"
 
+#include <chrono>
 #include <cmath>
 #include <stdexcept>
 #include <utility>
@@ -136,20 +137,38 @@ std::vector<RetrievalResult> DenseRetriever::searchTopK(
     const std::string& query,
     int top_k
 ) const {
+    return searchTopKImpl(query, top_k, nullptr);
+}
+
+std::vector<RetrievalResult> DenseRetriever::searchTopKProfiled(
+    const std::string& query, int top_k, DenseRetrievalTiming& timing
+) const {
+    timing = {};
+    return searchTopKImpl(query, top_k, &timing);
+}
+
+std::vector<RetrievalResult> DenseRetriever::searchTopKImpl(
+    const std::string& query, int top_k, DenseRetrievalTiming* timing
+) const {
+    using Clock = std::chrono::steady_clock;
+    const auto start = timing ? Clock::now() : Clock::time_point{};
     std::vector<RetrievalResult> results;
 
     if (!loaded_ || query.empty() || top_k <= 0) {
         return results;
     }
 
-    const BgeEmbeddingResult embedding_result = embedder_.encodeQuery(query);
+    const BgeEmbeddingResult embedding_result = timing
+        ? embedder_.encodeQueryProfiled(query) : embedder_.encodeQuery(query);
 
     if (!embedding_result.ok) {
         return results;
     }
 
+    const auto search_start = timing ? Clock::now() : Clock::time_point{};
     const std::vector<DenseVectorSearchHit> hits = index_.searchTopK(embedding_result.embedding, top_k);
 
+    const auto mapping_start = timing ? Clock::now() : Clock::time_point{};
     results.reserve(hits.size());
 
     for (const DenseVectorSearchHit& hit : hits) {
@@ -182,6 +201,16 @@ std::vector<RetrievalResult> DenseRetriever::searchTopK(
         results.push_back(std::move(result));
     }
 
+    if (timing) {
+        const auto end = Clock::now();
+        timing->observed = true;
+        timing->embedding = embedding_result.timing;
+        timing->index_search_ms = std::chrono::duration<double, std::milli>(
+            mapping_start - search_start).count();
+        timing->mapping_ms = std::chrono::duration<double, std::milli>(
+            end - mapping_start).count();
+        timing->total_ms = std::chrono::duration<double, std::milli>(end - start).count();
+    }
     return results;
 }
 
