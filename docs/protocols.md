@@ -13,11 +13,13 @@
 | Python RAG 控制服务 | 5558 | REQ/REP，取消 RAG 并传播到生成器 | [rag_control_server.py](../python/rag/rag_control_server.py) |
 | C++ llm_server 普通接口 | 8899 | REQ/REP，LLM v1 JSON | [llm_server.cpp](../src/apps/llm_server.cpp) |
 | C++ llm_server 流接口 | 8900 | DEALER/ROUTER，LLM v1 JSON 事件流 | 同上 |
-| C++ llm_server 控制接口 | 8901 | 独立 REP 线程，取消活动生成 | [llm_control_server.cpp](../src/transport/llm_control_server.cpp) |
+| C++ llm_server 控制接口 | 8901 | 独立 REP 线程，取消活动流式生成 | [llm_control_server.cpp](../src/transport/llm_control_server.cpp) |
 
 5555 两种演示服务不能同时占用同一地址。表中是代码默认值，CLI/config 可覆盖。服务端默认 `tcp://*:<port>`、本机客户端使用 `tcp://127.0.0.1:<port>`。服务逻辑以单活动生成为基线，ROUTER 并不自动提供多模型并发调度。
 
 流式客户端通过 DEALER 发送一个 UTF-8 JSON 帧；ROUTER 收到 identity + payload 两帧，回应也以相同 identity 路由 JSON。不要添加 REQ 的空分隔帧。取消走独立通道，使推理阻塞时仍可接收控制请求。
+
+8901当前只匹配 `LlmStreamService` 记录的活动流请求；8899普通接口未登记到该活动ID，不能据此保证取消非流式生成。进程与控制线程的关系见[跨进程图解](project-flow.md#network)。
 
 板端 C++ 主链路直接调用本地后端，不需要启动这些网络进程。
 
@@ -130,3 +132,58 @@ turn_elapsed_ms = capture_elapsed_ms + asr_elapsed_ms + assistant_total_elapsed_
 answer_backend、TTS、playback 在 assistant 内存在流水重叠，不能再累加到整轮时间。first_playback_start_ms 测量“调用播放”的时刻，不是声学设备实际发声的精确时刻。缺少 observed 标志时不能把默认 0 当观测值。
 
 `AGENT_JSON` 记录 Agent 请求、状态、工具/Observation/trace；它不是音频或算子 profiling。后续新增失败率监测应包含所有开始/结束请求，不能只统计成功产生 PERF_JSON 的轮次。
+
+
+### 7.1 PERF_JSON可选队列扩展
+
+version仍为1。新报告增加以下完整字段组；旧报告可完全不含这组字段。新汇总器在发现任一扩展字段时校验整组：
+
+| 字段 | 类型/单位 | 含义 |
+| --- | --- | --- |
+| queue_metrics_observed / queue_metrics_complete | bool | 是否观测；是否正常成功完成后的完整快照 |
+| sentence_queue_capacity / audio_queue_capacity | 非负整数，项 | 配置容量，observed=true时须大于0 |
+| sentence_queue_peak_depth / audio_queue_peak_depth | 非负整数，项 | 数据push成功时的共享队列深度峰值，不超过capacity |
+| sentence_queue_push_wait_count / audio_queue_push_wait_count | 非负整数，次 | 数据push因容量已满进入等待的次数 |
+| sentence_queue_push_wait_ms / audio_queue_push_wait_ms | 有限非负数，ms | 容量等待累计时间 |
+
+complete=true要求observed=true且ok=true。取消/失败可能只返回部分快照；只有observed且complete的等待时间进入汇总，真实观测到的0保留，缺失/不完整不会补0。深度可能包含当时已有的控制项或旧任务，End本身的push等待不计入该组。
+
+性能报告的采样范围仍为AnswerCompleted；完整取消路径不保证产生一份PERF_JSON。成功率及分位数应限定为实际日志样本。BGE分段JSONL与基准清单是离线工具格式，详细字段和复现方法见[性能观测指南](performance-guide.md)。
+
+## 独立音频输出CLI与JSONL v1
+
+[参数与实际步骤](board-audio-output.md)；源码为[audio_output_check](../src/apps/audio_output_check.cpp)。它是本地诊断进程，无网络端口、request_id或PERF_JSON协议。每条JSON行含version=1；SDK/ALSA可能另写普通诊断文本，采集时同时保存stderr。
+
+| type | 含义 / 核心字段 |
+| --- | --- |
+| audio_check_config | mode、device、config、period_frames_requested、repeat、tts_compiled |
+| audio_check_audio | PCM源sample_rate、channels、frames、format=S16_LE、duration_seconds；audio_prepare_ms、tts_load_ms、tts_synthesis_ms |
+| audio_check_wav | path；已在打开声卡之前成功保存 |
+| audio_check_playback | iteration从1计数、ok、error、elapsed_ms；播放失败打印此条后退出 |
+| audio_check_error | phase=config/audio_prepare/wav/playback_open/playback、error；异常退出 |
+
+tone的TTS计时为null；音频为1秒440Hz、幅度0.1、单声道。tts只合成一次，repeat对同一播放器重复提交同一PCM。采样率是源PCM格式，period_frames_requested是配置请求，均不声称硬件最终协商值。所有时间是steady_clock墙钟时间，不能当CPU/NPU占比或正式语音首播延迟。
+
+退出0表示全部请求的play返回ok；1表示配置、准备、WAV、设备打开或播放失败；2表示非法CLI。help返回0且不加载配置。已有WAV使用O_EXCL保护，拒绝覆盖；父目录需预先存在。播出ok不等于使用者实际听到声音。导出的是标准RIFF/WAVE PCM16小端，不改变TTS采样率。
+
+板端PCM命名：capture_device/playback_device现默认edge_voice_16k，需加载config/alsa-rk3588.conf。audio_check_audio.sample_rate仍是源音频格式；即使为44100，配置指定的slave.rate为16000，实际硬件结果以板端hw_params为准。工具schema与Agent日志格式未改变，Rule Planner对口语环境查询复用路由分类。
+
+
+## TTS独立基准JSONL v1
+
+入口[tts_benchmark](../src/apps/tts_benchmark.cpp)，需编译SHERPA_TTS，无声卡访问；固定集[tts_cases.json](../benchmarks/tts_cases.json)包含id/text，version=1，id不可重复。--text与--cases互斥。
+
+| type | 关键含义 |
+| --- | --- |
+| tts_benchmark_config | 模型路径、线程、speaker/speed/provider、allowed_cpus、model_load_ms、预热/测量次数、输入FNV指纹、加载后进程峰值RSS |
+| tts_benchmark_sample | case_id/text、warmup或measured、iteration、first_inference、synthesis_ms、sample_rate/channels/frames/audio_seconds、rtf、累计进程peak RSS |
+| tts_benchmark_summary | 每case测量样本数、排除预热次数、合成/RTF的P50/P95，type7_linear插值 |
+| tts_benchmark_error | 无法载入配置、数据或模型等错误 |
+
+退出0为全部合成通过，1为数据/配置/SDK错误，2为CLI错误。warmup本身也保留原始记录；
+model_load_ms与合成分开，测量不含播放，不能当完整会话首播。
+输入FNV-1a64不是SHA256；完整资产SHA保存在部署清单及手动输入快照。
+RSS为Linux进程生命期累计峰值KiB；allowed_cpus是调用线程允许核，不能据此推断SDK内部所有线程或NPU占比。
+首调用标记不代表冷磁盘；读取模型指纹可能预热文件缓存。
+
+运行conf新增barge_in_enabled（true/false或1/0），缺省true；false是半双工，不用阈值1伪装禁用。PERF_JSON字段没有变化，开关状态从启动日志Barge-in与实际conf记录；关闭模式应无BargeInDetected，正常完成轮次仍输出原PERF_JSON。

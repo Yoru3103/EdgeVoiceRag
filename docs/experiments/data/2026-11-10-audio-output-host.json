@@ -1,0 +1,339 @@
+{
+  "log_dir": "/home/xx/EdgeVoiceRAG/.cache/audio-output-checks-20261110-vfb9u5ii",
+  "checks": [
+    {
+      "name": "tone-16000",
+      "rc": 0,
+      "rows": [
+        {
+          "config": "config/board_rk3588.conf",
+          "device": "null",
+          "mode": "tone",
+          "period_frames_requested": 1024,
+          "repeat": 2,
+          "tts_compiled": false,
+          "type": "audio_check_config",
+          "version": 1
+        },
+        {
+          "audio_prepare_ms": 0.444304,
+          "channels": 1,
+          "duration_seconds": 1.0,
+          "format": "S16_LE",
+          "frames": 16000,
+          "sample_rate": 16000,
+          "tts_load_ms": null,
+          "tts_synthesis_ms": null,
+          "type": "audio_check_audio",
+          "version": 1
+        },
+        {
+          "path": "/home/xx/EdgeVoiceRAG/.cache/audio-output-checks-20261110-vfb9u5ii/tone-16000.wav",
+          "type": "audio_check_wav",
+          "version": 1
+        },
+        {
+          "elapsed_ms": 0.067579,
+          "error": "",
+          "iteration": 1,
+          "ok": true,
+          "type": "audio_check_playback",
+          "version": 1
+        },
+        {
+          "elapsed_ms": 0.028895,
+          "error": "",
+          "iteration": 2,
+          "ok": true,
+          "type": "audio_check_playback",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "name": "tone-44100",
+      "rc": 0,
+      "rows": [
+        {
+          "config": "config/board_rk3588.conf",
+          "device": "null",
+          "mode": "tone",
+          "period_frames_requested": 1024,
+          "repeat": 2,
+          "tts_compiled": false,
+          "type": "audio_check_config",
+          "version": 1
+        },
+        {
+          "audio_prepare_ms": 1.08491,
+          "channels": 1,
+          "duration_seconds": 1.0,
+          "format": "S16_LE",
+          "frames": 44100,
+          "sample_rate": 44100,
+          "tts_load_ms": null,
+          "tts_synthesis_ms": null,
+          "type": "audio_check_audio",
+          "version": 1
+        },
+        {
+          "path": "/home/xx/EdgeVoiceRAG/.cache/audio-output-checks-20261110-vfb9u5ii/tone-44100.wav",
+          "type": "audio_check_wav",
+          "version": 1
+        },
+        {
+          "elapsed_ms": 0.057328,
+          "error": "",
+          "iteration": 1,
+          "ok": true,
+          "type": "audio_check_playback",
+          "version": 1
+        },
+        {
+          "elapsed_ms": 0.032081,
+          "error": "",
+          "iteration": 2,
+          "ok": true,
+          "type": "audio_check_playback",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "name": "tone-48000",
+      "rc": 0,
+      "rows": [
+        {
+          "config": "config/board_rk3588.conf",
+          "device": "null",
+          "mode": "tone",
+          "period_frames_requested": 1024,
+          "repeat": 2,
+          "tts_compiled": false,
+          "type": "audio_check_config",
+          "version": 1
+        },
+        {
+          "audio_prepare_ms": 1.141668,
+          "channels": 1,
+          "duration_seconds": 1.0,
+          "format": "S16_LE",
+          "frames": 48000,
+          "sample_rate": 48000,
+          "tts_load_ms": null,
+          "tts_synthesis_ms": null,
+          "type": "audio_check_audio",
+          "version": 1
+        },
+        {
+          "path": "/home/xx/EdgeVoiceRAG/.cache/audio-output-checks-20261110-vfb9u5ii/tone-48000.wav",
+          "type": "audio_check_wav",
+          "version": 1
+        },
+        {
+          "elapsed_ms": 0.060805,
+          "error": "",
+          "iteration": 1,
+          "ok": true,
+          "type": "audio_check_playback",
+          "version": 1
+        },
+        {
+          "elapsed_ms": 0.025198,
+          "error": "",
+          "iteration": 2,
+          "ok": true,
+          "type": "audio_check_playback",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "name": "preserve-wav",
+      "rc": 1,
+      "rows": [
+        {
+          "config": "config/board_rk3588.conf",
+          "device": "null",
+          "mode": "tone",
+          "period_frames_requested": 1024,
+          "repeat": 2,
+          "tts_compiled": false,
+          "type": "audio_check_config",
+          "version": 1
+        },
+        {
+          "audio_prepare_ms": 0.463701,
+          "channels": 1,
+          "duration_seconds": 1.0,
+          "format": "S16_LE",
+          "frames": 16000,
+          "sample_rate": 16000,
+          "tts_load_ms": null,
+          "tts_synthesis_ms": null,
+          "type": "audio_check_audio",
+          "version": 1
+        },
+        {
+          "error": "cannot create new WAV /home/xx/EdgeVoiceRAG/.cache/audio-output-checks-20261110-vfb9u5ii/tone-16000.wav: File exists",
+          "phase": "wav",
+          "type": "audio_check_error",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "name": "bad-mode",
+      "rc": 2,
+      "rows": []
+    },
+    {
+      "name": "bad-repeat",
+      "rc": 2,
+      "rows": []
+    },
+    {
+      "name": "bad-rate",
+      "rc": 2,
+      "rows": []
+    },
+    {
+      "name": "tts-rate",
+      "rc": 2,
+      "rows": []
+    },
+    {
+      "name": "tone-text",
+      "rc": 2,
+      "rows": []
+    },
+    {
+      "name": "unknown",
+      "rc": 2,
+      "rows": []
+    },
+    {
+      "name": "tts-not-compiled",
+      "rc": 1,
+      "rows": [
+        {
+          "config": "config/board_rk3588.conf",
+          "device": "null",
+          "mode": "tts",
+          "period_frames_requested": 1024,
+          "repeat": 2,
+          "tts_compiled": false,
+          "type": "audio_check_config",
+          "version": 1
+        },
+        {
+          "error": "TTS is not compiled; enable EDGE_ENABLE_SHERPA_TTS",
+          "phase": "audio_prepare",
+          "type": "audio_check_error",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "name": "bad-device",
+      "rc": 1,
+      "rows": [
+        {
+          "config": "config/board_rk3588.conf",
+          "device": "edge-no-such-pcm-device",
+          "mode": "tone",
+          "period_frames_requested": 1024,
+          "repeat": 2,
+          "tts_compiled": false,
+          "type": "audio_check_config",
+          "version": 1
+        },
+        {
+          "audio_prepare_ms": 0.568168,
+          "channels": 1,
+          "duration_seconds": 1.0,
+          "format": "S16_LE",
+          "frames": 16000,
+          "sample_rate": 16000,
+          "tts_load_ms": null,
+          "tts_synthesis_ms": null,
+          "type": "audio_check_audio",
+          "version": 1
+        },
+        {
+          "path": "/home/xx/EdgeVoiceRAG/.cache/audio-output-checks-20261110-vfb9u5ii/bad-device.wav",
+          "type": "audio_check_wav",
+          "version": 1
+        },
+        {
+          "error": "failed to open ALSA playback device edge-no-such-pcm-device: No such file or directory",
+          "phase": "playback_open",
+          "type": "audio_check_error",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "name": "host-real-tts",
+      "rc": 0,
+      "rows": [
+        {
+          "config": "config/board_rk3588.conf",
+          "device": "null",
+          "mode": "tts",
+          "period_frames_requested": 1024,
+          "repeat": 2,
+          "tts_compiled": true,
+          "type": "audio_check_config",
+          "version": 1
+        },
+        {
+          "audio_prepare_ms": 6405.783677,
+          "channels": 1,
+          "duration_seconds": 2.972154195011338,
+          "format": "S16_LE",
+          "frames": 131072,
+          "sample_rate": 44100,
+          "tts_load_ms": 2242.231873,
+          "tts_synthesis_ms": 3942.940476,
+          "type": "audio_check_audio",
+          "version": 1
+        },
+        {
+          "path": "/home/xx/EdgeVoiceRAG/.cache/audio-output-checks-20261110-vfb9u5ii/tts.wav",
+          "type": "audio_check_wav",
+          "version": 1
+        },
+        {
+          "elapsed_ms": 0.043062,
+          "error": "",
+          "iteration": 1,
+          "ok": true,
+          "type": "audio_check_playback",
+          "version": 1
+        },
+        {
+          "elapsed_ms": 0.018004,
+          "error": "",
+          "iteration": 2,
+          "ok": true,
+          "type": "audio_check_playback",
+          "version": 1
+        }
+      ]
+    }
+  ],
+  "count": 13,
+  "host_tts_audio": {
+    "audio_prepare_ms": 6405.783677,
+    "channels": 1,
+    "duration_seconds": 2.972154195011338,
+    "format": "S16_LE",
+    "frames": 131072,
+    "sample_rate": 44100,
+    "tts_load_ms": 2242.231873,
+    "tts_synthesis_ms": 3942.940476,
+    "type": "audio_check_audio",
+    "version": 1
+  }
+}

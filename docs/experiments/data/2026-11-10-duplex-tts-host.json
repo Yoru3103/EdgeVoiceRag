@@ -1,0 +1,20 @@
+{
+  "rc": 0,
+  "audio": {
+    "audio_prepare_ms": 6426.00869,
+    "channels": 1,
+    "duration_seconds": 2.972154195011338,
+    "format": "S16_LE",
+    "frames": 131072,
+    "sample_rate": 44100,
+    "tts_load_ms": 2176.727374,
+    "tts_synthesis_ms": 4051.106762,
+    "type": "audio_check_audio",
+    "version": 1
+  },
+  "sink_rate": 16000,
+  "sink_frames": 94976,
+  "expected_frames_before_resampler_tail": 95108.93424036281,
+  "log_dir": "/home/xx/EdgeVoiceRAG/.cache/duplex-tts-20261110-5z2q3iam",
+  "board_execution": false
+}

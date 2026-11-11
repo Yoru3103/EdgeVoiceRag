@@ -2,6 +2,8 @@
 
 梳理日期：2026-11-04。目标平台：RK3588，PC/WSL 提供开发和验证环境。本文以当前源码为依据，不把旧 README 的板端描述当作实测结论。
 
+图解入口：[完整调用与线程图解](project-flow.md)包含8张分层大图，覆盖主链路、线程、正常完成、起声打断、Agent确认和跨进程调用。
+
 ## 1. 项目解决什么问题
 
 系统接受用户语音，判断它是车辆手册问题、一般对话，还是实时设备查询/控制；将回答转换为语音，并支持用户在播报期间起声打断。设备控制由 C++ 工具层执行，LLM 只提出结构化动作。训练代码用于改善小模型的 Planner 输出。
@@ -16,7 +18,7 @@
 | C++ 文本与网络联调 | [main.cpp](../src/apps/main.cpp)、[llm_server.cpp](../src/apps/llm_server.cpp)、[rag_server.cpp](../src/apps/rag_server.cpp) | 文本 CLI 使用 MultiLevelResponseSystem；独立服务通过 ZeroMQ 工作 |
 | Python 原型与训练 | [python/rag](../python/rag/)、[python/embedding](../python/embedding/)、[python/agent_finetune](../python/agent_finetune/) | TF-IDF RAG、语音实验、ONNX 导出、索引、QLoRA 与离线评测；不是板端入口的必要进程 |
 
-`agent_demo` 是无模型、无音频、Mock 设备 + Rule Planner 的独立演示。不能用它的成功证明真实传感器、语音识别或 NPU 工作。
+`agent_demo` 是无模型、无音频的Rule Planner独立演示，默认Mock，可用--device iio读取Linux IIO。Host夹具通过不代表真实板端通过，文字入口也不验证ASR/TTS或NPU。
 
 ## 3. 板端调用链
 
@@ -28,7 +30,7 @@
 6. `AgentRoutingAnswerBackend` 外层路由先处理安全类别，再处理待确认动作和设备意图，其余交给 `PolicyRoutingAnswerBackend`。
 7. `ContinuousVoiceSession` 正常录制 → ASR → 异步 `VoiceAssistant::processText`，同时启动打断 VAD。
 8. 回答事件分句后进入句子队列，TTS 线程合成 PCM，音频队列将结果交给播放线程。
-9. 起声事件触发 `stopPlayback`，停止本地输出并尝试取消生成；打断录音继续收集下一轮完整问题。
+9. 起声事件触发 `stopPlayback`，停止本地输出并尝试取消生成；打断录音继续收集下一轮完整问题。回答先结束时仍检查并保留成功录音，已起声则等待录完，不重新采集同一问题。
 
 音频默认为 16 kHz 单声道，数据类型为有符号 PCM16；ASR/TTS 的模型格式和实际采样率仍由相应适配器检查/转换。两个 VAD 录音器引用同一 PCM 源，由连续会话安排不同阶段的采集，不能自行把它们改成任意并行读同一声卡。
 
@@ -83,10 +85,14 @@ RRF 分数、BM25 分数和余弦相似度量纲不同。相关性过滤和直�
 
 ## 7. 线程和所有权
 
+[![板端线程泳道与队列边界](diagrams/03-thread-lanes.svg)](diagrams/03-thread-lanes.svg)
+
+点击图片打开大图。逐步时序见[正常完成](project-flow.md#normal)与[起声打断](project-flow.md#interrupt)，锁、共享状态和源码位置见[共享状态表](project-flow.md#shared-state)。
+
 - `VoiceAssistant` 引用回答、TTS、播放后端；这些对象必须比它活得更久。内部任务以 shared_ptr 保存跨线程请求状态。
 - `BoundedBlockingQueue` 用 mutex + condition_variable 实现背压；容量默认是句子 4、音频 2。close 唤醒等待者，队列内剩余任务仍可 pop；clear 只清内容，不重新打开已关闭队列。
 - `processText` 串行处理请求；不要并发复用同一个 RKLLM handle、Rule Planner/Mock 设备或对其假定线程安全。
-- `StreamingSentenceBuffer` 是单线程对象。事件回调由调用者/工作线程同步执行，不能持有跨调用失效的引用；会话事件可能来自不同线程，用户回调要自行保护共享资源。
+- `StreamingSentenceBuffer` 是单线程对象。普通同步/Mock后端沿调用栈执行事件回调；RKLLM直接转发SDK回调，实际OS线程身份需核验。不能持有跨调用失效的引用；会话事件可能来自不同线程，用户回调要自行保护共享资源。
 - `BgeEmbedder` 对查询推理加锁，但 load/reload 与查询并发没有通用保证；检索器应在启动阶段加载完成后使用。
 - PImpl/unique_ptr 隔离 SDK 资源；取消、stop、析构的先后关系是后续并发学习的重点。
 
@@ -120,6 +126,7 @@ RRF 分数、BM25 分数和余弦相似度量纲不同。相关性过滤和直�
 
 | 场景 | 关键开关/条件 | 能做什么 |
 | --- | --- | --- |
+| Host诊断 | `EDGE_ENABLE_ASAN/EDGE_ENABLE_UBSAN=ON`，Debug、独立目录 | 为核心库及调用者插桩，按 `board_mainline` 标签检查Mock主线 |
 | PC/WSL 默认构建 | 所有 `EDGE_ENABLE_*` 为 OFF | 文本程序、Mock Agent、网络服务、工具和默认测试 |
 | 原生 BGE 检索 | `EDGE_ENABLE_BGE_EMBEDDER=ON`，配置 ORT 和 tokenizers-cpp | BGE/Dense/Hybrid；测试开启时还要求模型与索引资产 |
 | PC 语音联调 | ALSA、SHERPA_ASR/TTS/VAD 全部 ON | 生成 `board_voice_assistant`，使用 Mock LLM；运行仍需语音模型 |
@@ -148,3 +155,9 @@ cmake --build build-release -j4
 ```
 
 新增源码时修改所属模块的子 CMake；新增应用、工具、测试分别修改 apps、tools、tests。完整目标表、缓存变量和维护示例见 [CMake 构建指南](cmake-structure.md)，PC 语音和 RK3588 的完整 SDK 参数见[构建运行文档](development.md)。
+
+DHT11驱动的进程/IRQ上下文、2秒缓存、窗口QoS和异常修订，见[驱动专题图解](dht11-driver-guide.md)。该专题补充真实IIO设备内部调用，不改变应用层线程划分。
+
+设备Agent文字入口现支持 `agent_demo --device iio`，由LinuxVehicleDevice读取真实温湿度；默认仍为Mock且始终使用Rule Planner。无需先初始化语音/生成模型，操作见[板端主线联调](board-agent-bringup.md)。空调状态仍为内存逻辑。
+
+连续会话的barge_in_enabled控制回答期间是否启动打断future；关闭时主程序只创建正常VAD，仍异步处理回答并响应stop。既有并发图默认展示开启路径，半双工与开启路径的验收见[主线步骤](board-mainline-acceptance.md)。

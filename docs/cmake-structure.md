@@ -8,6 +8,7 @@
 CMakeLists.txt                    # 根装配，include + add_subdirectory
 cmake/
   EdgeOptions.cmake               # EDGE_ENABLE_*、SDK和测试模型缓存路径
+  EdgeDiagnostics.cmake           # ASan/UBSan选项、探测与目标使用要求
   EdgeDependencies.cmake          # 通用包、ALSA/ORT/sherpa/RKLLM依赖查找
   toolchains/
     rk3588-buildroot.cmake         # 交叉编译工具链，使用-DCMAKE_TOOLCHAIN_FILE选择
@@ -26,7 +27,7 @@ src/
   voice/CMakeLists.txt            # 会话、分句和语音流水线
   observability/CMakeLists.txt    # 性能报告/聚合
   apps/CMakeLists.txt             # edge_voice_rag、服务、demo、board_voice_assistant
-tools/CMakeLists.txt              # retrieval_benchmark、voice_performance_summary
+tools/CMakeLists.txt              # benchmark/summary；BGE开启时添加bge_retrieval_profile
 tests/CMakeLists.txt              # 默认/可选测试定义、注册、参数与工作目录
 ```
 
@@ -111,7 +112,7 @@ BUILD_TESTING 由 include(CTest) 提供，默认 ON；关闭后不创建项目�
 
 RK3588构建继续使用[开发文档](development.md)中的工具链和SDK参数，另外追加 -DBUILD_TESTING=OFF 即可选择不构建测试。
 
-## 6. 本次验证范围
+## 6. 构建组织验证记录\n\n以下为2026-11-04目录拆分时的历史结果；2026-11-08增量测试为默认43项、可选SDK组合51项，详见[测试手册](testing-guide.md)。
 
 - 默认配置：编译并执行40项CTest。
 - PC可选配置：ALSA、sherpa ASR/TTS/VAD、BGE开启，board_voice_assistant编译链接；RKLLM关闭。
@@ -159,20 +160,25 @@ ctest --test-dir <build-dir> --output-on-failure
 | edge_voice_rag | src/apps | 始终 | 核心库；文本分级响应入口 |
 | rag_server | src/apps | 始终 | 核心库；早期BM25文本服务 |
 | llm_server | src/apps | 始终 | 核心库；LLM普通/流式/取消服务 |
-| agent_demo | src/apps | 始终 | 核心库；Rule Planner + Mock设备 |
+| agent_demo | src/apps | 始终 | 核心库；Rule Planner + Mock/IIO可选 |
 | zmq_rep_server / zmq_req_client / rag_client | src/apps | 始终 | 直接链接zmq的联调程序 |
 | sherpa_asr_demo | src/apps | SHERPA_ASR=ON | 核心库；ASR演示 |
+| audio_output_check | src/apps | EDGE_ENABLE_ALSA=ON | 核心库；tone仅需ALSA，tts模式另需SHERPA_TTS=ON |
 | board_voice_assistant | src/apps | ALSA及三个SHERPA开关均为ON | 核心库；连续语音主入口 |
+| tts_benchmark | src/apps | EDGE_ENABLE_SHERPA_TTS=ON | 核心库；独立CPU合成基准，无需ALSA开关或声卡 |
 | retrieval_benchmark / voice_performance_summary | tools | 始终 | 核心库；检索评测与语音日志汇总 |
-| unit_tests及各模块测试 | tests | BUILD_TESTING=ON | 默认40项；可选测试再按后端开关增加 |
+| bge_retrieval_profile | tools | EDGE_ENABLE_BGE_EMBEDDER=ON | 显式BGE/Dense分段JSONL采样；不是常驻服务 |
+| unit_tests及各模块测试 | tests | BUILD_TESTING=ON | 默认43项；可选测试再按后端开关增加 |
 
-表中 SHERPA_* 均指 `EDGE_ENABLE_SHERPA_*`。当前可选测试增量为 ALSA、ASR、TTS、VAD 各1项，BGE 4项；全部开启时共48项。RKLLM目前没有单独增加一项CTest，不能把48项测试理解为板端全部硬件已验证。
+表中 SHERPA_* 均指 `EDGE_ENABLE_SHERPA_*`。当前可选测试增量为 ALSA 2项（后端测试和audio_output_check_smoke）、ASR/TTS/VAD各1项、BGE 4项；全部开启时共52项。RKLLM目前没有单独增加一项CTest，不能把52项测试理解为板端全部硬件已验证。
 
 ## 9. 功能与路径变量速查
 
 | 变量 | 默认值 | 含义 |
 | --- | --- | --- |
 | BUILD_TESTING | ON | 是否创建项目测试目标 |
+| EDGE_ENABLE_ASAN | OFF | 对核心库及其调用者启用AddressSanitizer |
+| EDGE_ENABLE_UBSAN | OFF | 启用UndefinedBehaviorSanitizer，发现错误即失败 |
 | EDGE_ENABLE_ALSA | OFF | 编入ALSA录放音/PCM实现 |
 | EDGE_ENABLE_SHERPA_ASR | OFF | 编入sherpa ASR，添加ASR演示 |
 | EDGE_ENABLE_SHERPA_TTS | OFF | 编入sherpa TTS |
@@ -207,3 +213,29 @@ cmake --build build --target agent_demo --verbose
 ```
 
 切换 x86/ARM 编译器或工具链时使用不同构建目录，分别保存SDK路径和编译产物。完整板端参数继续见[开发文档](development.md)。
+
+
+## 9. 独立诊断构建
+
+`EDGE_ENABLE_ASAN/EDGE_ENABLE_UBSAN` 默认OFF，可独立开启或同时开启；详细步骤、参数传播、18项主线测试与错误阅读方法见[板端主线诊断指南](diagnostics.md)。
+
+根配置先载入Options，再创建 `edge_diagnostics` INTERFACE目标，之后查找依赖。核心库PUBLIC链接该目标，确保项目实现和调用者都得到编译检查，最终程序得到诊断Runtime链接参数；不使用全局CXX_FLAGS向第三方目标扩散。
+
+`tests/CMakeLists.txt` 用 `board_mainline` 标签筛选18项无模型/无声卡主线测试，其中两项同时标为 `lifecycle`，一项标为 `stress`。普通主线条目超时30秒，压力条目120秒；仅打标签不会增加注册条目。三项新增条目的功能与参数见[测试手册](testing-guide.md)。
+
+性能工具和离线清单记录步骤见[性能观测指南](performance-guide.md)。run_retrieval_baseline.py无需CMake目标，使用Python标准库与系统GNU time调用已构建工具。
+
+既有agent_demo目标现支持运行时选择IIO；目标名/输出位置未改变，无需语音和模型开关。为避免全后端core传递SDK动态依赖，板端验证使用独立目录关闭六个可选后端构建，见[Agent联调说明](board-agent-bringup.md)。
+
+### 独立语音输出目标
+
+`audio_output_check` 在src/apps按ALSA开关生成，链接既有core，输出仍在构建根目录。ALSA-only构建支持tone；编译时未开启TTS的tts请求会清楚报错并返回1。独立ARM输出包仅开ALSA/TTS，关闭ASR/VAD/BGE/RKLLM和BUILD_TESTING；这会避免依赖其他模型SDK，但core公共依赖仍会传递libzmq。未新增全局开关或独立库。构建与运行示例见[输出手册](board-audio-output.md)。
+
+
+### TTS可选模型与基准
+
+src/config显式注册board_tts_config.cpp，配置映射只返回值，不访问SDK，因此默认无后端构建可编译并验证。
+tts_benchmark的新main按仓库约定放src/apps，输出仍在构建根目录；仅SHERPA_TTS开启时生成。
+未新增后端开关或CTest条目，默认43项、全SDK52项数量不变。
+本次默认43/43、ALSA-only45/45、可选SDK聚焦4/4和ARM BUILD_TESTING=OFF目标通过。
+新增模型资产仍需另行准备；不能因旧INT8配置能运行就假定FP32文件已经随部署提供。

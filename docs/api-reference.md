@@ -22,7 +22,7 @@
 | [perf_timer.h](../include/perf_timer.h) | `PerfTimer(name); reset(); elapsedMilliseconds(); name()` | steady_clock 计时器，单位毫秒；用于阶段耗时，不是 CPU 时间计数器。 |
 | [file_fingerprint.h](../include/file_fingerprint.h) | `calculateFileFnv1a64(path) → FileFingerprintResult` | 读取原始字节，返回固定 16 位小写十六进制指纹或 error；用于一致性检查，不是密码学完整性验证。 |
 | [scope_exit.h](../include/scope_exit.h) | `ScopeExit<Function>; makeScopeExit(fn); release()` | 作用域退出调用清理函数，release 放弃清理；禁止复制，清理函数应不抛异常。 |
-| [bounded_blocking_queue.h](../include/bounded_blocking_queue.h) | `BoundedBlockingQueue<T>(capacity); push(const T&/T&&); pop(); close(); clear(); size/empty/capacity/closed` | 容量必须大于零；push 满时等待、关闭后返回 false；pop 空时等待、关闭且耗尽返回 nullopt；clear 返回移除数，close 不可逆。 |
+| [bounded_blocking_queue.h](../include/bounded_blocking_queue.h) | `BoundedBlockingQueue<T>(capacity); push(const T&/T&&); push(value,QueuePushMetrics&); pop(); close(); clear(); size/empty/capacity/closed` | 容量必须大于零；push 满时等待、关闭后返回 false；pop 空时等待、关闭且耗尽返回 nullopt；clear 返回移除数，close 不可逆；观测重载返回容量等待和成功push的锁内共享深度，原重载不采时。 |
 
 ## 音频、语音模型与会话
 
@@ -35,7 +35,7 @@
 | [audio_player.h](../include/audio_player.h) | `AudioPlayer::name/play(AudioBuffer)/stop; AudioPlaybackResult` | 阻塞播放，结果为 ok/error；stop 用于其他线程停止当前输出，具体并发行为由适配器实现。 |
 | [asr_backend.h](../include/asr_backend.h) | `AsrBackend::name/transcribe(AudioBuffer); AsrTranscriptionResult` | PCM → text，返回 ok/text/error/elapsed_ms；ASR 结果仍可能为空，上层必须校验。 |
 | [tts_backend.h](../include/tts_backend.h) | `TtsBackend::name/synthesize(text); TtsSynthesisResult` | 文本 → AudioBuffer；返回 ok/audio/error，不保证所有实现均支持合成中硬取消。 |
-| [alsa_audio_player.h](../include/alsa_audio_player.h) | `AlsaAudioPlayer(config); name/play/stop/config` | ALSA 播放适配，device 与 period_frames 可配置；RAII + PImpl，禁复制；需 EDGE_ENABLE_ALSA。 |
+| [alsa_audio_player.h](../include/alsa_audio_player.h) | `AlsaAudioPlayer(config); name/play/stop/config` | ALSA 播放适配，device 与 period_frames 可配置；RAII + PImpl，禁复制；需 EDGE_ENABLE_ALSA。play失败error附请求device、sample_rate、channels、period_frames_requested；这些不是硬件协商实值。 |
 | [alsa_audio_recorder.h](../include/alsa_audio_recorder.h) | `AlsaAudioRecorder(config); name/recordUtterance/stop/config` | 固定时长 ALSA 录音，record_duration_ms/采样率/声道/period 可配置；需 EDGE_ENABLE_ALSA。 |
 | [alsa_pcm_stream_source.h](../include/alsa_pcm_stream_source.h) | `AlsaPcmStreamSource(config); name/sampleRate/channels/capture/cancelCurrentCapture/stop/config` | 连续 PCM chunk 源；默认 16000Hz、单声道、512 帧与 100000us 延迟；需 EDGE_ENABLE_ALSA。 |
 | [wav_audio_reader.h](../include/wav_audio_reader.h) | `WavAudioReader::read(path) → AudioBuffer` | 解析 RIFF/WAVE 和 PCM 数据，跳过支持的可选块；不支持或损坏输入抛异常；不是任意音频格式解码器。 |
@@ -46,9 +46,9 @@
 | [streaming_sentence_buffer.h](../include/streaming_sentence_buffer.h) | `StreamingSentenceBuffer(delimiters); append(delta); flush(); clear(); empty/pendingBytes/pendingText` | append 返回新完整句子；flush 返回末尾未完句并清空；不是线程安全容器，pendingBytes 为 UTF-8 字节数。 |
 | [voice_assistant.h](../include/voice_assistant.h) | `VoiceAssistant(backends, capacities); start/stop/running; processText(id, query); stopPlayback()` | 装配回答、分句、TTS、播放；processText 等待整轮完成；返回 VoiceAssistantResult 含回答、策略、计数、时序；打断返回独立结果。 |
 | [voice_input_pipeline.h](../include/voice_input_pipeline.h) | `VoiceInputPipeline(recorder, asr, assistant); processOnce(id); stopRecording()` | 单轮录音→音频校验→ASR→回答；结果含 recognized_text、采集/识别耗时和 assistant_result。 |
-| [continuous_voice_session.h](../include/continuous_voice_session.h) | `ContinuousVoiceSession(normal, barge, asr, assistant, config); run(handler); stop()` | 连续录音和回答，打断后保留新录音；回调 WaitingForSpeech/RecognizedText/AnswerCompleted/BargeInDetected/Error，结果含轮次与打断计数。 |
+| [continuous_voice_session.h](../include/continuous_voice_session.h) | `ContinuousVoiceSession(normal, barge, asr, assistant, config); run(handler); stop()` | 连续录音和回答；answer或barge分支取得的成功录音均保留，已起声时等待该语句录完；ASR返回/识别事件回调后检查stop，已观察到停止则不派发回答；回调 WaitingForSpeech/RecognizedText/AnswerCompleted/BargeInDetected/Error，结果含轮次与打断计数。 |
 | [voice_performance_report.h](../include/voice_performance_report.h) | `VoicePerformanceReport::KVersion; encode(VoiceSessionEvent)` | 仅接受有效 AnswerCompleted 和一致 request_id；返回单行 JSON 字符串，不含外部 [PERF_JSON] 前缀；非法事件抛异常。 |
-| [voice_performance_statistics.h](../include/voice_performance_statistics.h) | `VoicePerformanceAggregator::addLogLine(line,error); summarize(); VoiceMetricStatistics/VoicePerformanceStatistics` | 普通行返回 false 且 error 空，坏报告返回 false 且 error 非空；汇总平均/P50/P95/最大值和有效/失败样本计数。 |
+| [voice_performance_statistics.h](../include/voice_performance_statistics.h) | `VoicePerformanceAggregator::addLogLine(line,error); summarize(); VoiceMetricStatistics/VoicePerformanceStatistics` | 普通行返回 false 且 error 空，坏报告返回 false 且 error 非空；汇总平均/P50/P95/最大值和有效/失败样本计数；兼容旧报告，只聚合observed且complete的队列等待，计数/深度不混入ms表。 |
 
 ## 检索
 
@@ -59,9 +59,9 @@
 | [chinese_text_tokenizer.h](../include/chinese_text_tokenizer.h) | `ChineseTextTokenizer::tokenize(text)` | 中文文本分词，供 BM25 构建/查询词项；精确签名见头文件，不使用 Python jieba 实例。 |
 | [knowledge_base_loader.h](../include/knowledge_base_loader.h) | `loadDocumentChunks(path) → KnowledgeBaseLoadResult` | 解析 chunks，返回 ok/documents/error；统一手册与别名构造规则。 |
 | [bm25_retriever.h](../include/bm25_retriever.h) | `Bm25Retriever(path, config); loadKnowledgeBase(); searchTopK(); documentCount/vocabularySize/averageDocumentLength` | 建立内存倒排统计并按 BM25 排序；配置 k1/b/minimum_matched_terms；应先成功加载。 |
-| [bge_embedder.h](../include/bge_embedder.h) | `BgeEmbedder(config); load(); encodeQuery(query); isLoaded/dimension/lastError` | ONNX Runtime CPU + tokenizers-cpp；返回 ok/embedding/error，默认检索指令、512 维和 max_length=512；需 BGE 开关。 |
+| [bge_embedder.h](../include/bge_embedder.h) | `BgeEmbedder(config); load(); encodeQuery(query); encodeQueryProfiled(query); isLoaded/dimension/lastError` | ONNX Runtime CPU + tokenizers-cpp；返回 ok/embedding/error，默认检索指令、512维和max_length=512；Profiled额外返回锁/准备/ORT/后处理分段和token数，错误时observed=false；需BGE开关。 |
 | [dense_vector_index.h](../include/dense_vector_index.h) | `DenseVectorIndex(meta,f32); load(); searchTopK(vector,k); isLoaded/rowCount/dimension/maxLength/chunkIds/modelId/pooling/queryInstruction/lastError/chunksFingerprint` | 载入连续 float32 向量及元数据，查询归一化向量并返回 row/chunk_id/score；负责格式、大小等校验。 |
-| [dense_retriever.h](../include/dense_retriever.h) | `DenseRetriever(config); load(); searchTopK(); isLoaded/lastError` | 组合 BGE、DenseVectorIndex 与手册映射，检查索引和当前 chunks 一致性；需 BGE 开关。 |
+| [dense_retriever.h](../include/dense_retriever.h) | `DenseRetriever(config); load(); searchTopK(); searchTopKProfiled(query,k,timing); isLoaded/lastError` | 组合 BGE、DenseVectorIndex 与手册映射，检查索引和当前chunks一致性；Profiled拆分编码/索引/映射并先清空计时对象，普通路径不采分段时间；需BGE开关。 |
 | [hybrid_retriever.h](../include/hybrid_retriever.h) | `edge_voice_rag::HybridRetriever(sparse,dense,config); searchTopK()` | 非拥有引用组合双路检索；加权 RRF 合并去重；candidate_top_k 控制候选数。 |
 | [relevance_filtering_retriever.h](../include/relevance_filtering_retriever.h) | `RelevanceFilteringRetriever(inner,config); searchTopK()` | 装饰器过滤原始 sparse/dense 分数不达标结果，再截取 top_k；不能用 RRF 分数替代原始分数。 |
 | [retriever_runtime.h](../include/retriever_runtime.h) | `RetrieverRuntime(config); load(); retriever(); backendName/relevanceFilterEnabled/lastError` | 拥有检索器和过滤器，load 成功后才可访问 retriever 引用；未加载时访问抛 logic_error；关闭 BGE 时拒绝 dense/hybrid。 |
@@ -127,6 +127,29 @@
 | `VoiceAssistantResult` | ok/error、query/answer、response_mode/reason、rag_timing、timing、chunk/sentence计数 | 远程后端未必提供本地细分耗时 |
 | `VoiceAssistantInterruptResult` | had_active_request、output_stopped、cancel_attempted/cancel_ok/generation_cancelled | 分别表示有活动请求、本地停播、尝试及真正取消生成 |
 | `AgentResponse` | state、answer/error、executed_tool、observation、trace | WaitingForConfirmation 时 ok 可为 true，但工具尚未执行 |
+| `VoiceQueueTiming` / `VoiceAssistantTiming` | capacity、peak_depth、push_wait_count/ms、queue_metrics_observed/complete | 只采数据push的容量等待；深度为共享队列总占用；取消/失败快照可能不完整，见[性能指南](performance-guide.md) |
+| `BgeEmbeddingTiming` / `DenseRetrievalTiming` | observed、token_count、lock/prepare/inference/postprocess/index/mapping/total | 显式Profiled路径的应用层墙钟分段，不是算子trace或硬件占比 |
 | `VoicePerformanceStatistics` | valid/invalid/ignored计数、successful_report_count、reported_success_rate、metrics | 成功率只在日志内有效 PERF_JSON 报告上计算，不能作为所有请求的成功率 |
 
 通信 JSON、工具 schema 和索引数据见[协议文档](protocols.md)。Python 各模块入口及类/函数索引见[源码文件索引](source-map.md)。
+
+RuleAgentPlanner对EnvironmentQuery复用AgentIntentClassifier判定，覆盖“现在多少度”等口语查询，继续通过get_cabin_environment执行IIO/Mock读取；工具接口、参数与确认机制未变。板端PCM选择和私有配置加载见[采样率冲突修复](rk3588-duplex-fix.md)。
+
+
+## 板端TTS配置映射
+
+[board_tts_config.h](../include/board_tts_config.h)新增
+makeBoardTtsConfig(const BoardAppConfig&) → SherpaOnnxTtsConfig，返回独立值配置，不创建SDK资源。
+主程序、输出检查与TTS基准共用，保证模型文件、词表、date/number FST、说话人和线程一致。
+
+BoardAppConfig新增tts_model_file（目录内文件名，旧conf缺省model.int8.onnx）、
+tts_speaker_id（缺省0，非负，实际模型创建时检查上界）。
+当前板端conf显式选model.onnx / speaker0；CPU性能与内存对照见[TTS优化](tts-optimization.md)。
+
+
+## 连续会话打断开关
+
+ContinuousVoiceSessionConfig新增末尾字段barge_in_enabled=true，保留原max_turns/future_poll_interval_ms的聚合初始化顺序。
+BoardAppConfig同名字段旧conf缺省true，false关闭回答期间的打断录音；主程序以同一标志控制第二套VAD创建和会话模式。
+关闭时未使用barge recorder的录音/取消/stop接口，主动stop仍停止正常录音与助手并等待相关工作回收。
+开启时行为及request/session语义保持原样。当前板端参考conf显式false，详见[主线验收](board-mainline-acceptance.md)。

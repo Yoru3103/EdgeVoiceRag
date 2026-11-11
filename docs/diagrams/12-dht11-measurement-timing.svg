@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1190" viewBox="0 0 1440 1190" role="img" aria-labelledby="title desc">
+<title id="title">12  DHT11 一次测量：调用与中断时序</title><desc id="desc">缓存未命中路径；按先后顺序示意，不按真实时长比例绘制</desc>
+<defs>
+<marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#2563eb"/></marker>
+<marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#7c3aed"/></marker>
+<marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#15803d"/></marker>
+<marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#c26b09"/></marker>
+<marker id="arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#64748b"/></marker>
+<marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#c24138"/></marker>
+</defs>
+<rect width="1440" height="1190" rx="20" fill="#f8fafc"/>
+<style>text{font-family:Microsoft YaHei, PingFang SC, Noto Sans CJK SC, Segoe UI, Arial, sans-serif;fill:#16324f}.small{font-size:16px}.muted{fill:#64748b}</style>
+<text x="32" y="49" font-size="32" text-anchor="start" font-weight="700">12  DHT11 一次测量：调用与中断时序</text>
+<text x="32" y="82" font-size="17" text-anchor="start" style="fill:#64748b">缓存未命中路径；按先后顺序示意，不按真实时长比例绘制</text>
+<rect x="32" y="310" width="1376" height="630" rx="16" fill="#fff8e9" stroke="#f3dfb8" stroke-width="1"/>
+<text x="1378" y="339" font-size="18" text-anchor="end" style="fill:#c26b09" font-weight="700">QoS 持有区间</text>
+<line x1="200" y1="206" x2="200" y2="1038" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="522" y1="206" x2="522" y2="1038" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="866" y1="206" x2="866" y2="1038" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="1237" y1="206" x2="1237" y2="1038" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="6 5"/>
+<rect x="512" y="354" width="20" height="566" rx="4" fill="#ffe0a3" stroke="#e8bd6e" stroke-width="1"/>
+<rect x="1227" y="426" width="20" height="430" rx="4" fill="#ddd0ff" stroke="#b89de9" stroke-width="1"/>
+<rect x="56" y="132" width="288" height="74" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="56" y="132" width="5" height="74" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="200.0" y="176.0" font-size="21" text-anchor="middle" font-weight="700">用户进程 · measure</text>
+<rect x="392" y="132" width="260" height="74" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="392" y="132" width="5" height="74" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="522.0" y="176.0" font-size="21" text-anchor="middle" font-weight="700">CPU latency QoS</text>
+<rect x="716" y="132" width="300" height="74" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="716" y="132" width="5" height="74" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="866.0" y="176.0" font-size="21" text-anchor="middle" font-weight="700">GPIO + DHT11</text>
+<rect x="1090" y="132" width="294" height="74" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="1090" y="132" width="5" height="74" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="1237.0" y="176.0" font-size="21" text-anchor="middle" font-weight="700">GPIO 硬中断</text>
+<rect x="56" y="238" width="288" height="54" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="56" y="238" width="5" height="54" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="200.0" y="272.0" font-size="21" text-anchor="middle" font-weight="700">缓存失效 → 测量</text>
+<rect x="392" y="236" width="992" height="48" rx="10" fill="#edf3fb" stroke="none" stroke-width="0"/>
+<text x="408" y="264" font-size="17" text-anchor="start" style="fill:#2563eb">缓存命中直接返回：不创建 QoS 请求，也不启动总线测量。</text>
+<polyline points="200,354 522,354" fill="none" stroke="#c26b09" stroke-width="2" marker-end="url(#arrow-amber)"/>
+<rect x="260.0" y="325" width="202" height="24" rx="4" fill="#f8fafc" stroke="none" stroke-width="0"/>
+<text x="361" y="342" font-size="16" text-anchor="middle" style="fill:#c26b09">① 添加 0 µs 请求</text>
+<polyline points="200,426 1237,426" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrow-purple)"/>
+<rect x="529.0" y="397" width="378" height="24" rx="4" fill="#f8fafc" stroke="none" stroke-width="0"/>
+<text x="718" y="414" font-size="16" text-anchor="middle" style="fill:#7c3aed">② request_irq：在起始信号之前就绪</text>
+<polyline points="200,504 866,504" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<rect x="440.0" y="475" width="186" height="24" rx="4" fill="#f8fafc" stroke="none" stroke-width="0"/>
+<text x="533" y="492" font-size="16" text-anchor="middle" style="fill:#2563eb">③ 开漏拉低 DATA</text>
+<rect x="726" y="540" width="280" height="72" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="726" y="540" width="5" height="72" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="866.0" y="569.5" font-size="21" text-anchor="middle" font-weight="700">起始低电平</text>
+<text x="866.0" y="596.5" font-size="21" text-anchor="middle" font-weight="700">18～20 ms</text>
+<text x="1378" y="580" font-size="17" text-anchor="end" style="fill:#7c3aed">起始沿不入帧</text>
+<polyline points="200,650 866,650" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<rect x="344.0" y="621" width="378" height="24" rx="4" fill="#f8fafc" stroke="none" stroke-width="0"/>
+<text x="533" y="638" font-size="16" text-anchor="middle" style="fill:#2563eb">④ 释放 DATA，等待 completion</text>
+<polyline points="866,716 1237,716" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrow-purple)"/>
+<rect x="935.0" y="687" width="234" height="24" rx="4" fill="#f8fafc" stroke="none" stroke-width="0"/>
+<text x="1052" y="704" font-size="16" text-anchor="middle" style="fill:#7c3aed">⑤ 记录边沿时间戳 / 电平</text>
+<polyline points="1237,786 200,786" fill="none" stroke="#7c3aed" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow-purple)"/>
+<rect x="585.0" y="757" width="266" height="24" rx="4" fill="#f8fafc" stroke="none" stroke-width="0"/>
+<text x="718" y="774" font-size="16" text-anchor="middle" style="fill:#7c3aed">⑥ complete：唤醒等待者</text>
+<polyline points="200,856 1237,856" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#arrow-green)"/>
+<rect x="569.0" y="827" width="298" height="24" rx="4" fill="#f8fafc" stroke="none" stroke-width="0"/>
+<text x="718" y="844" font-size="16" text-anchor="middle" style="fill:#15803d">⑦ free_irq：同步并结束采集</text>
+<polyline points="200,920 522,920" fill="none" stroke="#c26b09" stroke-width="2" marker-end="url(#arrow-amber)"/>
+<rect x="252.0" y="891" width="218" height="24" rx="4" fill="#f8fafc" stroke="none" stroke-width="0"/>
+<text x="361" y="908" font-size="16" text-anchor="middle" style="fill:#c26b09">⑧ 移除本次 QoS 请求</text>
+<rect x="56" y="962" width="288" height="74" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="56" y="962" width="5" height="74" rx="2" fill="#15803d" stroke="#15803d" stroke-width="0"/>
+<text x="200.0" y="992.5" font-size="21" text-anchor="middle" font-weight="700">⑨ 严格校验后返回</text>
+<text x="200.0" y="1019.5" font-size="16" text-anchor="middle" style="fill:#64748b">成功才更新温湿度缓存</text>
+<rect x="32" y="1060" width="1376" height="74" rx="10" fill="#edf3fb" stroke="none" stroke-width="0"/>
+<text x="48" y="1088" font-size="17" text-anchor="start" style="fill:#2563eb">统一清理：IRQ申请失败、拉低失败、超时、中断、校验失败，均移除本次请求。</text>
+<text x="48" y="1114" font-size="17" text-anchor="start" style="fill:#2563eb">条带表示资源持有区间，不是 CPU 执行占比；失败可能等待到驱动超时。</text>
+<text x="32" y="1160" font-size="18" text-anchor="start" style="fill:#64748b">IRQ handler 只记录与通知；可睡眠的等待、QoS 管理、解析和打印均在进程上下文完成。</text>
+</svg>

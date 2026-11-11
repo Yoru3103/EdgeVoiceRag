@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "source": "transcribed_from_user_terminal_message",
+  "client_date": "2026-11-10",
+  "config": {
+    "kernel": "6.1.141",
+    "module_version": "0.2.2-window-qos",
+    "mode": "baseline",
+    "samples_per_mode": 10,
+    "interval_seconds": 3.0,
+    "script_sha256": "452bd3569bc232fe79429c4ae19749772c19463f6713fab047b8e6b8e037955e"
+  },
+  "samples": [
+    {
+      "sample": 1,
+      "ok": true,
+      "temperature_mC": 400,
+      "elapsed_ms": 23.9015
+    },
+    {
+      "sample": 2,
+      "ok": true,
+      "temperature_mC": 31100,
+      "elapsed_ms": 24.692292
+    },
+    {
+      "sample": 3,
+      "ok": true,
+      "temperature_mC": 31100,
+      "elapsed_ms": 25.078084
+    },
+    {
+      "sample": 4,
+      "ok": true,
+      "temperature_mC": 31600,
+      "elapsed_ms": 25.111041
+    },
+    {
+      "sample": 5,
+      "ok": true,
+      "temperature_mC": 31500,
+      "elapsed_ms": 25.0635
+    },
+    {
+      "sample": 6,
+      "ok": true,
+      "temperature_mC": 31900,
+      "elapsed_ms": 23.596417
+    },
+    {
+      "sample": 7,
+      "ok": true,
+      "temperature_mC": 31400,
+      "elapsed_ms": 24.831042
+    },
+    {
+      "sample": 8,
+      "ok": true,
+      "temperature_mC": 31500,
+      "elapsed_ms": 24.890542
+    },
+    {
+      "sample": 9,
+      "ok": true,
+      "temperature_mC": 31900,
+      "elapsed_ms": 23.860084
+    },
+    {
+      "sample": 10,
+      "ok": true,
+      "temperature_mC": 31800,
+      "elapsed_ms": 24.814708
+    }
+  ],
+  "summary": {
+    "success": 10,
+    "failure": 0
+  },
+  "analysis": {
+    "suspect_sample_numbers": [
+      1
+    ],
+    "note": "0.4 C differs sharply from the next nine 31.1-31.9 C readings; physical correctness unverified",
+    "status": "historical_initial_review"
+  },
+  "follow_up": {
+    "source": "user_feedback",
+    "result": "subsequent tests reported no issue",
+    "sample_count": null,
+    "first_sample_investigation_closed_at_user_request": true
+  }
+}

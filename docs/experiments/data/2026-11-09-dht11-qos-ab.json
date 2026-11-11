@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "source": "transcribed_from_user_terminal_message",
+  "client_date": "2026-11-09",
+  "kernel": "6.1.141",
+  "module_version": "0.2.1-od-value",
+  "script_sha256": "452bd3569bc232fe79429c4ae19749772c19463f6713fab047b8e6b8e037955e",
+  "interval_seconds": 3,
+  "order": [
+    "baseline",
+    "qos0"
+  ],
+  "governor": "schedutil",
+  "cpu0_idle_states": [
+    {
+      "name": "WFI",
+      "latency_us": 1,
+      "disable": 0
+    },
+    {
+      "name": "cpu-sleep",
+      "latency_us": 220,
+      "disable": 0
+    }
+  ],
+  "frequency_snapshot_note": "scaling_cur_freq values as printed; not continuous traces",
+  "frequency_snapshots": {
+    "baseline_before": {
+      "policy0": "1008000",
+      "policy4": "408000",
+      "policy6": "1200000"
+    },
+    "baseline_after": {
+      "policy0": "408000",
+      "policy4": "408000",
+      "policy6": "408000"
+    },
+    "qos0_before": {
+      "policy0": "408000",
+      "policy4": "408000",
+      "policy6": "408000"
+    },
+    "qos0_after": {
+      "policy0": "408000",
+      "policy4": "408000",
+      "policy6": "408000"
+    }
+  },
+  "baseline": {
+    "samples": [
+      {
+        "sample": 1,
+        "ok": false,
+        "temperature_mC": null,
+        "errno": 110,
+        "elapsed_ms": 1038.35725,
+        "captured_edges": 53,
+        "irq_setup_before_start_us": 29,
+        "release_call_us": 4
+      },
+      {
+        "sample": 2,
+        "ok": false,
+        "temperature_mC": null,
+        "errno": 110,
+        "elapsed_ms": 1031.009334,
+        "captured_edges": 35,
+        "irq_setup_before_start_us": 85,
+        "release_call_us": 24
+      },
+      {
+        "sample": 3,
+        "ok": false,
+        "temperature_mC": null,
+        "errno": 110,
+        "elapsed_ms": 1031.776084,
+        "captured_edges": 34,
+        "irq_setup_before_start_us": 39,
+        "release_call_us": 17
+      },
+      {
+        "sample": 4,
+        "ok": false,
+        "temperature_mC": null,
+        "errno": 110,
+        "elapsed_ms": 1031.135,
+        "captured_edges": 38,
+        "irq_setup_before_start_us": 51,
+        "release_call_us": 26
+      },
+      {
+        "sample": 5,
+        "ok": false,
+        "temperature_mC": null,
+        "errno": 110,
+        "elapsed_ms": 1031.409751,
+        "captured_edges": 34,
+        "irq_setup_before_start_us": 52,
+        "release_call_us": 25
+      }
+    ],
+    "success": 0,
+    "failure": 5
+  },
+  "qos0": {
+    "samples": [
+      {
+        "sample": 1,
+        "ok": true,
+        "temperature_mC": 32000,
+        "elapsed_ms": 24.606458,
+        "captured_edges": null
+      },
+      {
+        "sample": 2,
+        "ok": true,
+        "temperature_mC": 32700,
+        "elapsed_ms": 24.696,
+        "captured_edges": null
+      },
+      {
+        "sample": 3,
+        "ok": true,
+        "temperature_mC": 32100,
+        "elapsed_ms": 24.587208,
+        "captured_edges": null
+      },
+      {
+        "sample": 4,
+        "ok": true,
+        "temperature_mC": 32600,
+        "elapsed_ms": 24.63125,
+        "captured_edges": null
+      },
+      {
+        "sample": 5,
+        "ok": true,
+        "temperature_mC": 32700,
+        "elapsed_ms": 24.863125,
+        "captured_edges": null
+      }
+    ],
+    "success": 5,
+    "failure": 0,
+    "qos_request_released": true
+  }
+}

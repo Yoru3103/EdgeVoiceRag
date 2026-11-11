@@ -6,10 +6,21 @@
 
 项目是面向 RK3588 的端侧语音助手与受约束设备 Agent，使用 C++17；PC/WSL 用于 Mock、联调和离线验证，Python 用于 RAG 原型、Embedding 资产和 Planner 训练评测。默认用中文沟通和维护项目说明。
 
+### 当前阶段重点
+
+当前优先完成RK3588板端C++主线：`board_voice_assistant` 的录音/VAD/ASR → 本地Agent与问答路由 → 检索/RKLLM → 分句/TTS/播放，以及打断、线程回收和真实设备验证。PC/WSL的Mock用于验证这条主线的行为。
+
+- 暂缓ZeroMQ通信示例、独立网络服务和Python RAG/语音联调路线，不主动扩展、迁移或重构这些部分。
+- Python的Embedding/索引资产脚本按板端需要使用；它们不作为板端运行时服务依赖。
+- 现有旁路代码和说明保留作参考，后续用户明确恢复时再安排。
+
 先读与任务相关的文档和实现，避免把所有模型、日志或第三方代码一次性读入：
 
 - [README](README.md)：项目能力、主链路和文档导航。
 - [项目总览](docs/project-guide.md)：模块职责、调用链和并发/所有权。
+- [性能观测](docs/performance-guide.md)：队列/BGE计时、固定输入清单、资源采集与口径。
+- [C++测试手册](docs/testing-guide.md)：全部C++测试功能、并发场景与压力测试口径。
+- [板端主线诊断](docs/diagnostics.md)：独立ASan/UBSan构建、主线测试标签和学习步骤。
 - [CMake 指南](docs/cmake-structure.md)：子目录构建、开关、SDK与目标。
 - [开发文档](docs/development.md)：PC/WSL、语音、RK3588构建运行。
 - [接口参考](docs/api-reference.md)、[协议与数据](docs/protocols.md)：公共API、JSON和模型/索引契约。
@@ -33,7 +44,7 @@
 | --- | --- |
 | `src/apps/board_voice_main.cpp` | 主线：连续语音、本地检索/LLM、策略和设备Agent装配 |
 | `src/apps/main.cpp` | 文本入口，使用较早的MultiLevelResponseSystem，与板端Policy不同 |
-| `src/apps/agent_demo.cpp` | Rule Planner + Mock设备的无模型演示 |
+| `src/apps/agent_demo.cpp` | Rule Planner + Mock/Linux IIO可选的无模型文字入口 |
 | `src/agent/`、`src/devices/` | 意图、规划、执行、工具与Mock/Linux IIO设备 |
 | `src/audio/`、`src/speech/`、`src/voice/` | 音频适配、ASR/TTS/VAD和会话流水线 |
 | `src/retrieval/`、`src/inference/`、`src/response/` | 检索、生成后端、查询分类和响应策略 |
@@ -52,6 +63,7 @@
 
 - 根 `CMakeLists.txt`：保持总装配职责。
 - `cmake/EdgeOptions.cmake`：新增/修改功能开关和SDK/测试资产缓存变量。
+- `cmake/EdgeDiagnostics.cmake`：ASan/UBSan目标使用要求与工具链探测；默认关闭，使用独立Host目录。
 - `cmake/EdgeDependencies.cmake`：依赖查找、校验和第三方目录引入。
 - `src/<模块>/CMakeLists.txt`：本模块源码、条件编译宏和链接依赖。
 - `src/apps/CMakeLists.txt`、`tools/CMakeLists.txt`：应用和工具目标。

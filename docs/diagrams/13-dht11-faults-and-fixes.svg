@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1250" viewBox="0 0 1440 1250" role="img" aria-labelledby="title desc">
+<title id="title">13  DHT11 异常：证据、原因与修订</title><desc id="desc">区分采集超时、GPIO接口错误与帧判定；按用户后续复测反馈记录当前状态</desc>
+<defs>
+<marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#2563eb"/></marker>
+<marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#7c3aed"/></marker>
+<marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#15803d"/></marker>
+<marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#c26b09"/></marker>
+<marker id="arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#64748b"/></marker>
+<marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#c24138"/></marker>
+</defs>
+<rect width="1440" height="1250" rx="20" fill="#f8fafc"/>
+<style>text{font-family:Microsoft YaHei, PingFang SC, Noto Sans CJK SC, Segoe UI, Arial, sans-serif;fill:#16324f}.small{font-size:16px}.muted{fill:#64748b}</style>
+<text x="32" y="49" font-size="32" text-anchor="start" font-weight="700">13  DHT11 异常：证据、原因与修订</text>
+<text x="32" y="82" font-size="17" text-anchor="start" style="fill:#64748b">区分采集超时、GPIO接口错误与帧判定；按用户后续复测反馈记录当前状态</text>
+<rect x="32" y="116" width="1376" height="72" rx="12" fill="#eaf0f7" stroke="none" stroke-width="1"/>
+<text x="56" y="162" font-size="23" text-anchor="start" font-weight="700">现象 / 实测</text>
+<text x="370" y="162" font-size="23" text-anchor="start" font-weight="700">原因与证据边界</text>
+<text x="930" y="162" font-size="23" text-anchor="start" font-weight="700">修订 / 当前状态</text>
+<rect x="56" y="214" width="270" height="190" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="56" y="214" width="5" height="190" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="191.0" y="289.0" font-size="21" text-anchor="middle" font-weight="700">边沿不足而超时</text>
+<text x="191.0" y="316.0" font-size="21" text-anchor="middle" font-weight="700">连续电平不交替</text>
+<text x="191.0" y="343.0" font-size="16" text-anchor="middle" style="fill:#64748b">例：34～81沿，记录失真</text>
+<rect x="370" y="214" width="500" height="190" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="370" y="214" width="5" height="190" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="620.0" y="262.0" font-size="21" text-anchor="middle" font-weight="700">微秒级边沿未被可靠记录</text>
+<text x="620.0" y="289.0" font-size="16" text-anchor="middle" style="fill:#64748b">IRQ 日志证实记录异常</text>
+<text x="620.0" y="313.0" font-size="16" text-anchor="middle" style="fill:#64748b">原0.2.1：普通0/5，外部QoS 5/5</text>
+<text x="620.0" y="337.0" font-size="16" text-anchor="middle" style="fill:#64748b">支持 CPU 空闲 / 系统时序影响</text>
+<text x="620.0" y="361.0" font-size="16" text-anchor="middle" style="fill:#64748b">尚非唯一物理根因证明</text>
+<rect x="930" y="214" width="454" height="190" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="930" y="214" width="5" height="190" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="1157.0" y="275.5" font-size="21" text-anchor="middle" font-weight="700">0.2.2：测量窗口 QoS</text>
+<text x="1157.0" y="302.5" font-size="16" text-anchor="middle" style="fill:#64748b">测量前添加 0 µs，采集后移除</text>
+<text x="1157.0" y="326.5" font-size="16" text-anchor="middle" style="fill:#64748b">成功、超时、中断、错误均清理</text>
+<text x="1157.0" y="350.5" font-size="16" text-anchor="middle" style="fill:#64748b">本轮10/10；用户后测反馈正常</text>
+<polyline points="326,309.0 370,309.0" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrow-purple)"/>
+<polyline points="870,309.0 930,309.0" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrow-purple)"/>
+<rect x="56" y="432" width="270" height="190" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="56" y="432" width="5" height="190" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="191.0" y="520.5" font-size="21" text-anchor="middle" font-weight="700">拉低 GPIO 失败 -EIO</text>
+<text x="191.0" y="547.5" font-size="16" text-anchor="middle" style="fill:#64748b">0.2.0 引入的接口错误</text>
+<rect x="370" y="432" width="500" height="190" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="370" y="432" width="5" height="190" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="620.0" y="507.0" font-size="21" text-anchor="middle" font-weight="700">IRQ 已启用时调用 direction_output</text>
+<text x="620.0" y="534.0" font-size="16" text-anchor="middle" style="fill:#64748b">内核先检查 IRQ 方向保护</text>
+<text x="620.0" y="558.0" font-size="16" text-anchor="middle" style="fill:#64748b">开漏标志不会跳过该检查</text>
+<rect x="930" y="432" width="454" height="190" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="930" y="432" width="5" height="190" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="1157.0" y="493.5" font-size="21" text-anchor="middle" font-weight="700">0.2.1：改用开漏 set_value</text>
+<text x="1157.0" y="520.5" font-size="16" text-anchor="middle" style="fill:#64748b">逻辑0拉低，逻辑1释放</text>
+<text x="1157.0" y="544.5" font-size="16" text-anchor="middle" style="fill:#64748b">使用框架接口，不改内部标志</text>
+<text x="1157.0" y="568.5" font-size="16" text-anchor="middle" style="fill:#64748b">后续未再出现方向保护错误</text>
+<polyline points="326,527.0 370,527.0" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<polyline points="870,527.0 930,527.0" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<rect x="56" y="650" width="270" height="190" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="56" y="650" width="5" height="190" rx="2" fill="#15803d" stroke="#15803d" stroke-width="0"/>
+<text x="191.0" y="738.5" font-size="21" text-anchor="middle" font-weight="700">82 沿直接报超时</text>
+<text x="191.0" y="765.5" font-size="16" text-anchor="middle" style="fill:#64748b">可能过早拒绝完整数据帧</text>
+<rect x="370" y="650" width="500" height="190" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="370" y="650" width="5" height="190" rx="2" fill="#15803d" stroke="#15803d" stroke-width="0"/>
+<text x="620.0" y="711.5" font-size="21" text-anchor="middle" font-weight="700">门槛过严；要区分缺少什么</text>
+<text x="620.0" y="738.5" font-size="16" text-anchor="middle" style="fill:#64748b">缺前导仍可能保留完整40位</text>
+<text x="620.0" y="762.5" font-size="16" text-anchor="middle" style="fill:#64748b">数据段缺失不能凭计数补回</text>
+<text x="620.0" y="786.5" font-size="16" text-anchor="middle" style="fill:#64748b">当前81沿失败帧含电平失真</text>
+<rect x="930" y="650" width="454" height="190" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="930" y="650" width="5" height="190" rx="2" fill="#15803d" stroke="#15803d" stroke-width="0"/>
+<text x="1157.0" y="711.5" font-size="21" text-anchor="middle" font-weight="700">完整帧校验后再接受</text>
+<text x="1157.0" y="738.5" font-size="16" text-anchor="middle" style="fill:#64748b">82沿可尝试解码，仍校验电平</text>
+<text x="1157.0" y="762.5" font-size="16" text-anchor="middle" style="fill:#64748b">完整40位 + 校验和 + 数值范围</text>
+<text x="1157.0" y="786.5" font-size="16" text-anchor="middle" style="fill:#64748b">计数接近不等于帧有效</text>
+<polyline points="326,745.0 370,745.0" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#arrow-green)"/>
+<polyline points="870,745.0 930,745.0" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#arrow-green)"/>
+<rect x="56" y="868" width="270" height="224" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="56" y="868" width="5" height="224" rx="2" fill="#15803d" stroke="#15803d" stroke-width="0"/>
+<text x="191.0" y="960.0" font-size="21" text-anchor="middle" font-weight="700">当前验证结果</text>
+<text x="191.0" y="987.0" font-size="16" text-anchor="middle" style="fill:#64748b">本轮10次读取均成功</text>
+<text x="191.0" y="1011.0" font-size="16" text-anchor="middle" style="fill:#64748b">后续复测用户反馈正常</text>
+<rect x="370" y="868" width="500" height="224" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="370" y="868" width="5" height="224" rx="2" fill="#15803d" stroke="#15803d" stroke-width="0"/>
+<text x="620.0" y="933.0" font-size="21" text-anchor="middle" font-weight="700">从外部对照到驱动自管理</text>
+<text x="620.0" y="960.0" font-size="16" text-anchor="middle" style="fill:#64748b">0.2.1：外部QoS对照0/5→5/5</text>
+<text x="620.0" y="984.0" font-size="16" text-anchor="middle" style="fill:#64748b">0.2.2：仅测量窗口持有约束</text>
+<text x="620.0" y="1008.0" font-size="16" text-anchor="middle" style="fill:#64748b">后续复测按用户反馈正常</text>
+<text x="620.0" y="1032.0" font-size="16" text-anchor="middle" style="fill:#64748b">未提供后测数量，不补写成功率</text>
+<rect x="930" y="868" width="454" height="224" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="930" y="868" width="5" height="224" rx="2" fill="#15803d" stroke="#15803d" stroke-width="0"/>
+<text x="1157.0" y="946.5" font-size="21" text-anchor="middle" font-weight="700">继续板端主线</text>
+<text x="1157.0" y="973.5" font-size="16" text-anchor="middle" style="fill:#64748b">已结束本轮传感器专项诊断</text>
+<text x="1157.0" y="997.5" font-size="16" text-anchor="middle" style="fill:#64748b">真实温湿度工具 → Agent联调</text>
+<text x="1157.0" y="1021.5" font-size="16" text-anchor="middle" style="fill:#64748b">语音录放音与性能分别验证</text>
+<polyline points="326,980.0 370,980.0" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#arrow-green)"/>
+<polyline points="870,980.0 930,980.0" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#arrow-green)"/>
+<rect x="32" y="1132" width="1376" height="74" rx="10" fill="#fff3e2" stroke="none" stroke-width="0"/>
+<text x="48" y="1160" font-size="17" text-anchor="start" style="fill:#c26b09">成功率来自用户提供的板端日志，不是智能体新增的板端实测。</text>
+<text x="48" y="1186" font-size="17" text-anchor="start" style="fill:#c26b09">本轮已观察到超时改善，用户后续复测反馈正常；Agent 与真实语音链路另行验证。</text>
+</svg>

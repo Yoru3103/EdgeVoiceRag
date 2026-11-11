@@ -1,0 +1,66 @@
+{
+  "date": "2026-11-11",
+  "log_dir": "/home/xx/EdgeVoiceRAG/.cache/tts-validated-20261111-qjbafz72",
+  "text": "当前车内温度为31.8摄氏度，湿度为32.0%。",
+  "scope": "Host CPU only; no board tests; synthesis excludes model load and playback",
+  "comparison": [
+    {
+      "model": "melo-int8",
+      "threads": 6,
+      "summary": {
+        "case_id": "inline",
+        "percentile_method": "type7_linear",
+        "rtf_p50": 1.3062389837480262,
+        "rtf_p95": 1.3372578694457489,
+        "samples": 5,
+        "synthesis_p50_ms": 5702.192273,
+        "synthesis_p95_ms": 5837.6006114,
+        "type": "tts_benchmark_summary",
+        "version": 1,
+        "warmup_excluded": 1
+      },
+      "sample_rate": 44100,
+      "peak_rss_kb": 343608
+    },
+    {
+      "model": "melo-fp32",
+      "threads": 6,
+      "summary": {
+        "case_id": "inline",
+        "percentile_method": "type7_linear",
+        "rtf_p50": 0.23718532228124994,
+        "rtf_p95": 0.23874996000843746,
+        "samples": 5,
+        "synthesis_p50_ms": 1032.64358,
+        "synthesis_p95_ms": 1039.4556082,
+        "type": "tts_benchmark_summary",
+        "version": 1,
+        "warmup_excluded": 1
+      },
+      "sample_rate": 44100,
+      "peak_rss_kb": 454816
+    },
+    {
+      "model": "aishell3",
+      "threads": 6,
+      "summary": {
+        "case_id": "inline",
+        "percentile_method": "type7_linear",
+        "rtf_p50": 0.01855393170782919,
+        "rtf_p95": 0.02106701783095588,
+        "samples": 5,
+        "synthesis_p50_ms": 90.325859,
+        "synthesis_p95_ms": 103.8574644,
+        "type": "tts_benchmark_summary",
+        "version": 1,
+        "warmup_excluded": 1
+      },
+      "sample_rate": 8000,
+      "peak_rss_kb": 145440
+    }
+  ],
+  "cli_checks": 8,
+  "benchmark_sha256": "70da62cbee732bd68e26b36116733ce36bec4239508efc01485233e69d5011b6",
+  "config_sha256": "885a5d9eaf622970d9316dccb6b57166f9dd252419e3978e355df9e67339b007",
+  "source_sha256": "a11986b0a05236c89fcf7c879e768deddfc7260ab8415bd63682c52780782e96"
+}

@@ -2,6 +2,10 @@
 
 所有命令在 Linux/WSL 项目根目录执行。Windows 上通过 WSL 进入仓库，不在 Windows 原生工具链中直接链接 Linux .so。
 
+各测试功能和新增并发场景见[C++测试手册](testing-guide.md)。
+
+当前板端主线的诊断步骤见[ASan/UBSan学习指南](diagnostics.md)：先建立普通Debug对照，再运行带 `board_mainline` 标签的Host测试。
+
 ## 1. 基础依赖与文本构建
 
 Debian/Ubuntu 可先准备开发依赖：
@@ -129,6 +133,7 @@ cmake --build build-rk3588 --target board_voice_assistant -j4
 JSON、ZeroMQ、ALSA 也须位于目标 sysroot/工具链可查找位置。不要把 x86 的包目录当目标依赖。编译成功后在 RK3588 部署程序、模型、vector_db、conf 与匹配运行库，从项目部署根目录执行：
 
 ```bash
+export ALSA_CONFIG_PATH="$PWD/config/alsa-rk3588.conf"
 ./board_voice_assistant config/board_rk3588.conf
 ```
 
@@ -143,6 +148,8 @@ JSON、ZeroMQ、ALSA 也须位于目标 sysroot/工具链可查找位置。不�
 本次未安装/加载内核模块、改设备树或操作真实设备。
 
 ## 7. 评测与性能工具
+
+队列等待、BGE分段与可复现采样流程见[性能观测指南](performance-guide.md)。原始样本及源码/资产指纹由离线记录器保存，性能采样要求Release/RelWithDebInfo且关闭Sanitizer。
 
 ```bash
 ./build/retrieval_benchmark bm25 vector_db/chunks.json benchmarks/retrieval_cases.json 3 10 --filter
@@ -179,6 +186,7 @@ PYTHONPATH=python python -m agent_finetune.evaluate_planner --help
 | 文件/目录 | 作用 |
 | --- | --- |
 | `cmake/EdgeOptions.cmake` | 声明功能开关、SDK路径和测试模型路径 |
+| `cmake/EdgeDiagnostics.cmake` | 诊断编译/链接参数与工具链探测，默认关闭 |
 | `cmake/EdgeDependencies.cmake` | 查找通用依赖和已开启的可选SDK |
 | `src/CMakeLists.txt` 与各模块子CMake | 创建核心库，逐模块添加源码、编译宏和依赖 |
 | `src/apps/CMakeLists.txt` | 定义应用、服务和演示程序 |
@@ -194,7 +202,7 @@ cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
 cmake --build build-release -j4
 ```
 
-该开关只关闭项目测试目标；应用、工具和所选后端的SDK检查仍然保留。默认值为ON，可正常执行40项基础CTest；可选测试数随后端组合增加。
+该开关只关闭项目测试目标；应用、工具和所选后端的SDK检查仍然保留。默认值为ON，可正常执行43项默认CTest；可选测试数随后端组合增加。
 
 常用定位命令：
 
@@ -208,3 +216,48 @@ ctest --test-dir build -N
 CMake开关控制哪些后端编入二进制，运行conf选择实际使用的后端。修改同一构建目录的配置会保留未覆盖的缓存值；PC、语音联调和RK3588交叉编译建议使用各自独立的构建目录。
 
 完整层级、目标表、变量默认值和新增模块示例见[CMake构建指南](cmake-structure.md)，总体模块关系见[项目文档](project-guide.md)。
+
+## RK3588手动验收入口
+
+后续板端测试由使用者操作，步骤见[手动性能测试](rk3588-performance.md)。DHT11 DATA改用JP6第3脚（GPIO4_A5，3.3V IO；需拔掉JP6跳帽并禁用UART3），接线与设备树核对见[DHT11硬件说明](hardware-dht11.md)。当前板端配置使用DeepSeek RKLLM和Rule Planner，本地Qwen LoRA适配器尚未接入板端。
+
+DHT11当前准备的0.2.2版本只在实际测量期间持有CPU latency QoS请求，缓存读取不持有。手动加载及不带外部约束的验证见[窗口QoS记录](experiments/2026-11-09-dht11-qos-window.md)，仍独立于用户态CMake。
+
+用户后续确认DHT11测试没有问题，按要求结束首条专项追查；驱动分层、硬中断与QoS时序及历史异常原因见[DHT11专题](dht11-driver-guide.md)。接下来继续真实温湿度Agent联调，语音链路单独验收。
+
+## 真实IIO设备的C++ Agent联调
+
+agent_demo默认仍用Mock，可通过以下参数选择Linux IIO，仍使用Rule Planner：
+
+```bash
+./build/agent_demo --device iio --iio-root /sys/bus/iio/devices --iio-device-name edge_dht11
+```
+
+该入口不初始化声卡和模型；空调/LED仍为内存状态。独立ARM包、动态库校验及确认/取消验收见[板端Agent主线联调](board-agent-bringup.md)。此步骤通过后再接回board_voice_assistant的语音路径。
+
+## 独立语音输出验收
+
+使用者已确认IIO文字Agent调用正常。完整语音恢复前，先用新增`audio_output_check`独立检查tone→ALSA与文本→TTS→ALSA，并将同一份PCM导出WAV交给aplay对照。该入口不开录音、VAD、ASR、Agent或LLM，复用board_voice_assistant的TTS设置及AlsaAudioPlayer。
+
+[逐步手动操作、独立ARM包与结果判读](board-audio-output.md)。此包复用部署根目录模型，不覆盖现有主程序；Host null设备测试无法证明板端发声。
+
+## 已删除板端部署目录时恢复
+
+使用[完整部署包](rk3588-deployment.md)，包含当前主线模型、索引、全部用户态运行库及0.2.2-window-qos模块。包内只有一个EdgeVoiceRAG顶层目录，附启动脚本和校验表；不修改启动分区或系统自动加载配置。驱动针对6.1.141重新编译，用户仍需手动核对板端内核与当前已加载版本。
+
+板端当前PCM配置为edge_voice_16k，通过config/alsa-rk3588.conf固定底层录放音同为16k，TTS保持源格式再转换。直接运行程序须设置ALSA_CONFIG_PATH，完整包启动脚本自动设置；详见[采样率对称冲突与口语查询修复](rk3588-duplex-fix.md)。
+
+
+## TTS模型选择与测量
+
+当前board_rk3588.conf显式选择原Melo的FP32 model.onnx、speaker0；旧conf省略新字段仍保留INT8缺省。
+需要新增权重，不能只更新二进制后继续使用缺少model.onnx的旧目录。
+[TTS更新包与板端对照步骤](tts-optimization.md)提供保留用户打断阈值的安装方式，以及8k中文备选配置。
+
+tts_benchmark仅需SHERPA_TTS即可生成，默认固定4条文本；--text可聚焦用户本次读数。
+它复用相同后端配置，计时不含模型加载和播放；RTF/RSS口径与主程序PERF_JSON首播应分开。
+[NPU迁移](speech-npu-roadmap.md)是后续计划，当前SDK仍未启用RKNN，CPU provider未变。
+
+## 半双工语音基线
+
+新版主程序支持barge_in_enabled=false：回答期间不监听打断，结束后再正常录音，适用于当前外放基线。缺项旧配置保持true；启动会显示实际模式。用户TTS速度已认可，下一步操作见[主线基线与打断验收](board-mainline-acceptance.md)。

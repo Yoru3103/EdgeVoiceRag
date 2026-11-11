@@ -1,0 +1,42 @@
+./run.sh
+1970-01-01 10:51:39.653607452 [W:onnxruntime:, device_discovery.cc:283 GetGpuDevices] Failed to detect devices under "/sys/class/drm/card1": device_discovery.cc:93 ReadFileContents Failed to open file: "/sys/class/drm/card1/device/vendor"
+1970-01-01 10:51:39.653684452 [W:onnxruntime:, device_discovery.cc:283 GetGpuDevices] Failed to detect devices under "/sys/class/drm/card0": device_discovery.cc:93 ReadFileContents Failed to open file: "/sys/class/drm/card0/device/vendor"
+I rkllm: rkllm-runtime version: 1.2.3, rknpu driver version: 0.9.8, platform: RK3588
+I rkllm: loading rkllm model from models/llm/deepseek-1.5b-w8a8-rk3588.rkllm
+I rkllm: rkllm-toolkit version: unknown, max_context_limit: 4096, npu_core_num: 3, target_platform: RK3588, model_dtype: W8A8
+I rkllm: Enabled cpus: [4, 5, 6, 7]
+I rkllm: Enabled cpus num: 4
+[DEVICE] 使用Linux IIO设备：edge_dht11
+EdgeVoiceRAG board assistant
+Retriever: hybrid
+Relevance filter: enabled
+LLM: rkllm
+Response policy: cpp_agent_router
+ASR: sherpa_onnx_sense_voice
+TTS: sherpa_onnx_vits_tts
+TTS model: models/tts/vits-icefall-zh-aishell3/model.onnx
+TTS threads: 4
+TTS speaker: 66
+Capture: alsa_pcm_stream
+Playback: alsa_playback
+Agent planner: rule_agent_planner
+Agent maximum steps: 4
+Agent confirmation timeout: 30000 ms
+Agent tools: [{"description":"读取当前车内温度，并由C++确定性判断温度条件。仅用于用户提出“温度满足某个条件时执行操作”的任务。operator只能是gt、ge、lt、le，分别表示大于、大于等于、小于、小于等于。普通温湿度查询应使用get_cabin_environment。","name":"check_cabin_temperature_condition","parameters":{"additionalProperties":false,"properties":{"operator":{"description":"gt大于，ge大于等于，lt小于，le小于等于","enum":["gt","ge","lt","le"],"type":"string"},"threshold_c":{"description":"摄氏温度阈值","maximum":100.0,"minimum":-50.0,"type":"number"}},"required":["operator","threshold_c"],"type":"object"},"requires_confirmation":false},{"description":"查询模拟空调和指示灯的当前状态","name":"get_air_conditioner_state","parameters":{"additionalProperties":false,"properties":{},"type":"object"},"requires_confirmation":false},{"description":"读取当前车内温度和湿度","name":"get_cabin_environment","parameters":{"additionalProperties":false,"properties":{},"type":"object"},"requires_confirmation":false},{"description":"打开或关闭模拟空调，并同步改变指示灯状态","name":"set_air_conditioner","parameters":{"additionalProperties":false,"properties":{"enabled":{"description":"true 表示开启，false 表示关闭","type":"boolean"}},"required":["enabled"],"type":"object"},"requires_confirmation":true},{"description":"原子执行温度条件空调控制。C++读取当前车内温度并确定性比较，条件成立时设置空调状态并进行写后验证。operator只能是gt、ge、lt、le；enabled为条件成立时希望设置的空调状态。该工具可能改变设备状态，因此需要用户确认。","name":"set_air_conditioner_if_temperature","parameters":{"additionalProperties":false,"properties":{"enabled":{"description":"条件成立时设置的空调状态","type":"boolean"},"operator":{"description":"gt大于，ge大于等于，lt小于，le小于等于","enum":["gt","ge","lt","le"],"type":"string"},"threshold_c":{"description":"摄氏温度阈值","maximum":100.0,"minimum":-50.0,"type":"number"}},"required":["operator","threshold_c","enabled"],"type":"object"},"requires_confirmation":true}]
+[VOICE] 等待用户说话...
+[ASR] 现在多少度？
+[ROUTE] AGENT_ROUTE_JSON {"emergency":false,"intent":"environment_query","intent_confidence":0.8999999761581421,"intent_matched":true,"pending_action":false,"query":"现在多少度？","request_id":"voice-session1","use_agent":true}
+[INFO] AGENT_STEP {"action":"tool_call","session_id":"board-voice-session","step":1,"tool_call":{"arguments":{},"id":"environment-1","name":"get_cabin_environment"}}
+[INFO] AGENT_TOOL_RESULT {"data":{"humidity_percent":20.0,"temperature_c":30.399999618530273},"error":"","ok":true,"session_id":"board-voice-session","step":1,"tool":"get_cabin_environment"}
+[INFO] AGENT_STEP {"action":"final_answer","answer":"当前车内温度为30.4摄氏度，湿度为20.0%。","session_id":"board-voice-session","step":2}
+[ROUTE] AGENT_JSON {"error":"","event":"agent_workflow","executed_tool":"get_cabin_environment","observation":{"humidity_percent":20.0,"temperature_c":30.399999618530273},"ok":true,"request_id":"voice-session1","session_id":"board-voice-session","state":"completed","trace":[{"result":{"data":{"humidity_percent":20.0,"temperature_c":30.399999618530273},"error":"","ok":true},"tool_call":{"arguments":{},"id":"environment-1","name":"get_cabin_environment"}}]}
+/home/xx/rk3588_third_party/sherpa-onnx/sherpa-onnx/csrc/lexicon.cc:ConvertTextToTokenIdsChinese:242 OOV %. Ignore it!
+[ANSWER] 当前车内温度为30.4摄氏度，湿度为20.0%。
+[POLICY] mode=agent_tool category=environment_query confidence=0.9 retrieved=0 reason=device agent completed the workflow
+[PERF_JSON] {"answer_backend":"cpp_agent_router","answer_backend_elapsed_ms":24.522166,"asr_elapsed_ms":190.105292,"assistant_total_elapsed_ms":4829.393,"audio_backend":"alsa_playback","audio_queue_capacity":2,"audio_queue_peak_depth":1,"audio_queue_push_wait_count":0,"audio_queue_push_wait_ms":0.0,"capture_elapsed_ms":9707.062421,"classification_confidence":0.8999999761581421,"first_answer_text_ms":24.747,"first_answer_text_observed":true,"first_audio_ready_ms":345.449,"first_audio_ready_observed":true,"first_playback_start_ms":345.536,"first_playback_started":true,"llm_elapsed_ms":0.0,"llm_first_token_observed":false,"llm_time_to_first_token_ms":0.0,"ok":true,"playback_elapsed_ms":4483.476,"query_category":"environment_query","queue_metrics_complete":true,"queue_metrics_observed":true,"received_chunk_count":1,"request_id":"voice-session1","response_mode":"agent_tool","response_reason":"device agent completed the workflow","retrieval_elapsed_ms":0.0,"retrieval_result_count":0,"sentence_queue_capacity":4,"sentence_queue_peak_depth":1,"sentence_queue_push_wait_count":0,"sentence_queue_push_wait_ms":0.0,"spoken_sentence_count":1,"tts_backend":"sherpa_onnx_vits_tts","tts_elapsed_ms":320.667,"turn_elapsed_ms":14726.560713,"type":"voice_turn_performance","version":1}
+[VOICE] 等待用户说话...
+[ASR] 你是谁？
+[ROUTE] AGENT_ROUTE_JSON {"emergency":false,"intent":"none","intent_confidence":0.0,"intent_matched":false,"pending_action":false,"query":"你是谁？","request_id":"voice-session2","use_agent":false}
+[ANSWER] 我还不能确定您想了解的具体内容。请说明车辆功能、仪表提示或遇到的现象，我再为您查询。
+[POLICY] mode=clarification category=unknown confidence=0 retrieved=0 reason=query is ambiguous and no relevant manual evidence was found
+[PERF_JSON] {"answer_backend":"cpp_agent_router","answer_backend_elapsed_ms":20.701334,"asr_elapsed_ms":214.721125,"assistant_total_elapsed_ms":7418.363,"audio_backend":"alsa_playback","audio_queue_capacity":2,"audio_queue_peak_depth":1,"audio_queue_push_wait_count":0,"audio_queue_push_wait_ms":0.0,"capture_elapsed_ms":18633.264884,"classification_confidence":0.0,"first_answer_text_ms":20.844,"first_answer_text_observed":true,"first_audio_ready_ms":236.674,"first_audio_ready_observed":true,"first_playback_start_ms":236.759,"first_playback_started":true,"llm_elapsed_ms":0.0,"llm_first_token_observed":false,"llm_time_to_first_token_ms":0.0,"ok":true,"playback_elapsed_ms":7181.27,"query_category":"unknown","queue_metrics_complete":true,"queue_metrics_observed":true,"received_chunk_count":1,"request_id":"voice-session2","response_mode":"clarification","response_reason":"query is ambiguous and no relevant manual evidence was found","retrieval_elapsed_ms":20.640958,"retrieval_result_count":0,"sentence_queue_capacity":4,"sentence_queue_peak_depth":2,"sentence_queue_push_wait_count":0,"sentence_queue_push_wait_ms":0.0,"spoken_sentence_count":2,"tts_backend":"sherpa_onnx_vits_tts","tts_elapsed_ms":501.06100000000004,"turn_elapsed_ms":26266.349009,"type":"voice_turn_performance","version":1}

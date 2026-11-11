@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1060" viewBox="0 0 1280 1060" role="img" aria-labelledby="title desc">
+<title id="title">02  一个问题如何选择回答方式</title><desc id="desc">路由选择在回答调用路径内执行；具体方法与阈值见图下说明</desc>
+<defs>
+<marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#2563eb"/></marker>
+<marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#7c3aed"/></marker>
+<marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#15803d"/></marker>
+<marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#c26b09"/></marker>
+<marker id="arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#64748b"/></marker>
+<marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#c24138"/></marker>
+</defs>
+<rect width="1280" height="1060" rx="20" fill="#f8fafc"/>
+<style>text{font-family:Microsoft YaHei, PingFang SC, Noto Sans CJK SC, Segoe UI, Arial, sans-serif;fill:#16324f}.small{font-size:16px}.muted{fill:#64748b}</style>
+<text x="32" y="49" font-size="32" text-anchor="start" font-weight="700">02  一个问题如何选择回答方式</text>
+<text x="32" y="82" font-size="17" text-anchor="start" style="fill:#64748b">路由选择在回答调用路径内执行；具体方法与阈值见图下说明</text>
+<rect x="440" y="128" width="400" height="80" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="440" y="128" width="5" height="80" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="640.0" y="161.5" font-size="21" text-anchor="middle" font-weight="700">问题文本 + request_id</text>
+<text x="640.0" y="188.5" font-size="16" text-anchor="middle" style="fill:#64748b">来自 ASR 或调用者</text>
+<polyline points="640,208 640,250" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<rect x="440" y="250" width="400" height="100" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="440" y="250" width="5" height="100" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="640.0" y="293.5" font-size="21" text-anchor="middle" font-weight="700">外层 Agent 路由</text>
+<text x="640.0" y="320.5" font-size="16" text-anchor="middle" style="fill:#64748b">先检查安全，再看待确认动作和设备意图</text>
+<polyline points="440,300 220,300 220,412" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<rect x="71.0" y="364" width="298" height="24" rx="4" fill="#f8fafc" stroke="none" stroke-width="0"/>
+<text x="220" y="381" font-size="16" text-anchor="middle" style="fill:#2563eb">非紧急且匹配设备 / Pending</text>
+<polyline points="840,300 1010,300 1010,412" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<rect x="949.0" y="364" width="122" height="24" rx="4" fill="#f8fafc" stroke="none" stroke-width="0"/>
+<text x="1010" y="381" font-size="16" text-anchor="middle" style="fill:#2563eb">紧急或普通问答</text>
+<rect x="32" y="412" width="376" height="366" rx="16" fill="#eef4ff" stroke="#dce4ed" stroke-width="1"/>
+<text x="52" y="444" font-size="22" text-anchor="start" style="fill:#2563eb" font-weight="700">设备 Agent</text>
+<rect x="62" y="475" width="316" height="100" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="62" y="475" width="5" height="100" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="220.0" y="518.5" font-size="21" text-anchor="middle" font-weight="700">规划 → 校验 → 执行</text>
+<text x="220.0" y="545.5" font-size="16" text-anchor="middle" style="fill:#64748b">需要写操作时先请求用户确认</text>
+<rect x="62" y="630" width="316" height="90" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="62" y="630" width="5" height="90" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="220.0" y="668.5" font-size="21" text-anchor="middle" font-weight="700">业务结果或确认提示</text>
+<text x="220.0" y="695.5" font-size="16" text-anchor="middle" style="fill:#64748b">规划 JSON 不直接播报</text>
+<polyline points="220,575 220,630" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<rect x="440" y="412" width="808" height="438" rx="16" fill="#f3efff" stroke="#dce4ed" stroke-width="1"/>
+<text x="460" y="444" font-size="22" text-anchor="start" style="fill:#7c3aed" font-weight="700">普通问答 Policy</text>
+<rect x="490" y="475" width="708" height="80" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="490" y="475" width="5" height="80" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="844.0" y="508.5" font-size="21" text-anchor="middle" font-weight="700">查询分类 + 按需检索</text>
+<text x="844.0" y="535.5" font-size="16" text-anchor="middle" style="fill:#64748b">BM25 / BGE Dense / Hybrid → 相关性过滤</text>
+<text x="470" y="601" font-size="20" text-anchor="start" font-weight="700">策略从以下五种结果中选择：</text>
+<rect x="470" y="626" width="232" height="82" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="470" y="626" width="5" height="82" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="586.0" y="660.5" font-size="21" text-anchor="middle" font-weight="700">安全答复</text>
+<text x="586.0" y="687.5" font-size="16" text-anchor="middle" style="fill:#64748b">固定文本 + 手册</text>
+<rect x="728" y="626" width="232" height="82" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="728" y="626" width="5" height="82" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="844.0" y="660.5" font-size="21" text-anchor="middle" font-weight="700">手册直答</text>
+<text x="844.0" y="687.5" font-size="16" text-anchor="middle" style="fill:#64748b">首条高置信事实</text>
+<rect x="986" y="626" width="232" height="82" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="986" y="626" width="5" height="82" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="1102.0" y="660.5" font-size="21" text-anchor="middle" font-weight="700">请求澄清</text>
+<text x="1102.0" y="687.5" font-size="16" text-anchor="middle" style="fill:#64748b">无足够可靠信息</text>
+<rect x="590" y="738" width="252" height="82" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="590" y="738" width="5" height="82" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="716.0" y="772.5" font-size="21" text-anchor="middle" font-weight="700">RAG + LLM</text>
+<text x="716.0" y="799.5" font-size="16" text-anchor="middle" style="fill:#64748b">手册上下文 + 问题</text>
+<rect x="870" y="738" width="252" height="82" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="870" y="738" width="5" height="82" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="996.0" y="772.5" font-size="21" text-anchor="middle" font-weight="700">纯 LLM</text>
+<text x="996.0" y="799.5" font-size="16" text-anchor="middle" style="fill:#64748b">通用生成提示词</text>
+<rect x="440" y="925" width="400" height="80" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="440" y="925" width="5" height="80" rx="2" fill="#15803d" stroke="#15803d" stroke-width="0"/>
+<text x="640.0" y="958.5" font-size="21" text-anchor="middle" font-weight="700">统一答复事件</text>
+<text x="640.0" y="985.5" font-size="16" text-anchor="middle" style="fill:#64748b">进入分句、TTS 和播放流水线</text>
+<polyline points="220,778 220,965 440,965" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#arrow-green)"/>
+<polyline points="844,850 844,887 640,887 640,925" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#arrow-green)"/>
+<text x="32" y="1040" font-size="17" text-anchor="start" style="fill:#64748b">Hybrid 依次调用两路检索后做 RRF；当前没有为 BM25、Dense 各建应用线程。</text>
+</svg>

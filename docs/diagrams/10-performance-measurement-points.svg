@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="990" viewBox="0 0 1280 990" role="img" aria-labelledby="title desc">
+<title id="title">10  性能观测：调用与跨线程边界</title><desc id="desc">同一 request_id 关联事件；横向箭头是数据流，阶段可能重叠</desc>
+<defs>
+<marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#2563eb"/></marker>
+<marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#7c3aed"/></marker>
+<marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#15803d"/></marker>
+<marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#c26b09"/></marker>
+<marker id="arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#64748b"/></marker>
+<marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#c24138"/></marker>
+</defs>
+<rect width="1280" height="990" rx="20" fill="#f8fafc"/>
+<style>text{font-family:Microsoft YaHei, PingFang SC, Noto Sans CJK SC, Segoe UI, Arial, sans-serif;fill:#16324f}.small{font-size:16px}.muted{fill:#64748b}</style>
+<text x="32" y="49" font-size="32" text-anchor="start" font-weight="700">10  性能观测：调用与跨线程边界</text>
+<text x="32" y="82" font-size="17" text-anchor="start" style="fill:#64748b">同一 request_id 关联事件；横向箭头是数据流，阶段可能重叠</text>
+<rect x="32" y="116" width="1216" height="212" rx="16" fill="#eef4ff" stroke="#dce4ed" stroke-width="1"/>
+<text x="52" y="148" font-size="22" text-anchor="start" style="fill:#2563eb" font-weight="700">① 回答调用路径 · T2 回答线程</text>
+<rect x="56" y="184" width="352" height="96" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="56" y="184" width="5" height="96" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="232.0" y="225.5" font-size="21" text-anchor="middle" font-weight="700">检索</text>
+<text x="232.0" y="252.5" font-size="16" text-anchor="middle" style="fill:#64748b">BM25 / BGE / Hybrid</text>
+<rect x="464" y="184" width="352" height="96" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="464" y="184" width="5" height="96" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="640.0" y="225.5" font-size="21" text-anchor="middle" font-weight="700">策略 / 生成</text>
+<text x="640.0" y="252.5" font-size="16" text-anchor="middle" style="fill:#64748b">手册直答 / RKLLM</text>
+<rect x="872" y="184" width="352" height="96" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="872" y="184" width="5" height="96" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="1048.0" y="225.5" font-size="21" text-anchor="middle" font-weight="700">文本分句</text>
+<text x="1048.0" y="252.5" font-size="16" text-anchor="middle" style="fill:#64748b">首文本 → 句子片段</text>
+<polyline points="408,232 464,232" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<polyline points="816,232 872,232" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<rect x="32" y="370" width="1216" height="218" rx="16" fill="#f3efff" stroke="#dce4ed" stroke-width="1"/>
+<text x="52" y="402" font-size="22" text-anchor="start" style="fill:#7c3aed" font-weight="700">② 跨线程输出 · 有界队列</text>
+<rect x="56" y="439" width="270" height="92" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="56" y="439" width="5" height="92" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="191.0" y="478.5" font-size="21" text-anchor="middle" font-weight="700">sentence_queue</text>
+<text x="191.0" y="505.5" font-size="16" text-anchor="middle" style="fill:#64748b">T2 push → T3 pop</text>
+<rect x="366" y="439" width="240" height="92" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="366" y="439" width="5" height="92" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="486.0" y="478.5" font-size="21" text-anchor="middle" font-weight="700">T3 · TTS</text>
+<text x="486.0" y="505.5" font-size="16" text-anchor="middle" style="fill:#64748b">首音频 / 合成累计</text>
+<rect x="646" y="439" width="270" height="92" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="646" y="439" width="5" height="92" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="781.0" y="478.5" font-size="21" text-anchor="middle" font-weight="700">audio_queue</text>
+<text x="781.0" y="505.5" font-size="16" text-anchor="middle" style="fill:#64748b">T3 push → T4 pop</text>
+<rect x="956" y="439" width="268" height="92" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="956" y="439" width="5" height="92" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="1090.0" y="478.5" font-size="21" text-anchor="middle" font-weight="700">T4 · 播放</text>
+<text x="1090.0" y="505.5" font-size="16" text-anchor="middle" style="fill:#64748b">首播 / 播放累计</text>
+<polyline points="326,485 366,485" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrow-purple)"/>
+<polyline points="606,485 646,485" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrow-purple)"/>
+<polyline points="916,485 956,485" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrow-purple)"/>
+<polyline points="1048,280 1048,347 640,347 640,414 191,414 191,439" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrow-purple)"/>
+<rect x="56" y="609" width="1168" height="74" rx="10" fill="#edf3fb" stroke="none" stroke-width="0"/>
+<text x="72" y="637" font-size="17" text-anchor="start" style="fill:#2563eb">两路队列：容量满时 push 等待次数 / 累计等待；成功入队时采样共享深度峰值。</text>
+<text x="72" y="663" font-size="17" text-anchor="start" style="fill:#2563eb">这些等待与 TTS / 播放可能重叠；不包含消费者等空队列，也不是任务驻留时间。</text>
+<rect x="32" y="722" width="592" height="170" rx="16" fill="#eef6f0" stroke="#dce4ed" stroke-width="1"/>
+<text x="52" y="754" font-size="22" text-anchor="start" style="fill:#15803d" font-weight="700">③ 独立 Dense profile 工具</text>
+<text x="56" y="794" font-size="19" text-anchor="start">prepare → ORT Session::Run → postprocess</text>
+<text x="56" y="826" font-size="19" text-anchor="start">→ index search → mapping；入口另记 total</text>
+<rect x="648" y="722" width="600" height="170" rx="16" fill="#fff3e2" stroke="#dce4ed" stroke-width="1"/>
+<text x="668" y="754" font-size="22" text-anchor="start" style="fill:#c26b09" font-weight="700">④ 汇总与资源 · 不同统计范围</text>
+<text x="672" y="794" font-size="19" text-anchor="start">语音：AnswerCompleted → PERF_JSON → 汇总</text>
+<text x="672" y="826" font-size="19" text-anchor="start">检索：逐 run/case 样本 + 原生命令峰值 RSS</text>
+<text x="32" y="948" font-size="20" text-anchor="start" style="fill:#64748b">P50 / P95 逐列计算，不能相加；取消 / 失败轮次需要单独保留状态。</text>
+</svg>

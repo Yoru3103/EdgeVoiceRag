@@ -1,0 +1,142 @@
+{
+  "log_dir": "/home/xx/EdgeVoiceRAG/.cache/tts-host-grid-20261111-6kev1b29",
+  "text": "当前车内温度为31.8摄氏度，湿度为32.0%。",
+  "uname": {
+    "system": "Linux",
+    "node": "xx",
+    "release": "6.18.33.2-microsoft-standard-WSL2",
+    "version": "#1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026",
+    "machine": "x86_64",
+    "processor": "x86_64"
+  },
+  "rows": [
+    {
+      "model": "aishell3",
+      "threads": 1,
+      "model_load_ms": 619.952916,
+      "sample_rate": 8000,
+      "audio_seconds": 5.146,
+      "p50_ms": 255.219122,
+      "p95_ms": 266.46421699999996,
+      "rtf_p50": 0.051064250100040016
+    },
+    {
+      "model": "aishell3",
+      "threads": 2,
+      "model_load_ms": 575.584838,
+      "sample_rate": 8000,
+      "audio_seconds": 4.708375,
+      "p50_ms": 149.193034,
+      "p95_ms": 179.8309069,
+      "rtf_p50": 0.031686735657206574
+    },
+    {
+      "model": "aishell3",
+      "threads": 4,
+      "model_load_ms": 638.359587,
+      "sample_rate": 8000,
+      "audio_seconds": 4.790375,
+      "p50_ms": 106.152429,
+      "p95_ms": 107.028903,
+      "rtf_p50": 0.02300597166309972
+    },
+    {
+      "model": "aishell3",
+      "threads": 6,
+      "model_load_ms": 618.890771,
+      "sample_rate": 8000,
+      "audio_seconds": 4.52,
+      "p50_ms": 84.933205,
+      "p95_ms": 102.55224580000001,
+      "rtf_p50": 0.0182952055790409
+    },
+    {
+      "model": "melo-int8",
+      "threads": 1,
+      "model_load_ms": 2129.992354,
+      "sample_rate": 44100,
+      "audio_seconds": 4.365351473922902,
+      "p50_ms": 6807.64011,
+      "p95_ms": 7404.9599751000005,
+      "rtf_p50": 1.5594712477715678
+    },
+    {
+      "model": "melo-int8",
+      "threads": 2,
+      "model_load_ms": 1986.716792,
+      "sample_rate": 44100,
+      "audio_seconds": 4.365351473922902,
+      "p50_ms": 6039.161582,
+      "p95_ms": 6178.7021801,
+      "rtf_p50": 1.3834307771266208
+    },
+    {
+      "model": "melo-int8",
+      "threads": 4,
+      "model_load_ms": 2287.656325,
+      "sample_rate": 44100,
+      "audio_seconds": 4.365351473922902,
+      "p50_ms": 5637.363968,
+      "p95_ms": 5653.2182798,
+      "rtf_p50": 1.291388334175532
+    },
+    {
+      "model": "melo-int8",
+      "threads": 6,
+      "model_load_ms": 1946.996393,
+      "sample_rate": 44100,
+      "audio_seconds": 4.365351473922902,
+      "p50_ms": 5613.911748,
+      "p95_ms": 5707.6097742,
+      "rtf_p50": 1.2860159786756151
+    },
+    {
+      "model": "melo-fp32",
+      "threads": 1,
+      "model_load_ms": 3483.302277,
+      "sample_rate": 44100,
+      "audio_seconds": 4.35374149659864,
+      "p50_ms": 3245.232466,
+      "p95_ms": 3291.1942969,
+      "rtf_p50": 0.7453893320343749
+    },
+    {
+      "model": "melo-fp32",
+      "threads": 2,
+      "model_load_ms": 3093.43864,
+      "sample_rate": 44100,
+      "audio_seconds": 4.35374149659864,
+      "p50_ms": 1870.243403,
+      "p95_ms": 1886.7331634,
+      "rtf_p50": 0.4295715316265624
+    },
+    {
+      "model": "melo-fp32",
+      "threads": 4,
+      "model_load_ms": 2879.264227,
+      "sample_rate": 44100,
+      "audio_seconds": 4.35374149659864,
+      "p50_ms": 1299.833569,
+      "p95_ms": 1304.6371498,
+      "rtf_p50": 0.29855552287968745
+    },
+    {
+      "model": "melo-fp32",
+      "threads": 6,
+      "model_load_ms": 2853.521044,
+      "sample_rate": 44100,
+      "audio_seconds": 4.35374149659864,
+      "p50_ms": 997.093538,
+      "p95_ms": 1036.9979216,
+      "rtf_p50": 0.22901992200937496
+    }
+  ],
+  "provenance": {
+    "binary_sha256": "89eefa1434bc5167f4b2ac77b88b70bda4d95df3baebcf1503c818f6bf2a2e8d",
+    "source_sha256": "b46722f336596388a290d7aebed8b1ec812a867f4f022b42d09d31d1e585b3cc",
+    "config_sha256": "a9ccc0041a4051238094320a6b2930953efa7d4d6745987075aeeb6b67a7d2de",
+    "build_type": "Release",
+    "sdk_build": "build-board-pc",
+    "scope": "Host synthesis-only, no board/ALSA/ASR/VAD/LLM"
+  }
+}

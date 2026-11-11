@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1240" viewBox="0 0 1440 1240" role="img" aria-labelledby="title desc">
+<title id="title">11  DHT11 驱动框图</title><desc id="desc">从应用读取到硬件边沿：缓存、测量、硬中断与结果发布各有职责</desc>
+<defs>
+<marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#2563eb"/></marker>
+<marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#7c3aed"/></marker>
+<marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#15803d"/></marker>
+<marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#c26b09"/></marker>
+<marker id="arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#64748b"/></marker>
+<marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 1 1 L 9 5 L 1 9 Z" fill="#c24138"/></marker>
+</defs>
+<rect width="1440" height="1240" rx="20" fill="#f8fafc"/>
+<style>text{font-family:Microsoft YaHei, PingFang SC, Noto Sans CJK SC, Segoe UI, Arial, sans-serif;fill:#16324f}.small{font-size:16px}.muted{fill:#64748b}</style>
+<text x="32" y="49" font-size="32" text-anchor="start" font-weight="700">11  DHT11 驱动框图</text>
+<text x="32" y="82" font-size="17" text-anchor="start" style="fill:#64748b">从应用读取到硬件边沿：缓存、测量、硬中断与结果发布各有职责</text>
+<rect x="32" y="116" width="1376" height="174" rx="16" fill="#eef4ff" stroke="#dce4ed" stroke-width="1"/>
+<text x="52" y="148" font-size="22" text-anchor="start" style="fill:#2563eb" font-weight="700">① 用户态：两种调用入口</text>
+<rect x="160" y="174" width="440" height="84" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="160" y="174" width="5" height="84" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="380.0" y="209.5" font-size="21" text-anchor="middle" font-weight="700">C++ 设备 Agent</text>
+<text x="380.0" y="236.5" font-size="16" text-anchor="middle" style="fill:#64748b">温湿度工具 → LinuxVehicleDevice</text>
+<rect x="840" y="174" width="440" height="84" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="840" y="174" width="5" height="84" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="1060.0" y="209.5" font-size="21" text-anchor="middle" font-weight="700">诊断程序 / shell</text>
+<text x="1060.0" y="236.5" font-size="16" text-anchor="middle" style="fill:#64748b">探针脚本或 cat 读取 IIO 属性</text>
+<polyline points="380,258 380,312 720,312 720,354" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<polyline points="1060,258 1060,312 720,312" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<rect x="400" y="354" width="640" height="114" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="400" y="354" width="5" height="114" rx="2" fill="#2563eb" stroke="#2563eb" stroke-width="0"/>
+<text x="720.0" y="391.0" font-size="21" text-anchor="middle" font-weight="700">Linux IIO：read_raw + mutex</text>
+<text x="720.0" y="418.0" font-size="16" text-anchor="middle" style="fill:#64748b">按 name=edge_dht11 定位；温度 / 湿度 input</text>
+<text x="720.0" y="442.0" font-size="16" text-anchor="middle" style="fill:#64748b">成功缓存 2 秒：命中直接返回，失效进入真实测量</text>
+<rect x="32" y="490" width="1376" height="422" rx="16" fill="#f3efff" stroke="#dce4ed" stroke-width="1"/>
+<text x="52" y="522" font-size="22" text-anchor="start" style="fill:#7c3aed" font-weight="700">② 驱动：进程上下文与硬中断协作</text>
+<polyline points="720,468 720,546 362,546 362,568" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<rect x="72" y="568" width="580" height="128" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="72" y="568" width="5" height="128" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="362.0" y="612.0" font-size="21" text-anchor="middle" font-weight="700">进程上下文 · edge_dht11_measure</text>
+<text x="362.0" y="639.0" font-size="16" text-anchor="middle" style="fill:#64748b">CPU QoS 请求 + IRQ 注册</text>
+<text x="362.0" y="663.0" font-size="16" text-anchor="middle" style="fill:#64748b">开漏拉低 18～20 ms → 释放 → 等待 completion</text>
+<rect x="788" y="568" width="580" height="128" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="788" y="568" width="5" height="128" rx="2" fill="#7c3aed" stroke="#7c3aed" stroke-width="0"/>
+<text x="1078.0" y="612.0" font-size="21" text-anchor="middle" font-weight="700">硬中断上下文 · IRQ handler</text>
+<text x="1078.0" y="639.0" font-size="16" text-anchor="middle" style="fill:#64748b">GPIO 上升沿 / 下降沿触发</text>
+<text x="1078.0" y="663.0" font-size="16" text-anchor="middle" style="fill:#64748b">时间戳 + 电平写入 edges[]；达标后通知</text>
+<polyline points="652,632 788,632" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrow-purple)"/>
+<rect x="667.0" y="599" width="106" height="24" rx="4" fill="#f8fafc" stroke="none" stroke-width="0"/>
+<text x="720" y="616" font-size="16" text-anchor="middle" style="fill:#7c3aed">硬件边沿触发</text>
+<polyline points="1078,696 1078,732 540,732 540,696" fill="none" stroke="#7c3aed" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow-purple)"/>
+<rect x="718.0" y="709" width="234" height="24" rx="4" fill="#f8fafc" stroke="none" stroke-width="0"/>
+<text x="835" y="726" font-size="16" text-anchor="middle" style="fill:#7c3aed">complete 唤醒等待者</text>
+<polyline points="362,696 362,778" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#arrow-green)"/>
+<rect x="72" y="778" width="580" height="94" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="72" y="778" width="5" height="94" rx="2" fill="#15803d" stroke="#15803d" stroke-width="0"/>
+<text x="362.0" y="818.5" font-size="21" text-anchor="middle" font-weight="700">采集结束 → 清理 → 严格解码</text>
+<text x="362.0" y="845.5" font-size="16" text-anchor="middle" style="fill:#64748b">free_irq → 移除 QoS → 电平 / 40 位 / 校验和 / 量程</text>
+<rect x="788" y="778" width="580" height="94" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="788" y="778" width="5" height="94" rx="2" fill="#15803d" stroke="#15803d" stroke-width="0"/>
+<text x="1078.0" y="818.5" font-size="21" text-anchor="middle" font-weight="700">缓存发布 / IIO 返回</text>
+<text x="1078.0" y="845.5" font-size="16" text-anchor="middle" style="fill:#64748b">完整校验成功才发布；失败返回 errno</text>
+<polyline points="652,825 788,825" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#arrow-green)"/>
+<polyline points="1368,825 1424,825 1424,411 1040,411" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#arrow-green)"/>
+<rect x="1119.0" y="378" width="202" height="24" rx="4" fill="#f8fafc" stroke="none" stroke-width="0"/>
+<text x="1220" y="395" font-size="16" text-anchor="middle" style="fill:#15803d">返回数值 / errno</text>
+<rect x="32" y="950" width="1376" height="208" rx="16" fill="#eef6f0" stroke="#dce4ed" stroke-width="1"/>
+<text x="52" y="982" font-size="22" text-anchor="start" style="fill:#15803d" font-weight="700">③ 内核框架与实物依赖</text>
+<rect x="56" y="1018" width="400" height="94" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="56" y="1018" width="5" height="94" rx="2" fill="#15803d" stroke="#15803d" stroke-width="0"/>
+<text x="256.0" y="1058.5" font-size="21" text-anchor="middle" font-weight="700">CPU latency QoS</text>
+<text x="256.0" y="1085.5" font-size="16" text-anchor="middle" style="fill:#64748b">测量时添加 0 µs 请求；结束移除</text>
+<rect x="520" y="1018" width="400" height="94" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="520" y="1018" width="5" height="94" rx="2" fill="#15803d" stroke="#15803d" stroke-width="0"/>
+<text x="720.0" y="1058.5" font-size="21" text-anchor="middle" font-weight="700">GPIO / IRQ 框架</text>
+<text x="720.0" y="1085.5" font-size="16" text-anchor="middle" style="fill:#64748b">设备树指定 GPIO；当前 GPIO0_C6</text>
+<rect x="984" y="1018" width="400" height="94" rx="12" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="984" y="1018" width="5" height="94" rx="2" fill="#15803d" stroke="#15803d" stroke-width="0"/>
+<text x="1184.0" y="1058.5" font-size="21" text-anchor="middle" font-weight="700">DHT11 模块</text>
+<text x="1184.0" y="1085.5" font-size="16" text-anchor="middle" style="fill:#64748b">JP5-10 DATA；3.3V 上拉；共地</text>
+<polyline points="920,1065 984,1065" fill="none" stroke="#15803d" stroke-width="2" marker-start="url(#arrow-green)" marker-end="url(#arrow-green)"/>
+<text x="32" y="1200" font-size="18" text-anchor="start" style="fill:#64748b">框表示职责；IRQ 不是新建的用户态线程。具体时序见图12，异常与修订见图13。</text>
+</svg>

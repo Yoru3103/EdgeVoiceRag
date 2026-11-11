@@ -1,6 +1,6 @@
 # 源码文件索引
 
-本索引覆盖本次目录与构建整理提交中的源码；用户已有的未提交评测工作单独列在文末。公共接口的逐项说明见 [api-reference.md](api-reference.md)；训练数据与本地模型不在这里重复展开。
+本索引覆盖本次目录与构建整理提交中的源码；此前独立的Planner评测工作单独列在文末，并已分步提交。公共接口的逐项说明见 [api-reference.md](api-reference.md)；训练数据与本地模型不在这里重复展开。
 
 ## C++ 实现
 
@@ -21,7 +21,8 @@
 
 | 文件 | 职责 |
 | --- | --- |
-| [agent_demo.cpp](../src/apps/agent_demo.cpp) | Mock设备 + RulePlanner 文本 Agent 演示。 |
+| [agent_demo.cpp](../src/apps/agent_demo.cpp) | RulePlanner文本Agent，默认Mock，支持--device iio及IIO根目录/name参数。 |
+| [audio_output_check.cpp](../src/apps/audio_output_check.cpp) | 独立ALSA输出探针：tone/可选TTS、同handle重复播放、PCM16 WAV无覆盖导出与JSONL诊断；不启动录音/VAD/ASR/Agent。 |
 | [board_voice_main.cpp](../src/apps/board_voice_main.cpp) | 板端连续语音主入口；本地装配检索、推理、设备 Agent 和音频后端。 |
 | [llm_server.cpp](../src/apps/llm_server.cpp) | C++ LLM 普通/流式服务，启动独立取消线程。 |
 | [main.cpp](../src/apps/main.cpp) | 文本 CLI，装配 AppConfig、BM25 和旧多级响应系统。 |
@@ -97,10 +98,10 @@
 
 | 文件 | 职责 |
 | --- | --- |
-| [bge_embedder.cpp](../src/retrieval/bge_embedder.cpp) | ONNX Runtime CPU + tokenizers-cpp；返回 ok/embedding/error，默认检索指令、512 维和 max_length=512；需 BGE 开关。 |
+| [bge_embedder.cpp](../src/retrieval/bge_embedder.cpp) | ONNX Runtime CPU + tokenizers-cpp；普通编码与显式Profiled分段路径，返回向量、状态和可选timing；需BGE开关。 |
 | [bm25_retriever.cpp](../src/retrieval/bm25_retriever.cpp) | 建立内存倒排统计并按 BM25 排序；配置 k1/b/minimum_matched_terms；应先成功加载。 |
 | [chinese_text_tokenizer.cpp](../src/retrieval/chinese_text_tokenizer.cpp) | 中文文本分词，供 BM25 构建/查询词项；精确签名见头文件，不使用 Python jieba 实例。 |
-| [dense_retriever.cpp](../src/retrieval/dense_retriever.cpp) | 组合 BGE、DenseVectorIndex 与手册映射，检查索引和当前 chunks 一致性；需 BGE 开关。 |
+| [dense_retriever.cpp](../src/retrieval/dense_retriever.cpp) | 组合BGE、DenseVectorIndex与手册映射；校验chunks兼容性，支持显式编码/索引/映射分段；需BGE开关。 |
 | [dense_vector_index.cpp](../src/retrieval/dense_vector_index.cpp) | 载入连续 float32 向量及元数据，查询归一化向量并返回 row/chunk_id/score；负责格式、大小等校验。 |
 | [hybrid_retriever.cpp](../src/retrieval/hybrid_retriever.cpp) | 非拥有引用组合双路检索；加权 RRF 合并去重；candidate_top_k 控制候选数。 |
 | [knowledge_base_loader.cpp](../src/retrieval/knowledge_base_loader.cpp) | 解析 chunks，返回 ok/documents/error；统一手册与别名构造规则。 |
@@ -244,7 +245,9 @@
 
 | 文件 | 用途 |
 | --- | --- |
-| [retrieval_benchmark.cpp](../tools/retrieval_benchmark.cpp) | 检索质量/负例拒答/耗时，输出 METRICS_JSON |
+| [retrieval_benchmark.cpp](../tools/retrieval_benchmark.cpp) | 检索质量/负例拒答/耗时；--samples输出run/case原始时延，仍输出METRICS_JSON |
+| [bge_retrieval_profile.cpp](../tools/bge_retrieval_profile.cpp) | BGE开启时构建；显式采样准备/ORT/后处理/索引/映射，输出JSONL |
+| [run_retrieval_baseline.py](../tools/run_retrieval_baseline.py) | 标准库离线记录器；固定输入/指纹、原始样本、GNU/BusyBox time原生RSS与失败清单 |
 | [voice_performance_summary.cpp](../tools/voice_performance_summary.cpp) | 读取 PERF_JSON，输出 P50/P95、平均值、最大值和日志计数 |
 | [app.conf](../config/app.conf) | 文本客户端 AppConfig 配置 |
 | [board_pc_mock.conf](../config/board_pc_mock.conf) | 板端/PC/WSL语音 BoardAppConfig 配置 |
@@ -261,6 +264,8 @@
 
 ## 回归测试文件
 
+逐项测试功能、受控生命周期与压力运行方法见[C++测试手册](testing-guide.md)。
+
 默认/可选 C++ 测试的注册条件见 [tests/CMakeLists.txt](../tests/CMakeLists.txt)，整体构建组织见[CMake指南](cmake-structure.md)。同名模块通常对应相应接口；workflow覆盖多步确认，protocol覆盖错误消息，integration/consistency需要模型资产。Python 测试不默认访问真实音频或训练GPU。
 
 ### tests
@@ -275,6 +280,7 @@
 - [board_app_config_tests.cpp](../tests/board_app_config_tests.cpp)
 - [bounded_blocking_queue_tests.cpp](../tests/bounded_blocking_queue_tests.cpp)
 - [chinese_text_tokenizer_tests.cpp](../tests/chinese_text_tokenizer_tests.cpp)
+- [continuous_voice_session_lifecycle_tests.cpp](../tests/continuous_voice_session_lifecycle_tests.cpp)
 - [continuous_voice_session_tests.cpp](../tests/continuous_voice_session_tests.cpp)
 - [dense_index_consistency_tests.cpp](../tests/dense_index_consistency_tests.cpp)
 - [dense_retriever_tests.cpp](../tests/dense_retriever_tests.cpp)
@@ -310,6 +316,8 @@
 - [vehicle_tools_tests.cpp](../tests/vehicle_tools_tests.cpp)
 - [voice_assistant_tests.cpp](../tests/voice_assistant_tests.cpp)
 - [voice_input_pipeline_tests.cpp](../tests/voice_input_pipeline_tests.cpp)
+- [voice_lifecycle_tests.cpp](../tests/voice_lifecycle_tests.cpp)（含--stress入口）
+- [support/voice_test_support.h](../tests/support/voice_test_support.h)（测试检查点、可控后端与失败清理）
 - [voice_performance_report_tests.cpp](../tests/voice_performance_report_tests.cpp)
 - [voice_performance_statistics_tests.cpp](../tests/voice_performance_statistics_tests.cpp)
 - [wav_audio_reader_tests.cpp](../tests/wav_audio_reader_tests.cpp)
@@ -339,3 +347,29 @@
 - `python/agent_finetune/evaluate_planner.py` 的分组汇总、回答词组等评测改动。
 - `python/agent_finetune/generate_robustness_heldout_v3.py` 和 `data/agent_planner/robustness_heldout_v3.jsonl`。
 - `python/tests/test_agent_evaluate_planner.py` 和 `python/tests/test_agent_robustness_heldout_v3.py`。
+
+离线基准记录器回归：[test_retrieval_baseline.py](../tests/test_retrieval_baseline.py)，用Python标准库unittest单独执行，不属于CTest条目。
+
+[prepare_rk3588_perf.py](../tools/prepare_rk3588_perf.py)：生成新版本ARM部署包、递归动态库依赖与交叉构建清单；拒绝覆盖输出。硬件接线见[DHT11](hardware-dht11.md)，操作流程见[RK3588性能](rk3588-performance.md)。
+
+DHT11新增共享帧解析器[edge_dht11_frame.h](../kernel_modules/edge_dht11/edge_dht11_frame.h)与[模块测试说明](../kernel_modules/edge_dht11/README.md)：用于内核/Host复用同一解码实现并回放真实采样。
+
+[dht11_latency_probe.py](../tools/dht11_latency_probe.py)：板端手动诊断，比较普通读取和临时CPU延迟请求，输出JSONL样本/汇总；文件描述符关闭后释放请求，不修改驱动或governor。
+
+DHT11接口到硬件的调用入口及历次修订，见[驱动专题图解](dht11-driver-guide.md)；图源与SVG索引见[diagrams](diagrams/README.md)。
+
+[agent_demo.cpp](../src/apps/agent_demo.cpp)新增Mock/IIO后端选择和IIO根目录/name参数，沿用既有Rule/工具/确认执行器；[联合设备测试](../tests/linux_vehicle_device_tests.cpp)覆盖IIO到Agent的查询、确认/取消、错误与恢复。运行方式见[板端联调](board-agent-bringup.md)。
+
+板端私有ALSA配置[alsa-rk3588.conf](../config/alsa-rk3588.conf)固定底层16k；通过启动环境加载，不修改系统配置。RuleAgentPlanner复用AgentIntentClassifier的EnvironmentQuery分类，避免口语问句已路由却未执行工具。见[修复说明](rk3588-duplex-fix.md)。
+
+
+### TTS延迟优化增量
+
+| 文件 | 功能 |
+| --- | --- |
+| [board_tts_config.h](../include/board_tts_config.h)、[映射实现](../src/config/board_tts_config.cpp) | 共用BoardAppConfig→Sherpa配置，不创建引擎，旧conf兼容 |
+| [tts_benchmark.cpp](../src/apps/tts_benchmark.cpp) | 固定合成输入、模型/线程覆盖、加载/首调用/预热/RTF/RSS与JSONL |
+| [tts_cases.json](../benchmarks/tts_cases.json) | 数值原句、中文数词、确认语句与手册短答 |
+| [低延迟备选配置](../config/board_rk3588_tts_fast.conf) | AISHELL3 8k speaker66；包安装时继承用户主conf的其他参数 |
+
+优化结果与操作见[TTS手册](tts-optimization.md)；未来ASR/TTS NPU范围见[迁移路线](speech-npu-roadmap.md)。

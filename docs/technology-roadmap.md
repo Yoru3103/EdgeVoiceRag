@@ -2,6 +2,8 @@
 
 日期：2026-11-04。项目：EdgeVoiceRAG。主平台：RK3588；开发与基础验证：PC/WSL。
 
+**当前阶段范围（2026-11-07）：优先完成RK3588板端C++主线。** 先推进连续语音、Agent/问答路由、本地检索与RKLLM、TTS/播放、打断取消和线程回收，再积累板端质量与性能证据。ZeroMQ通信示例、独立网络服务及Python RAG/语音联调暂缓；PC/WSL Mock和必要的Python资产准备服务于板端验证。下文的技术栈路线是分阶段计划，不要求当前同时铺开。
+
 ## 1. 建设目标与结论
 
 建议把项目发展为 **“可复现评测的端侧语音推理与设备 Agent 系统”**：在现有功能上补齐模型精度、算子性能、内存与取消可靠性的工程证据。主线是完善 C++ 并发和资源管理 → 建立性能基线 → 做 PTQ 精度分析 → 接入 RKNN 通用推理 → 研究 Runtime 内存和同步；MLIR 作为可独立演示的编译实验接入。
@@ -16,7 +18,7 @@
 | --- | --- | --- | --- | --- |
 | C++11/14/17、STL、内存管理、并发、Linux 调试 | P0 | C++17、RAII/PImpl、unique/shared_ptr、mutex/CV、atomic、future、有界队列和取消 | 压力下生命周期证据、Sanitizer、统一错误边界、组件依赖边界 | 会话取消压力实验、资源检查、分模块 CMake、GDB 调试记录 |
 | 模型量化与精度分析 | P0 | INT8 语音资产、W8A8 命名的 RKLLM 模型、QLoRA 训练脚本、BGE FP32 ONNX 导出 | 自建 PTQ、校准集、scale/zero-point 分析、逐层误差、业务精度对照 | BGE FP32→INT8 PTQ、张量误差定位、检索退化分析与混合精度 |
-| Profiling 与性能优化 | P0 | PERF_JSON、首文本/音频时序、检索 benchmark、P50/P95 汇总 | 算子 trace、CPU/NPU 可归因测量、内存峰值、拷贝/排队耗时 | ORT profiling + Linux perf + RSS + RKNN 性能查询，形成优化前后对照 |
+| Profiling 与性能优化 | P0 | PERF_JSON、队列容量等待/峰值、BGE应用分段、固定输入指纹与检索RSS基线 | 算子 trace、CPU/NPU 可归因测量、内存峰值、拷贝/排队耗时 | ORT profiling + Linux perf + RSS + RKNN 性能查询，形成优化前后对照 |
 | ONNX、ONNX Runtime、RKNN | P1 | BGE ONNX 导出/校验、ORT C++ CPU 推理、sherpa 适配、RKLLM 后端 | RKNN-Toolkit2 通用模型转换/运行闭环、兼容性清单、回退策略 | 独立 RKNN smoke test，兼容后再接 BGE 或小型语义路由器 |
 | 计算图 IR、MLIR、TVM、LLVM | P1 | 已有可观测的 ONNX 子图和数值对照基础 | IR/Lowering/Pass 实作与验证 | 独立 MLIR 小型优化 Pass + CPU lowering；有收益再接业务 |
 | NPU Runtime、DMA、Cache、IOMMU | P1 | RKLLM SDK 调用、Linux IIO 驱动、GPIO IRQ/completion/mutex | 通用 NPU buffer 生命周期、拷贝与绑定、cache 同步、地址转换理解 | RKNN buffer 复用/绑定对照，记录真实同步路径与 IOMMU 映射关系 |
@@ -35,9 +37,11 @@ QLoRA 中的 4-bit 基座用于训练显存节省，不能直接证明推理 PTQ
 | future 与取消 | ContinuousVoiceSession、RKLLM abort | 使用受控延迟 Mock 构造“起声→停播→取消→新请求”，验证旧任务不污染新请求 | request_id 关联 trace、打断延迟分布、无残留播放 |
 | Linux 调试 | 默认 C++ 测试与进程 | GDB 抓栈、core 分析、perf 热点；分别建立 ASan/UBSan 和 TSan 构建 | 可复现命令、修复前后证据、无未解释的项目内报错 |
 
-建议新增 `CMakePresets.json` 或独立 CMake 选项，先覆盖 host Mock 路线；Sanitizer 分开运行，第三方 SDK 的限制单独记录。不要一开始重写整个线程系统。先写能稳定触发满队列/取消/退出路径的场景，再依据证据改生命周期。
+已完成第一步（2026-11-07）：增加默认关闭的 `EDGE_ENABLE_ASAN/EDGE_ENABLE_UBSAN`，建立15组 `board_mainline` Host测试标签和独立诊断目录；普通/插桩全量各40项通过，主线各重复20次共300次进程执行通过。学习步骤见[诊断指南](diagnostics.md)，环境、日志和边界见[实验记录](experiments/2026-11-07-host-diagnostics.md)。
 
-建议压力标准：使用固定种子，对 Mock 流水线执行至少 1000 轮正常/取消混合请求，设置每轮超时；所有线程最终回收，没有旧 request_id 的音频进入下一轮。这个数量是建议验收门槛，不是当前实测值。
+ASan与UBSan可合并运行；TSan以后使用单独构建，第三方SDK的限制单独记录。不要一开始重写整个线程系统。先写能稳定触发满队列/取消/退出路径的场景，再依据证据改生命周期。
+
+已完成Host增量（2026-11-08）：新增18类助手和12类连续会话受控场景，修复回答先完成时丢弃成功打断录音、ASR/识别回调停止后仍派发回答的问题；执行固定种子1000个混合场景，另在同一助手中执行1000轮唯一ID请求（673正常、327取消），逐轮检查文本/音频及取消ID隔离。普通Debug与ASan/UBSan各43项、PC可选SDK组合51项通过。每轮Mock/future等待5秒，压力进程120秒超时。详见[测试手册](testing-guide.md)与[实验记录](experiments/2026-11-08-voice-lifecycle.md)。这些结果不替代TSan、真实SDK并发或板端硬件验收。
 
 ### 3.2 目录整理后的下一步拆库
 
@@ -68,8 +72,8 @@ edge_common
 | --- | --- | --- |
 | ASR、检索、LLM 首 token/总时间、TTS、播放 | 部分阶段已记录 | 固定计时起点、错误和取消状态，记录模型/配置/输入长度 |
 | 首次播放调用、整轮时间 | 已有 | 分别统计“用户说完→开始播报”和包含录音等待的整轮，必要时用回环测实际声学延迟 |
-| 句子/音频队列 | 有背压，无完整观测 | 入/出队时刻、深度峰值、生产者等待时长 |
-| 内存 | 训练侧有 GPU 峰值，主程序无统一记录 | cold/warm RSS、VmHWM、加载/运行峰值、缓存/队列占用 |
+| 句子/音频队列 | 已有请求级容量等待、共享深度峰值和完整性标记 | 消费者空等、任务驻留时间与更多跨请求trace |
+| 内存 | 已有检索基准原生命令峰值RSS；语音主程序未统一采样 | 板端VmHWM、阶段内存、缓存/队列占用；区分新进程与冷磁盘 |
 | 算子耗时 | 未记录 | BGE ORT trace、RKNN 支持范围内的性能查询、CPU 栈热点 |
 | CPU/NPU | 只有 SDK 使用事实 | 分别记录 CPU 时间、Runtime/device trace、NPU负载采样及传输/等待，不混用指标 |
 
@@ -219,7 +223,7 @@ CPU 虚拟地址、物理地址和设备 DMA 地址不是同一个概念；IOMMU
 | M6：MLIR Pass | 2–3周，可在M3后独立 | experiments/mlir（拟建） | Pass/负例/IR/数值/Lowering完整；与主链隔离 |
 | M7：集成展示 | 约1周 | 文档、demo、完整板端场景 | 同一版本功能、质量和性能报告可复现 |
 
-建议**下一次只先实施 M1+M2 的最小部分**：加独立诊断构建、固定输入 benchmark manifest、补 BGE profiling 与队列等待计时。这样 M3 有可信基线，后续优化不靠感觉判断。
+M1+M2的Host最小部分已完成（2026-11-08）：独立诊断构建、固定输入/指纹清单、队列容量等待与共享峰值、BGE应用分段、逐run/case原始样本及检索进程RSS。正式基线为29条固定查询各测30次，每组870样本；这是Host对照，不是优化收益；另已完成RK3588固定查询实测，详见[板端性能记录与手动步骤](rk3588-performance.md)。详见[性能指南](performance-guide.md)和[基线记录](experiments/2026-11-08-observability-baseline.md)。RK3588已复用清单完成四组各870样本；真实语音尝试因ALSA播放参数失败，后续由使用者操作验收。下一步先解决录放音，再接ORT算子trace/perf/驱动观测；M2完整验收与M3仍未完成。
 
 QLoRA 可保留为并行研究支线：冻结 heldout，比基础模型和 adapter 的 JSON有效率/工具选择/参数/最终回答；随后合并 adapter、按匹配 RKLLM 工具转换并重新测板端。它不阻塞先做 BGE PTQ，也不替代 PTQ。
 
@@ -255,3 +259,31 @@ QLoRA 可保留为并行研究支线：冻结 heldout，比基础模型和 adapt
 - M6：说明独立实现的 MLIR Pass、匹配条件、IR与数值验证；仅在真实接入并测量后关联业务收益。
 
 [A/B/C/D] 都是待填字段。已经存在模型文件、训练日志或 SDK 包，不足以填入优化成果。每个简历要点最终应能定位到实现、实验记录与可演示场景。
+
+2026-11-09硬件进展：使用者在RK3588完成一帧DHT11采集/解码，31℃ / 38%RH且校验和正确；[证据与边界](experiments/2026-11-09-dht11-first-read.md)。连续稳定性、早期漏沿根因与Agent真实传感器联调继续待验证。
+
+DHT11后续连续采样出现10组仅1组温湿度均成功，单帧通过尚未扩展为稳定能力。已准备[IRQ采集修订0.2.0-irq-first](experiments/2026-11-09-dht11-irq-fix.md)，完成本地共享解析器与ARM模块编译验证，新版板端结果待用户实测。
+
+IRQ前置0.2.0版本随后在板端触发GPIO方向保护错误；已修订为[0.2.1-od-value](experiments/2026-11-09-dht11-od-value.md)，并增加采集流程模拟回归。当前为本地验证通过、板端待验证状态，未完成DHT11稳定性目标。
+
+0.2.1后续板端验证：用户独立10次温度读取为4成功、6失败。方向保护错误消失，仍有80/81沿超时及解码失败；[失败明细待采集](experiments/2026-11-09-dht11-4-of-10.md)，DHT11稳定性目标继续未完成。
+
+已获得两帧81沿失败明细：存在连续相同采样电平，无法当作仅缺前导修复。已准备[CPU空闲延迟对照](experiments/2026-11-09-dht11-failed-edges.md)，本地7项探针测试通过，板端A/B仍待用户运行；DHT11稳定性状态不变。
+
+CPU延迟对照已有用户实测：0.2.1普通0/5、外部0µs约束5/5。已准备[0.2.2测量窗口QoS](experiments/2026-11-09-dht11-qos-window.md)，本地9类采集生命周期与10类解析用例在普通/Sanitizer下通过，模块编译成功；新版独立板端验证、长期稳定性和Agent联调仍待完成。
+
+2026-11-10：0.2.2用户独立10次读取均成功，无超时；首条400（0.4℃）存疑，其余31.1～31.9℃。[原始数据与质量待核对项](experiments/2026-11-10-dht11-window-qos-10read.md)已保留，尚未完成数据正确性、长期稳定性和Agent联调验收。
+
+用户后续确认0.2.2测试没有问题，按要求结束首条专项追查；原始记录保留，不补写后测样本数。新增[驱动框图、调用时序与异常复盘](dht11-driver-guide.md)，当前继续推进真实温湿度Agent与板端语音主线。
+
+2026-11-10主线推进：agent_demo支持真实IIO后端并保留默认Mock；补IIO→Rule工具查询、确认/取消、错误传播/恢复行为。本次Host43/43、针对IIO的ASan/UBSan1/1、CLI实跑8/8通过，独立最小ARM构建与部署包已准备；[板端Agent验收](board-agent-bringup.md)随后由使用者确认调用正常，记为真实IIO文字Agent阶段通过；无额外逐轮输出，不补写成功率。
+
+2026-11-10语音输出推进：增加audio_output_check，复用现有TTS与ALSA播放器，支持固定测试音、重复播放、无覆盖WAV导出和参数诊断。默认Host43/43、ALSA-only Host45/45、可选SDK聚焦2/2及13项CLI/WAV/真实TTS检查通过；独立Release ARM包已构建。Host现有TTS资产输出44100Hz单声道PCM16；板端音频格式和可听结果仍待使用者按[输出手册](board-audio-output.md)确认，尚未修复或归因此前ALSA参数错误。
+
+2026-11-10完整部署恢复：按用户删除旧目录后的需求，重建6个ARM程序和0.2.2-window-qos驱动，归档全部主线模型/索引及11个运行库。归档约1.97GB、逐文件校验通过；[解压与启动](rk3588-deployment.md)。不更改板端设备树/内核，不将打包结果记为新一轮语音实测。
+
+2026-11-10用户语音实测新增证据：ASR成功识别“现在多少度”，但Rule未调用工具；同时ASoC明确报16k/44.1k采样率对称冲突。现Planner复用环境意图、项目plug profile固定硬件16k，Host43/43与ALSA45/45及真实TTS转换通过，ARM已编译。小更新包带备份安装脚本，另准备新版完整包；[板端修复验收](rk3588-duplex-fix.md)仍待用户执行，不计为板端成功。
+
+2026-11-11 TTS主线：用户温湿度语音一轮已正常返回并播放，但TTS为14.51秒。新增共享模型配置及固定TTS基准，Host同Melo FP32对现有INT8的5次合成P50为1.03s对5.70s，保留8k轻量备选；这是CPU对照，不是板端收益或已完成PTQ。默认43/43、ALSA-only45/45、SDK聚焦4/4通过，ARM更新包和保留用户参数的安装脚本准备完成。下一步由用户验证板端首播/合成/RSS/读音，再继续语音基线与打断回收。随后考虑SenseVoice RKNN，TTS子图/PTQ另行推进；详见[TTS记录](experiments/2026-11-11-tts-optimization.md)与[NPU路线](speech-npu-roadmap.md)。
+
+2026-11-12：用户确认TTS速度可接受，fast板端两个回合成功，首调用播放约346/237ms；不是正式分布基准。思考输出按用户再次要求继续挂起。主线新增barge_in_enabled半双工控制，默认43/43、Sanitizer聚焦2/2及ARM构建通过，小包本地安装/参数保留通过；[板端三轮基线与打断验收](board-mainline-acceptance.md)由用户操作，之后继续SenseVoice RKNN。
