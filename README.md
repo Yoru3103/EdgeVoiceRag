@@ -18,6 +18,7 @@
 | [C++测试手册](docs/testing-guide.md) | 每项测试的功能、受控并发场景、固定种子压力与运行方法 |
 | [板端主线诊断入门](docs/diagnostics.md) | 逐步建立Debug对照、ASan/UBSan构建和主线Mock检查 |
 | [CMake 构建结构](docs/cmake-structure.md) | 了解根配置、模块子CMake、SDK依赖和测试开关 |
+| [SenseVoice RKNN手动学习](docs/sensevoice-rknn-hands-on.md) | 独立参考、CPU/NPU对照、自编SDK与模型转换；由使用者逐步执行 |
 | [技术栈补充与项目演进报告](docs/technology-roadmap.md) | 按图片中的六个方向安排开发任务、实验和验收 |
 | [源码文件索引](docs/source-map.md) | 按文件定位 C++、Python、脚本、测试和驱动 |
 | [目录迁移说明](docs/refactoring.md) | 查看本次目录调整的范围和验证结果 |

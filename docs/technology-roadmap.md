@@ -287,3 +287,5 @@ CPU延迟对照已有用户实测：0.2.1普通0/5、外部0µs约束5/5。已�
 2026-11-11 TTS主线：用户温湿度语音一轮已正常返回并播放，但TTS为14.51秒。新增共享模型配置及固定TTS基准，Host同Melo FP32对现有INT8的5次合成P50为1.03s对5.70s，保留8k轻量备选；这是CPU对照，不是板端收益或已完成PTQ。默认43/43、ALSA-only45/45、SDK聚焦4/4通过，ARM更新包和保留用户参数的安装脚本准备完成。下一步由用户验证板端首播/合成/RSS/读音，再继续语音基线与打断回收。随后考虑SenseVoice RKNN，TTS子图/PTQ另行推进；详见[TTS记录](experiments/2026-11-11-tts-optimization.md)与[NPU路线](speech-npu-roadmap.md)。
 
 2026-11-12：用户确认TTS速度可接受，fast板端两个回合成功，首调用播放约346/237ms；不是正式分布基准。思考输出按用户再次要求继续挂起。主线新增barge_in_enabled半双工控制，默认43/43、Sanitizer聚焦2/2及ARM构建通过，小包本地安装/参数保留通过；[板端三轮基线与打断验收](board-mainline-acceptance.md)由用户操作，之后继续SenseVoice RKNN。
+
+2026-11-12：此前累积修改已[分组提交上传](commit-batches-2026-11-12.md)。按用户要求进入[SenseVoice RKNN手动学习](sensevoice-rknn-hands-on.md)，当前只交付操作步骤，尚未完成RKNN SDK构建、模型转换或板端运行。独立参考通过、自己转换、PTQ与完整主线接入分别验收，不提前记为已有能力。
