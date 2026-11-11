@@ -1,7 +1,13 @@
 #ifndef __EDGE_DHT11_H
 #define __EDGE_DHT11_H
 
+#ifdef __KERNEL__
 #include <linux/types.h>
+typedef s64 edge_dht11_ns_t;
+#else
+#include <stdint.h>
+typedef int64_t edge_dht11_ns_t;
+#endif
 
 #define EDGE_DHT11_DRIVER_NAME "edge_dht11"
 
@@ -22,6 +28,8 @@
  * 数组稍微留大，便于调试异常脉冲。
  */
 #define EDGE_DHT11_EXPECTED_EDGES 83
+/* 与Linux参考驱动一致：少一个前导边沿时仍尝试完整帧解码。 */
+#define EDGE_DHT11_MIN_EDGES 82
 #define EDGE_DHT11_MAX_EDGES      90
 
 /*
@@ -46,7 +54,7 @@
 #define EDGE_DHT11_CACHE_VALID_NS 2000000000LL
 
 struct edge_dht11_edge {
-    s64 timestamp_ns;
+    edge_dht11_ns_t timestamp_ns;
     int level;
 };
 
