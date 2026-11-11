@@ -38,3 +38,12 @@ Testing/
 
 # Local verification builds
 build-docs-check/
+
+# Independent host baseline and sanitizer builds
+/build-host-*/
+
+# Legacy isolated driver builds remain local
+/build-dht11-*/
+
+# Curated small board logs cited by experiment documents
+!docs/experiments/data/*.log

@@ -2,7 +2,7 @@
 add_library(edge_voice_rag_core)
 target_include_directories(edge_voice_rag_core PUBLIC "${PROJECT_SOURCE_DIR}/include")
 target_link_libraries(edge_voice_rag_core
-    PUBLIC zmq nlohmann_json::nlohmann_json Threads::Threads
+    PUBLIC zmq nlohmann_json::nlohmann_json Threads::Threads edge_diagnostics
 )
 set_target_properties(edge_voice_rag_core PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"

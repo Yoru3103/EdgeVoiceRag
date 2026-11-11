@@ -42,6 +42,9 @@ struct ContinuousVoiceSessionConfig {
     std::size_t max_turns = 0;
 
     int future_poll_interval_ms = 10;   // 异步任务轮询间隔
+
+    // false: 回答期间不启动打断录音，完成后再进入下一轮正常录音。
+    bool barge_in_enabled = true;
 };
 
 struct ContinuousVoiceSessionResult {

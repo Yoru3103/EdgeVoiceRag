@@ -978,6 +978,7 @@ int main() {
     testStopIsIdempotent();
     testCannotRestartAfterStop();
     testStopPlaybackCancelsGeneration();
+    testStopPlaybackWithoutActiveRequest();
 
     if (failed_count == 0) {
         std::cout

@@ -176,6 +176,47 @@ bool VoicePerformanceAggregator::addLogLine(
             values.emplace("first_playback_start_ms", first_playback_start);
         }
 
+        // Optional v1 extension: legacy records have no queue fields.
+        const char* queue_fields[] = {
+            "queue_metrics_observed", "queue_metrics_complete",
+            "sentence_queue_capacity", "sentence_queue_peak_depth",
+            "sentence_queue_push_wait_count", "sentence_queue_push_wait_ms",
+            "audio_queue_capacity", "audio_queue_peak_depth",
+            "audio_queue_push_wait_count", "audio_queue_push_wait_ms"
+        };
+        bool has_queue_fields = false;
+        for (const char* field : queue_fields) {
+            has_queue_fields = has_queue_fields || report.contains(field);
+        }
+        if (has_queue_fields) {
+            const bool observed = requireBoolean(report, "queue_metrics_observed");
+            const bool complete = requireBoolean(report, "queue_metrics_complete");
+            if (complete && (!observed || !ok)) {
+                throw std::runtime_error("complete queue metrics require an observed successful request");
+            }
+            for (const std::string prefix : {"sentence_queue", "audio_queue"}) {
+                for (const std::string suffix : {"_capacity", "_peak_depth", "_push_wait_count"}) {
+                    const std::string field = prefix + suffix;
+                    if (!report.contains(field) || !report.at(field).is_number_unsigned()) {
+                        // Parsed positive JSON integers may use signed storage.
+                        if (!report.contains(field) || !report.at(field).is_number_integer()
+                            || report.at(field).get<double>() < 0.0) {
+                            throw std::runtime_error("invalid queue count: " + field);
+                        }
+                    }
+                }
+                const double capacity = requireNonNegativeNumber(report, prefix + "_capacity");
+                const double peak = requireNonNegativeNumber(report, prefix + "_peak_depth");
+                const double wait = requireNonNegativeNumber(report, prefix + "_push_wait_ms");
+                if (peak > capacity || (observed && capacity == 0)) {
+                    throw std::runtime_error("invalid queue capacity/peak: " + prefix);
+                }
+                if (observed && complete) {
+                    values.emplace(prefix + "_push_wait_ms", wait);
+                }
+            }
+        }
+
         // 无异常时再统一写入
         for (const auto& item : values) {
             metric_values_[item.first].push_back(item.second);

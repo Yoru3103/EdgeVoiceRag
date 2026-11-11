@@ -240,8 +240,43 @@ void testAggregatePerformanceReports() {
 
 }  // namespace
 
+void testOptionalQueueMetrics() {
+    auto report = Json::parse(makePerformanceLine(10, 10.0, true, true).substr(12));
+    report["queue_metrics_observed"] = true;
+    report["queue_metrics_complete"] = true;
+    for (const std::string prefix : {"sentence_queue", "audio_queue"}) {
+        report[prefix + "_capacity"] = 2;
+        report[prefix + "_peak_depth"] = 1;
+        report[prefix + "_push_wait_count"] = 0;
+        report[prefix + "_push_wait_ms"] = 0.0;
+    }
+    VoicePerformanceAggregator a;
+    std::string error;
+    expectTrue(a.addLogLine("[PERF_JSON] " + report.dump(), error), "accept complete zero-wait observation");
+    auto partial = report;
+    partial["queue_metrics_complete"] = false;
+    partial["sentence_queue_push_wait_ms"] = 99.0;
+    expectTrue(a.addLogLine("[PERF_JSON] " + partial.dump(), error), "accept partial snapshot without aggregation");
+    auto invalid = report;
+    invalid["audio_queue_peak_depth"] = 3;
+    expectTrue(!a.addLogLine("[PERF_JSON] " + invalid.dump(), error), "reject peak greater than capacity");
+    invalid = report;
+    invalid.erase("audio_queue_push_wait_count");
+    expectTrue(!a.addLogLine("[PERF_JSON] " + invalid.dump(), error), "reject half-present optional group");
+    invalid = report;
+    invalid["audio_queue_push_wait_count"] = 0.5;
+    expectTrue(!a.addLogLine("[PERF_JSON] " + invalid.dump(), error), "reject fractional queue count");
+    const auto result = a.summarize();
+    expectTrue(result.valid_report_count == 2 && result.invalid_report_count == 3,
+               "optional group validation is atomic");
+    const auto metric = result.metrics.at("sentence_queue_push_wait_ms");
+    expectTrue(metric.sample_count == 1 && metric.average_ms == 0.0,
+               "observed zero retained; partial snapshot excluded");
+}
+
 int main() {
     testAggregatePerformanceReports();
+    testOptionalQueueMetrics();
 
     if (failed_count == 0) {
         std::cout

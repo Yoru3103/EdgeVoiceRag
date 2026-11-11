@@ -46,6 +46,7 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
 
     // 管理的是函数每次调用的生命周期
     // 当函数退出或意外结束时会调用析构函数结束，RAII
+    // assistant为引用而不是函数内构建，函数崩溃不会调用assistant的析构函数
     auto assistant_guard = makeScopeExit(
         [this]() {
             assistant_.stop();
@@ -115,6 +116,11 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
         user_audio = std::move(capture.audio);
         const AsrTranscriptionResult transcription = asr_backend_.transcribe(user_audio);
 
+        // stop()可能在不可中断的ASR调用期间到达，不再派发后续任务。
+        if (stop_requested_.load()) {
+            break;
+        }
+
         if (!transcription.ok) {
             session_result.error = "ASR failed: " + transcription.error;
 
@@ -149,12 +155,17 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
             std::move(recognized_event)
         );
 
-        // 会话线程同时启动两个异步任务，一个负责路由，一个负责监听打断
+        // 用户事件回调也可能同步调用stop()。
+        if (stop_requested_.load()) {
+            break;
+        }
+
+        // 回答异步执行；开启打断时再启动独立的监听任务。
         /*
          * processText 会一直等待：
          * LLM → TTS → 播放全部完成。
          *
-         * 因此必须放入单独线程，当前线程才能同时监听麦克风。
+         * 放入独立任务，以便启用时监听麦克风，同时保持stop()响应。
          */
         auto answer_future = std::async(
             std::launch::async,
@@ -178,42 +189,45 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
          * 检测到起声时立即停止播放和 LLM，
          * 但 VAD 继续录制完整的新问题。
          */
-        auto barge_future = std::async(
-            std::launch::async,
-            [
-                this,
-                &barge_in_started,
-                &handler,
-                request_id
-            ]() {
-                return barge_in_recorder_.recordUtterance(
-                    [
-                        this,
-                        &barge_in_started,
-                        &handler,
-                        request_id
-                    ]() {
-                        // 把原子变量切换为设定值，并返回原来的值
-                        // 这里说明如果之前已为真，说明已经打断开始了
-                        if (barge_in_started.exchange(true)) {
-                            return;
-                        }
-
-                        const auto interrupt = assistant_.stopPlayback();
-
-                        emitEvent(
-                            handler,
-                            VoiceSessionEvent{
-                                VoiceSessionEventType::BargeInDetected,
-                                request_id,
-                                "",
-                                interrupt.error
+        std::future<AudioCaptureResult> barge_future;
+        if (config_.barge_in_enabled) {
+            barge_future = std::async(
+                std::launch::async,
+                [
+                    this,
+                    &barge_in_started,
+                    &handler,
+                    request_id
+                ]() {
+                    return barge_in_recorder_.recordUtterance(
+                        [
+                            this,
+                            &barge_in_started,
+                            &handler,
+                            request_id
+                        ]() {
+                            // 把原子变量切换为设定值，并返回原来的值
+                            // 这里说明如果之前已为真，说明已经打断开始了
+                            if (barge_in_started.exchange(true)) {
+                                return;
                             }
-                        );
-                    }
-                );
-            }
-        );
+
+                            const auto interrupt = assistant_.stopPlayback();
+
+                            emitEvent(
+                                handler,
+                                VoiceSessionEvent{
+                                    VoiceSessionEventType::BargeInDetected,
+                                    request_id,
+                                    "",
+                                    interrupt.error
+                                }
+                            );
+                        }
+                    );
+                }
+            );
+        }
 
         bool iteration_finished = false;
 
@@ -226,13 +240,25 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
                 const VoiceAssistantResult answer = answer_future.get();
 
                 /*
-                 * 回答已自然结束，不再需要监听打断。
+                 * 回答任务已结束，回收打断任务并检查是否有下一轮录音。
                  */
-                barge_in_recorder_.cancelCurrentRecording();
+                // 已起声时仍需录完新问题，回答结束不能取消这段录音。
+                // 未观察到起声时取消监听，但录音可能已在并发边界完成；
+                // 因此 get() 得到的成功结果也必须保存，不能直接丢弃。
+                if (barge_future.valid()) {
+                    if (!barge_in_started.load()) {
+                        barge_in_recorder_.cancelCurrentRecording();
+                    }
 
-                const AudioCaptureResult ignored = barge_future.get();
-
-                (void)ignored;
+                    AudioCaptureResult barge_audio = barge_future.get();
+                    if (barge_audio.ok) {
+                        pending_capture = std::move(barge_audio);
+                        session_result.completed_turns++;
+                        session_result.interruption_count++;
+                        iteration_finished = true;
+                        continue;
+                    }
+                }
 
                 if (!answer.ok && !barge_in_started.load()) {
                     session_result.error = "voice assistant failed: " + answer.error;
@@ -259,7 +285,8 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
                 continue;
             }
 
-            if (barge_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            if (barge_future.valid()
+                && barge_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
                 AudioCaptureResult barge_audio = barge_future.get();
 
                 if (!barge_audio.ok) {
@@ -299,7 +326,9 @@ ContinuousVoiceSessionResult ContinuousVoiceSession::run(
         }
 
         if (stop_requested_.load()) {
-            barge_in_recorder_.cancelCurrentRecording();
+            if (barge_future.valid()) {
+                barge_in_recorder_.cancelCurrentRecording();
+            }
             assistant_.stopPlayback();
 
             if (answer_future.valid()) {
@@ -323,7 +352,9 @@ void ContinuousVoiceSession::stop() {
     stop_requested_.store(true);
 
     normal_recorder_.stop();
-    barge_in_recorder_.stop();
+    if (config_.barge_in_enabled) {
+        barge_in_recorder_.stop();
+    }
 
     assistant_.stopPlayback();
 }

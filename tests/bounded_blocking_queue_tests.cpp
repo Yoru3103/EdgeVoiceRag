@@ -278,6 +278,53 @@ void testClearRemovesPendingItems() {
     );
 }
 
+void testClearUnblocksProducer() {
+    using namespace std::chrono_literals;
+    BoundedBlockingQueue<int> queue(1);
+    queue.push(1);
+    std::promise<void> entered;
+    auto producer = std::async(std::launch::async, [&] {
+        entered.set_value();
+        return queue.push(2);
+    });
+    entered.get_future().wait();
+    expectTrue(producer.wait_for(50ms) == std::future_status::timeout,
+               "producer waits before clear");
+    expectTrue(queue.clear() == 1, "clear removes the full queue");
+    expectTrue(producer.wait_for(1s) == std::future_status::ready,
+               "clear wakes blocked producer");
+    expectTrue(producer.get(), "producer succeeds after clear");
+    const auto value = queue.pop();
+    expectTrue(value.has_value() && *value == 2, "post-clear item is preserved");
+}
+
+void testPushMetrics() {
+    using namespace std::chrono_literals;
+    BoundedBlockingQueue<int> queue(1);
+    QueuePushMetrics first;
+    expectTrue(queue.push(1, first), "metric push succeeds");
+    expectTrue(!first.waited && first.wait_elapsed_ms == 0.0 && first.depth_after_push == 1,
+               "unblocked push has exact zero capacity wait and locked depth");
+    QueuePushMetrics blocked;
+    std::promise<void> entered;
+    auto producer = std::async(std::launch::async, [&] {
+        entered.set_value();
+        return queue.push(2, blocked);
+    });
+    entered.get_future().wait();
+    expectTrue(producer.wait_for(50ms) == std::future_status::timeout,
+               "metric producer is held by full capacity");
+    queue.pop();
+    expectTrue(producer.wait_for(1s) == std::future_status::ready, "metric producer resumes");
+    expectTrue(producer.get(), "metric producer succeeds");
+    expectTrue(blocked.waited && blocked.wait_elapsed_ms > 0.0 && blocked.depth_after_push == 1,
+               "capacity wait is observed");
+    queue.close();
+    QueuePushMetrics rejected;
+    expectTrue(!queue.push(3, rejected) && !rejected.waited && rejected.depth_after_push == 0,
+               "closed push has no invented depth or wait");
+}
+
 void testMoveOnlyValue() {
     BoundedBlockingQueue<std::unique_ptr<int>> queue(1);
 
@@ -360,6 +407,8 @@ int main() {
     testCloseUnblocksProducer();
     testCloseDrainsExistingItems();
     testClearRemovesPendingItems();
+    testClearUnblocksProducer();
+    testPushMetrics();
     testMoveOnlyValue();
     testQueueState();
     testRejectZeroCapacity();

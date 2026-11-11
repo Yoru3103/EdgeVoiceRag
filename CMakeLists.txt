@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 
 include(cmake/EdgeOptions.cmake)
+include(cmake/EdgeDiagnostics.cmake)
 include(cmake/EdgeDependencies.cmake)
 include(CTest)
 

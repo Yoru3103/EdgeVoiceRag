@@ -168,6 +168,22 @@ void testEncodeCompletedEvent() {
     );
 }
 
+void testQueueMetricsEncoding() {
+    auto event = makeCompletedEvent();
+    event.assistant_result.timing.queue_metrics_observed = true;
+    event.assistant_result.timing.queue_metrics_complete = true;
+    event.assistant_result.timing.sentence_queue = {4, 3, 2, 7.5};
+    event.assistant_result.timing.audio_queue = {2, 2, 1, 3.5};
+    const auto report = Json::parse(VoicePerformanceReport::encode(event));
+    expectTrue(report.at("queue_metrics_complete").get<bool>()
+               && report.at("sentence_queue_push_wait_ms").get<double>() == 7.5
+               && report.at("audio_queue_peak_depth").get<int>() == 2,
+               "encode observed queue metrics with units and depth");
+    const auto legacy_shape = Json::parse(VoicePerformanceReport::encode(makeCompletedEvent()));
+    expectTrue(!legacy_shape.at("queue_metrics_observed").get<bool>(),
+               "default timing does not invent observed queue metrics");
+}
+
 void testRejectWrongEventType() {
     VoiceSessionEvent event = makeCompletedEvent();
 
@@ -212,6 +228,7 @@ void testRejectMismatchedRequestId() {
 
 int main() {
     testEncodeCompletedEvent();
+    testQueueMetricsEncoding();
     testRejectWrongEventType();
     testRejectMismatchedRequestId();
 

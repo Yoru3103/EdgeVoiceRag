@@ -128,3 +128,42 @@ if(EDGE_ENABLE_BGE_EMBEDDER)
         )
     endforeach()
 endif()
+
+
+# Host-side board mainline: no sound card, NPU, or Python/ZeroMQ service required.
+# Timeout bounds a stuck future/queue wait at the test-process boundary.
+set_tests_properties(
+    bounded_blocking_queue_tests
+    streaming_sentence_buffer_tests
+    voice_assistant_tests
+    voice_input_pipeline_tests
+    continuous_voice_session_tests
+    local_rag_llm_backend_tests
+    policy_routing_answer_backend_tests
+    agent_executor_tests
+    llm_agent_planner_tests
+    agent_workflow_tests
+    agent_answer_backend_tests
+    agent_routing_answer_backend_tests
+    linux_vehicle_device_tests
+    vehicle_tools_tests
+    board_app_config_tests
+    PROPERTIES LABELS "board_mainline" TIMEOUT 30
+)
+
+
+edge_add_test(voice_lifecycle_tests)
+set_tests_properties(voice_lifecycle_tests PROPERTIES
+    LABELS "board_mainline;lifecycle" TIMEOUT 30
+)
+add_test(NAME voice_lifecycle_stress COMMAND voice_lifecycle_tests --stress)
+set_tests_properties(voice_lifecycle_stress PROPERTIES
+    LABELS "board_mainline;stress" TIMEOUT 120
+    WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
+)
+
+
+edge_add_test(continuous_voice_session_lifecycle_tests)
+set_tests_properties(continuous_voice_session_lifecycle_tests PROPERTIES
+    LABELS "board_mainline;lifecycle" TIMEOUT 30
+)

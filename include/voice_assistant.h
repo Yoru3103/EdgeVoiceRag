@@ -16,6 +16,13 @@
 #include "streaming_sentence_buffer.h"
 #include "tts_backend.h"
 
+struct VoiceQueueTiming {
+    std::size_t capacity = 0;
+    std::size_t peak_depth = 0;
+    std::size_t push_wait_count = 0;
+    double push_wait_ms = 0.0;
+};
+
 struct VoiceAssistantTiming {
     // processText() 开始，到收到第一段有效回答文本。
     bool first_answer_text_observed = false;
@@ -37,6 +44,13 @@ struct VoiceAssistantTiming {
 
     // 整个 processText() 的执行时间。
     double total_elapsed_ms = 0.0;
+
+    // Only data pushes are timed; depth samples include all queued items.
+    // Failed/cancelled requests may return before workers finish: partial snapshot.
+    bool queue_metrics_observed = false;
+    bool queue_metrics_complete = false;
+    VoiceQueueTiming sentence_queue;
+    VoiceQueueTiming audio_queue;
 };
 
 struct VoiceAssistantResult {
@@ -210,6 +224,12 @@ private:
     // 将流式后端生成的结果加入到sentencequeue中等待后续处理
     bool enqueueEndOfRequest(
         const std::shared_ptr<RequestState>& state
+    );
+
+    static void addQueueMetrics(
+        const std::shared_ptr<RequestState>& state,
+        const QueuePushMetrics& metrics,
+        bool sentence_queue
     );
 
     static void failState(

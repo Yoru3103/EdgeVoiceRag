@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <deque>
@@ -7,6 +8,13 @@
 #include <optional>
 #include <stdexcept>
 #include <utility>
+
+// Per-push capacity wait, excluding mutex acquisition and control sentinels.
+struct QueuePushMetrics {
+    bool waited = false;
+    double wait_elapsed_ms = 0.0;
+    std::size_t depth_after_push = 0;
+};
 
 template <typename T>
 class BoundedBlockingQueue {
@@ -27,6 +35,14 @@ public:
     // 支持移动， audiobuffer较大，避免复制PCM
     bool push(T&& value) {
         return pushImpl(std::move(value));
+    }
+
+    bool push(T&& value, QueuePushMetrics& metrics) {
+        return pushImpl(std::move(value), &metrics);
+    }
+
+    bool push(const T& value, QueuePushMetrics& metrics) {
+        return pushImpl(value, &metrics);
     }
 
     std::optional<T> pop() {
@@ -112,8 +128,13 @@ public:
 
 private:
     template <typename U>
-    bool pushImpl(U&& value) {
+    bool pushImpl(U&& value, QueuePushMetrics* metrics = nullptr) {
+        if (metrics) { *metrics = {}; }
         std::unique_lock<std::mutex> lock(mutex_);
+        using Clock = std::chrono::steady_clock;
+        const bool waiting = metrics && !closed_ && queue_.size() >= capacity_;
+        const auto start = waiting ? Clock::now() : Clock::time_point{};
+
 
         not_full_.wait(
             lock,
@@ -122,12 +143,18 @@ private:
             }
         );
 
+        if (metrics && waiting) {
+            metrics->waited = true;
+            metrics->wait_elapsed_ms =
+                std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+        }
         if (closed_) {
             return false;
         }
 
         // forward保留传入参数的左值右值属性
         queue_.emplace_back(std::forward<U>(value));
+        if (metrics) { metrics->depth_after_push = queue_.size(); }
 
         lock.unlock();
 

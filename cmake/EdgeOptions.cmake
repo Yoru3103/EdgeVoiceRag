@@ -1,4 +1,8 @@
 # Build features and SDK/model locations. Keep cache names stable.
+# Host diagnostics use a separate build directory; deployment stays unchanged.
+option(EDGE_ENABLE_ASAN "Instrument project C++ code with AddressSanitizer" OFF)
+option(EDGE_ENABLE_UBSAN "Instrument project C++ code with UndefinedBehaviorSanitizer" OFF)
+
 option(EDGE_ENABLE_ALSA "Enable ALSA audio capture and playback" OFF)
 option(EDGE_ENABLE_SHERPA_VAD "Enable sherpa-onnx C++ VAD recorder" OFF)
 

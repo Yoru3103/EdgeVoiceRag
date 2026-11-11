@@ -1,5 +1,6 @@
 #include "voice_assistant.h"
 
+#include <algorithm>
 #include <exception>
 #include <string>
 #include <utility>
@@ -211,6 +212,9 @@ VoiceAssistantResult VoiceAssistant::processText(
 
     // 由于停止时可能在任意线程中，因此需要添加request_id
     state->request_id = request_id;
+    state->timing.queue_metrics_observed = true;
+    state->timing.sentence_queue.capacity = sentence_queue_.capacity();
+    state->timing.audio_queue.capacity = audio_queue_.capacity();
     
     // 打断线程通过active_state_找到当前请求ID，取消正确的请求
     setActiveState(state);
@@ -331,6 +335,7 @@ VoiceAssistantResult VoiceAssistant::processText(
         result.spoken_sentence_count = state->spoken_sentence_count;
 
         state->timing.total_elapsed_ms = state->timer.elapsedMilliseconds();
+        state->timing.queue_metrics_complete = !state->failed;
         result.timing = state->timing;
 
         if (state->failed) {
@@ -360,7 +365,10 @@ bool VoiceAssistant::enqueueSentence(
     task.text = sentence;
     task.end_of_request = false;
 
-    return sentence_queue_.push(std::move(task));
+    QueuePushMetrics metrics;
+    const bool pushed = sentence_queue_.push(std::move(task), metrics);
+    addQueueMetrics(state, metrics, true);
+    return pushed;
 }
 
 bool VoiceAssistant::enqueueEndOfRequest(const std::shared_ptr<RequestState>& state) {
@@ -431,7 +439,10 @@ void VoiceAssistant::ttsWorker() {
             audio_task.audio = std::move(synthesis.audio);
             audio_task.end_of_request = false;
 
-            if (!audio_queue_.push(std::move(audio_task))) {
+            QueuePushMetrics metrics;
+            const bool pushed = audio_queue_.push(std::move(audio_task), metrics);
+            addQueueMetrics(task->state, metrics, false);
+            if (!pushed) {
                 failState(task->state, "audio queue closed");
 
                 completeState(task->state);
@@ -492,6 +503,18 @@ void VoiceAssistant::playbackWorker() {
             failState(task->state, "audio playback exception: " + std::string(error.what()));
         }
     }
+}
+
+void VoiceAssistant::addQueueMetrics(
+    const std::shared_ptr<RequestState>& state,
+    const QueuePushMetrics& metrics,
+    bool sentence_queue
+) {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    auto& queue = sentence_queue ? state->timing.sentence_queue : state->timing.audio_queue;
+    queue.peak_depth = std::max(queue.peak_depth, metrics.depth_after_push);
+    queue.push_wait_count += metrics.waited ? 1 : 0;
+    queue.push_wait_ms += metrics.wait_elapsed_ms;
 }
 
 bool VoiceAssistant::stateFailed(const std::shared_ptr<RequestState>& state) {
