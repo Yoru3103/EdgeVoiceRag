@@ -19,6 +19,32 @@ from transformers import (
 from agent_finetune.planner_format import parse_strict_action
 
 
+def summarize_groups(
+    results: list[dict[str, Any]],
+    field: str,
+) -> dict[str, dict[str, Any]]:
+    groups: dict[str, list[dict[str, Any]]] = {}
+
+    for result in results:
+        value = str(result.get(field, "unspecified"))
+        groups.setdefault(value, []).append(result)
+
+    summary: dict[str, dict[str, Any]] = {}
+    for value, items in sorted(groups.items()):
+        total = len(items)
+        valid = sum(bool(item["json_valid"]) for item in items)
+        passed = sum(bool(item["passed"]) for item in items)
+        summary[value] = {
+            "total": total,
+            "json_valid_count": valid,
+            "json_valid_rate": valid / total,
+            "passed_count": passed,
+            "accuracy": passed / total,
+        }
+
+    return summary
+
+
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
 
@@ -160,6 +186,7 @@ def compare_action(
     actual: dict[str, Any],
     expected: dict[str, Any],
     required_answer_terms: list[str],
+    required_answer_term_groups: list[list[str]] | None = None,
 ) -> tuple[bool, str]:
     if actual.get("type") != expected.get("type"):
         return (
@@ -201,6 +228,19 @@ def compare_action(
         return (
             False,
             f"final answer is missing terms: {missing}",
+        )
+
+    missing_groups = [
+        group
+        for group in (required_answer_term_groups or [])
+        if not any(term in answer for term in group)
+    ]
+
+    if missing_groups:
+        return (
+            False,
+            "final answer does not match any term in groups: "
+            f"{missing_groups}",
         )
 
     return True, ""
@@ -274,6 +314,10 @@ def main() -> None:
             "required_answer_terms",
             [],
         )
+        required_term_groups = record.get(
+            "required_answer_term_groups",
+            [],
+        )
 
         raw_output, elapsed = generate(
             tokenizer,
@@ -294,6 +338,7 @@ def main() -> None:
                 parsed.value,
                 expected,
                 required_terms,
+                required_term_groups,
             )
         else:
             error = parsed.error
@@ -320,6 +365,9 @@ def main() -> None:
         results.append(
             {
                 "id": record["id"],
+                "scenario": record.get("scenario", "unspecified"),
+                "category": record.get("category", "unspecified"),
+                "difficulty": record.get("difficulty", "unspecified"),
                 "passed": passed,
                 "json_valid": parsed.ok,
                 "elapsed_seconds": elapsed,
@@ -346,6 +394,10 @@ def main() -> None:
             torch.cuda.max_memory_allocated() / 1024**3
         ),
         "results": results,
+        "groups": {
+            field: summarize_groups(results, field)
+            for field in ("scenario", "category", "difficulty")
+        },
         "adapter": (
             str(args.adapter)
             if args.adapter is not None
@@ -379,6 +431,15 @@ def main() -> None:
         f"peak_vram={summary['peak_gpu_memory_gib']:.2f}GiB",
     )
     print("[REPORT]", args.output)
+
+    for field, groups in summary["groups"].items():
+        print(f"[GROUPS:{field}]")
+        for value, metrics in groups.items():
+            print(
+                f"  {value}: "
+                f"{metrics['passed_count']}/{metrics['total']} "
+                f"({metrics['accuracy']:.2%})"
+            )
 
 
 if __name__ == "__main__":
