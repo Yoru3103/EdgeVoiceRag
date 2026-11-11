@@ -184,6 +184,33 @@ void testNaturalEnvironmentQuestionUsesAgent() {
     );
 }
 
+void testColloquialEnvironmentQuestionsExecuteTool() {
+    Fixture fixture;
+    int request = 0;
+    for (const std::string query : {
+        "现在多少度？", "车里多少度", "热不热？", "车内湿度是多少"
+    }) {
+        const auto result = fixture.router.query({
+            "colloquial-" + std::to_string(++request), query
+        });
+        expectTrue(
+            result.ok && result.response_mode == "agent_tool"
+                && result.answer.find("28.5") != std::string::npos
+                && result.answer.find("60.0") != std::string::npos,
+            "colloquial environment query returns actual tool values: " + query
+        );
+    }
+    fixture.device.setEnvironment(31.2F, 47.0F);
+    const auto result = fixture.router.query({"colloquial-refresh", "现在多少度？"});
+    expectTrue(
+        result.ok && result.answer.find("31.2") != std::string::npos
+            && result.answer.find("47.0") != std::string::npos
+            && fixture.fallback.query_count == 0
+            && !fixture.device.airConditionerEnabled(),
+        "colloquial query refreshes the reading without a control side effect"
+    );
+}
+
 void testControlUsesAgent() {
     Fixture fixture;
 
@@ -310,6 +337,7 @@ void testEmergencyOverridesPendingAction() {
 int main() {
     testEnvironmentUsesAgent();
     testNaturalEnvironmentQuestionUsesAgent();
+    testColloquialEnvironmentQuestionsExecuteTool();
     testControlUsesAgent();
     testConfirmationContinuesAgent();
     testManualQuestionUsesFallback();

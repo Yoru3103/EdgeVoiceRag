@@ -1,4 +1,5 @@
 #include "agent/rule_agent_planner.h"
+#include "agent/agent_intent_classifier.h"
 
 #include <iomanip>
 #include <sstream>
@@ -26,8 +27,11 @@ AgentAction RuleAgentPlanner::plan(const AgentPlanningContext& context) {
 }
 
 AgentAction RuleAgentPlanner::planInitialAction(const std::string& user_input) {
+    // 与路由共用环境意图，避免“现在多少度”等已路由请求落入能力提示。
+    const auto intent = AgentIntentClassifier{}.classify(user_input).intent;
     if (
-        contains(user_input, "温度")
+        intent == AgentIntent::EnvironmentQuery
+        || contains(user_input, "温度")
         || contains(user_input, "湿度")
         || contains(user_input, "车里热不热")
         || contains(user_input, "车内热不热")
