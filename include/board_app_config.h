@@ -39,6 +39,8 @@ struct BoardAppConfig {
     std::string asr_tokens_path;
     std::string vad_model_path;
     std::string tts_model_dir;
+    std::string tts_model_file = "model.int8.onnx";
+    int tts_speaker_id = 0;
 
     std::string llm_backend = "mock";
     std::string llm_model_path;
@@ -66,6 +68,7 @@ struct BoardAppConfig {
 
     float normal_vad_threshold = 0.25F;
     float barge_vad_threshold = 0.60F;
+    bool barge_in_enabled = true;
 
     float normal_silence_seconds = 0.8F;
     float barge_silence_seconds = 0.5F;

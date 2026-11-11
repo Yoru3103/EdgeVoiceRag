@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "environment_exact",
+      "text": "当前车内温度为31.8摄氏度，湿度为32.0%。"
+    },
+    {
+      "id": "environment_words",
+      "text": "当前车内温度为三十一点八摄氏度，湿度为百分之三十二。"
+    },
+    {
+      "id": "confirmation",
+      "text": "是否确认打开模拟空调？"
+    },
+    {
+      "id": "manual_short",
+      "text": "按下空调面板上的开关，即可开启空调。"
+    }
+  ]
+}

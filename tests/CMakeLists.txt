@@ -95,6 +95,14 @@ endif()
 
 if(EDGE_ENABLE_ALSA)
     edge_add_test(alsa_audio_backend_tests)
+    add_test(NAME audio_output_check_smoke COMMAND audio_output_check
+        --config "${PROJECT_SOURCE_DIR}/config/board_wsl.conf"
+        --device null --mode tone --sample-rate 44100 --repeat 2
+    )
+    set_tests_properties(audio_output_check_smoke PROPERTIES
+        LABELS "board_mainline;audio_output" TIMEOUT 15
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    )
 endif()
 
 if(EDGE_ENABLE_SHERPA_VAD)

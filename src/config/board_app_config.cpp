@@ -234,25 +234,25 @@ BoardAppConfig BoardAppConfig::load(const std::string& path) {
         );
 
     config.relevance_filter_enabled =
-            getBoolean(
-                values,
-                "relevance_filter_enabled",
-                config.relevance_filter_enabled
-            );
+        getBoolean(
+            values,
+            "relevance_filter_enabled",
+            config.relevance_filter_enabled
+        );
 
-        config.relevance_minimum_sparse_score =
-            getNumber<float>(
-                values,
-                "relevance_minimum_sparse_score",
-                config.relevance_minimum_sparse_score
-            );
+    config.relevance_minimum_sparse_score =
+        getNumber<float>(
+            values,
+            "relevance_minimum_sparse_score",
+            config.relevance_minimum_sparse_score
+        );
 
-        config.relevance_minimum_dense_similarity =
-            getNumber<float>(
-                values,
-                "relevance_minimum_dense_similarity",
-                config.relevance_minimum_dense_similarity
-            );
+    config.relevance_minimum_dense_similarity =
+        getNumber<float>(
+            values,
+            "relevance_minimum_dense_similarity",
+            config.relevance_minimum_dense_similarity
+        );
 
     config.relevance_candidate_top_k =
         getNumber<int>(
@@ -310,6 +310,9 @@ BoardAppConfig BoardAppConfig::load(const std::string& path) {
         "tts_model_dir",
         ""
     );
+
+    config.tts_model_file = getString(values, "tts_model_file", config.tts_model_file);
+    config.tts_speaker_id = getNumber<int>(values, "tts_speaker_id", config.tts_speaker_id);
 
     config.llm_backend = getString(
         values,
@@ -415,6 +418,8 @@ BoardAppConfig BoardAppConfig::load(const std::string& path) {
             "barge_vad_threshold",
             config.barge_vad_threshold
         );
+
+    config.barge_in_enabled = getBoolean(values, "barge_in_enabled", config.barge_in_enabled);
 
     config.normal_silence_seconds =
         getNumber<float>(
@@ -603,6 +608,14 @@ void BoardAppConfig::validate() const {
         throw std::invalid_argument(
             "TTS model directory must not be empty"
         );
+    }
+
+    if (tts_model_file.empty() || tts_model_file == "." || tts_model_file == ".."
+        || tts_model_file.find_first_of("/\\") != std::string::npos) {
+        throw std::invalid_argument("TTS model file must be a filename within tts_model_dir");
+    }
+    if (tts_speaker_id < 0) {
+        throw std::invalid_argument("TTS speaker id must not be negative");
     }
 
     if (

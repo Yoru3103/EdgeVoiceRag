@@ -8,6 +8,7 @@
 #include "alsa_audio_player.h"
 #include "alsa_pcm_stream_source.h"
 #include "board_app_config.h"
+#include "board_tts_config.h"
 #include "continuous_voice_session.h"
 #include "llm_backend_factory.h"
 #include "policy_routing_answer_backend.h"
@@ -239,21 +240,7 @@ int main(int argc, char* argv[]) {
 
         SherpaOnnxAsrBackend asr_backend(asr_config);
 
-        const fs::path tts_dir = config.tts_model_dir;
-
-        // 文字转语音
-        SherpaOnnxTtsConfig tts_config;
-        tts_config.model_path = (tts_dir/"model.int8.onnx").string();
-        tts_config.lexicon_path = (tts_dir/"lexicon.txt").string();
-        tts_config.tokens_path = (tts_dir/"tokens.txt").string();
-        tts_config.rule_fsts = {
-            (tts_dir/"date.fst").string(),
-            (tts_dir/"number.fst").string()
-        };
-        tts_config.num_threads = config.tts_num_threads;
-        tts_config.speaker_id = 0;
-        tts_config.speed = 1.0F;
-        tts_config.provider = "cpu";
+        const auto tts_config = makeBoardTtsConfig(config);
 
         SherpaOnnxTtsBackend tts_backend(tts_config);
 
@@ -295,7 +282,14 @@ int main(int argc, char* argv[]) {
 
         // 语音采集由两个VAD同时使用
         SherpaOnnxVadAudioRecorder normal_recorder(pcm_source, normal_vad);
-        SherpaOnnxVadAudioRecorder barge_recorder(pcm_source, barge_vad);
+        // 半双工基线不创建第二套VAD，也不在回答期间采集打断音频。
+        std::unique_ptr<SherpaOnnxVadAudioRecorder> active_barge_recorder;
+        if (config.barge_in_enabled) {
+            active_barge_recorder =
+                std::make_unique<SherpaOnnxVadAudioRecorder>(pcm_source, barge_vad);
+        }
+        auto& barge_recorder = active_barge_recorder
+            ? *active_barge_recorder : normal_recorder;
 
         VoiceAssistant assistant(
             answer_backend,
@@ -306,6 +300,7 @@ int main(int argc, char* argv[]) {
 
         ContinuousVoiceSessionConfig session_config;
         session_config.max_turns = config.max_turns;
+        session_config.barge_in_enabled = config.barge_in_enabled;
 
         ContinuousVoiceSession session(
             normal_recorder,
@@ -333,10 +328,14 @@ int main(int argc, char* argv[]) {
             << asr_backend.name()
             << "\nTTS: "
             << tts_backend.name()
+            << "\nTTS model: " << tts_config.model_path
+            << "\nTTS threads: " << tts_config.num_threads
+            << "\nTTS speaker: " << tts_config.speaker_id
             << "\nCapture: "
             << pcm_source.name()
             << "\nPlayback: "
             << audio_player.name()
+            << "\nBarge-in: " << (config.barge_in_enabled ? "enabled" : "disabled")
             << "\nAgent planner: "
             << agent_planner->name()
             << "\nAgent maximum steps: "

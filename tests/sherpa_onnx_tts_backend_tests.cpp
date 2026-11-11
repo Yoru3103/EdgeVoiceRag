@@ -30,7 +30,7 @@ SherpaOnnxTtsConfig makeConfig(
     SherpaOnnxTtsConfig config;
 
     /*
-     * 板端优先使用 int8 模型，降低内存和 CPU 开销。
+     * 沿用既有Melo INT8基线；CPU速度需实测，不能从INT8文件名推断。
      */
     config.model_path =
         (model_dir / "model.int8.onnx").string();

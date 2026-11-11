@@ -21,3 +21,14 @@ if(EDGE_ENABLE_ALSA AND EDGE_ENABLE_SHERPA_ASR
     add_executable(board_voice_assistant board_voice_main.cpp)
     target_link_libraries(board_voice_assistant PRIVATE edge_voice_rag_core)
 endif()
+
+# Standalone board output probe; tone mode needs ALSA only.
+if(EDGE_ENABLE_ALSA)
+    add_executable(audio_output_check audio_output_check.cpp)
+    target_link_libraries(audio_output_check PRIVATE edge_voice_rag_core)
+endif()
+
+if(EDGE_ENABLE_SHERPA_TTS)
+    add_executable(tts_benchmark tts_benchmark.cpp)
+    target_link_libraries(tts_benchmark PRIVATE edge_voice_rag_core)
+endif()

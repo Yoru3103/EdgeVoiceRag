@@ -240,6 +240,11 @@ public:
             return AudioPlaybackResult::failure(
                 "ALSA playback failed: "
                     + std::string(error.what())
+                    + " [device=" + config_.device
+                    + ", sample_rate=" + std::to_string(audio.sample_rate)
+                    + ", channels=" + std::to_string(audio.channels)
+                    + ", period_frames_requested=" + std::to_string(config_.period_frames)
+                    + "]"
             );
         }
     }
